@@ -36,13 +36,19 @@
     <header>
         <h2>Super CMS V12</h2>
         <nav>
-            <a href="{{ url_for('serve_root') }}">Главная</a>
+            <a href="{{ url_for('index') }}">Главная</a>
             {% if user_id %}
                 <a href="{{ url_for('dashboard') }}">Дашборд</a>
+                <a href="{{ url_for('wallet_page') }}">Кошелёк</a>
+                <a href="{{ url_for('marketplace') }}">Маркетплейс</a>
+                <a href="{{ url_for('bot_management') }}">Бот</a>
+                {% if is_admin %}
+                    <a href="{{ url_for('admin_panel') }}">Админ</a>
+                {% endif %}
                 <a href="{{ url_for('logout') }}">Выйти</a>
             {% else %}
-                <a href="{{ url_for('login_page') }}">Войти</a>
-                <a href="{{ url_for('register_page') }}">Регистрация</a>
+                <a href="{{ url_for('login') }}">Войти</a>
+                <a href="{{ url_for('register') }}">Регистрация</a>
             {% endif %}
         </nav>
     </header>

@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Кошелёк</h1>
+    {% if message %}
+        <div class="message">{{ message }}</div>
+    {% endif %}
+    <div class="card">
+        <h2>Баланс</h2>
+        <p style="font-size: 24px; font-weight: bold;">{{ wallet.balance }} USDT</p>
+        <p>Подключённый провайдер: {{ wallet.provider or '—' }}</p>
+        <p>Подключённая биржа: {{ wallet.exchange_provider or '—' }}</p>
+        <p>Telegram: {{ wallet.telegram or '—' }}</p>
+    </div>
+    <div class="card">
+        <h2>Купить USDT</h2>
+        <form method="post">
+            <input type="hidden" name="action" value="buy_usdt">
+            <div class="field-group">
+                <label for="amount">Сумма (USD)</label>
+                <input type="text" id="amount" name="amount" placeholder="100.00">
+            </div>
+            <button type="submit" class="btn">Купить USDT</button>
+        </form>
+    </div>
+{% endblock %}

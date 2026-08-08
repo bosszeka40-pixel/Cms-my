@@ -22,6 +22,7 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 app.include_router(admin_router)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.globals['url_for'] = app.url_path_for
 engine = CMSEngine()
 bot = HFTBot()
 production_bot = CMSProductionHFTBot()
@@ -41,11 +42,11 @@ class StrategyPayload(BaseModel):
     price_change: float
     current_balance: float
 
-@app.get("/")
+@app.get("/", name="index")
 async def serve_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "user_id": request.session.get("user_email")})
 
-@app.get("/login")
+@app.get("/login", name="login")
 async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request, "message": None, "user_id": request.session.get("user_email")})
 
@@ -58,7 +59,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("login.html", {"request": request, "message": "Неверный логин или пароль.", "user_id": None})
 
-@app.get("/register")
+@app.get("/register", name="register")
 async def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request, "message": None, "user_id": request.session.get("user_email")})
 
@@ -73,7 +74,7 @@ async def register_submit(request: Request, username: str = Form(...), email: st
     except Exception as e:
         return templates.TemplateResponse("register.html", {"request": request, "message": f"Ошибка регистрации: {e}", "user_id": None})
 
-@app.get("/forgot-password")
+@app.get("/forgot-password", name="forgot_password")
 async def forgot_password_page(request: Request):
     return templates.TemplateResponse("forgot_password.html", {"request": request, "message": None, "user_id": request.session.get("user_email")})
 
@@ -81,7 +82,7 @@ async def forgot_password_page(request: Request):
 async def forgot_password_submit(request: Request, email: str = Form(...)):
     return templates.TemplateResponse("forgot_password.html", {"request": request, "message": "Инструкции по восстановлению пароля отправлены на указанный email.", "user_id": request.session.get("user_email")})
 
-@app.get("/dashboard")
+@app.get("/dashboard", name="dashboard")
 async def dashboard(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
@@ -91,7 +92,21 @@ async def dashboard(request: Request):
     balance = "—"
     return templates.TemplateResponse("dashboard.html", {"request": request, "username": username, "email": user_email, "balance": balance, "user_id": user_email})
 
-@app.get("/logout")
+@app.get("/marketplace", name="marketplace")
+async def marketplace(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse("marketplace.html", {"request": request, "user_id": user_email})
+
+@app.get("/bot-management", name="bot_management")
+async def bot_management(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse("bot_management.html", {"request": request, "user_id": user_email})
+
+@app.get("/logout", name="logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/", status_code=302)

@@ -7,9 +7,12 @@
         <div class="card">
             <h2>Баланс SYSTEM_COIN</h2>
             <p style="font-size: 24px; font-weight: bold;">€{{ balance }}</p>
+            <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
+            <p>Адрес кошелька: {{ wallet.address or 'Не указан' }}</p>
+            <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>
             <div class="button-row">
-                <a class="btn" href="#">Пополнить</a>
-                <a class="btn" href="#">Перевести</a>
+                <a class="btn" href="{{ url_for('marketplace') }}">Кошелек и биржи</a>
+                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
             </div>
         </div>
         <div class="card">
@@ -22,8 +25,8 @@
             <h2>Плагины и управление</h2>
             <p>Здесь будут доступные системные плагины и управление ботом.</p>
             <div class="button-row">
-                <a class="btn" href="#">Маркетплейс</a>
-                <a class="btn" href="#">Управление ботом</a>
+                <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
+                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
             </div>
         </div>
     </div>

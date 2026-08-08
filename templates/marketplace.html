@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Маркетплейс</h1>
+    <p class="lead">Подключите биржу, кошелек и Telegram, а затем купите плагины или подключите стратегию.</p>
+    {% if message %}
+        <div class="message">{{ message }}</div>
+    {% endif %}
+    <div class="grid">
+        <div class="card">
+            <h2>Баланс</h2>
+            <p>€{{ wallet.balance }}</p>
+            <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
+            <p>Адрес: {{ wallet.address or 'Не указано' }}</p>
+            <p>Подключенная биржа: {{ wallet.exchange_provider or 'Не подключена' }}</p>
+            <p>API ключ (маскированный): {{ wallet.exchange_address or 'Не указано' }}</p>
+            <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>
+        </div>
+        <div class="card">
+            <h2>Подключение биржи</h2>
+            {% if exchange_info %}
+                <div class="card" style="margin-bottom: 15px;">
+                    <p>{{ exchange_info }}</p>
+                </div>
+            {% endif %}
+            <form method="post">
+                <input type="hidden" name="action" value="connect_exchange">
+                <div class="field-group">
+                    <label for="exchange_name">Биржа</label>
+                    <select id="exchange_name" name="exchange_name">
+                        {% for ex in exchanges %}
+                            <option value="{{ ex }}">{{ ex }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="api_key">API Key</label>
+                    <input type="text" id="api_key" name="api_key" placeholder="API Key">
+                </div>
+                <div class="field-group">
+                    <label for="api_secret">API Secret</label>
+                    <input type="password" id="api_secret" name="api_secret" placeholder="API Secret">
+                </div>
+                <button type="submit" class="btn">Подключить биржу</button>
+            </form>
+        </div>
+        <div class="card">
+            <h2>Подключение кошелька</h2>
+            <form method="post">
+                <input type="hidden" name="action" value="connect_wallet">
+                <div class="field-group">
+                    <label for="wallet_provider">Провайдер кошелька</label>
+                    <select id="wallet_provider" name="wallet_provider">
+                        {% for wallet_provider in wallets %}
+                            <option value="{{ wallet_provider }}">{{ wallet_provider }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="wallet_address">Адрес кошелька</label>
+                    <input type="text" id="wallet_address" name="wallet_address" placeholder="0x...">
+                </div>
+                <button type="submit" class="btn">Подключить кошелек</button>
+            </form>
+        </div>
+        <div class="card">
+            <h2>Подключение Telegram</h2>
+            <form method="post">
+                <input type="hidden" name="action" value="connect_telegram">
+                <div class="field-group">
+                    <label for="telegram_username">Telegram username</label>
+                    <input type="text" id="telegram_username" name="telegram_username" placeholder="@username">
+                </div>
+                <div class="field-group">
+                    <label for="telegram_token">Bot token</label>
+                    <input type="text" id="telegram_token" name="telegram_token" placeholder="123456:ABC-DEF...">
+                </div>
+                <button type="submit" class="btn">Подключить Telegram</button>
+            </form>
+        </div>
+    </div>
+    {% if plugin_message %}
+        <div class="message">{{ plugin_message }}</div>
+    {% endif %}
+    <div class="card">
+        <h2>Плагины</h2>
+        {% for plugin in plugins %}
+            <div class="card" style="margin-bottom: 15px;">
+                <h3>{{ plugin.name }}</h3>
+                <p>{{ plugin.description }}</p>
+                <p>Цена: €{{ '%.2f'|format(plugin.price) }}</p>
+                <form method="post" style="margin-top: 10px;">
+                    <input type="hidden" name="action" value="buy_plugin">
+                    <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
+                    <button class="btn" type="submit">Купить</button>
+                </form>
+            </div>
+        {% endfor %}
+    </div>
+    <div class="card">
+        <h2>Покупки</h2>
+        {% if purchases %}
+            <ul>
+                {% for item in purchases %}
+                    <li>{{ item.name }} — {{ item.when }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Пока нет покупок.</p>
+        {% endif %}
+    </div>
+{% endblock %}

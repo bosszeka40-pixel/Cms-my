@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Админ-панель</h1>
+    <p class="lead">Управление пользователями, плагинами и покупками.</p>
+    {% if message %}
+        <div class="message">{{ message }}</div>
+    {% endif %}
+    <div class="grid">
+        <div class="card">
+            <h2>Добавить плагин</h2>
+            <form method="post">
+                <div class="field-group">
+                    <label for="plugin_name">Название</label>
+                    <input type="text" id="plugin_name" name="plugin_name" required>
+                </div>
+                <div class="field-group">
+                    <label for="plugin_price">Цена</label>
+                    <input type="text" id="plugin_price" name="plugin_price" required>
+                </div>
+                <div class="field-group">
+                    <label for="plugin_description">Описание</label>
+                    <textarea id="plugin_description" name="plugin_description" rows="4"></textarea>
+                </div>
+                <button type="submit" class="btn">Создать плагин</button>
+            </form>
+        </div>
+        <div class="card">
+            <h2>Пользователи</h2>
+            {% if users %}
+                <ul>
+                    {% for user in users %}
+                        <li>{{ user[1] }} ({{ user[2] }}) — роль: {{ user[3] }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Нет пользователей.</p>
+            {% endif %}
+        </div>
+        <div class="card">
+            <h2>Плагины</h2>
+            {% if plugins %}
+                <ul>
+                    {% for plugin in plugins %}
+                        <li>{{ plugin.name }} — €{{ '%.2f'|format(plugin.price) }}<br>{{ plugin.description }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Нет плагинов.</p>
+            {% endif %}
+        </div>
+        <div class="card">
+            <h2>Кошельки пользователей</h2>
+            {% if wallets %}
+                <ul>
+                    {% for wallet in wallets %}
+                        <li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Нет данных кошельков.</p>
+            {% endif %}
+        </div>
+        <div class="card">
+            <h2>Покупки</h2>
+            {% if purchases %}
+                <ul>
+                    {% for item in purchases %}
+                        <li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Нет покупок.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

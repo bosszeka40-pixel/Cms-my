@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Управление ботом</h1>
+    <p class="lead">Запустите или остановите вашего торгового бота и настройте стратегию.</p>
+    {% if message %}
+        <div class="message">{{ message }}</div>
+    {% endif %}
+    <div class="card">
+        <h2>Статус бота</h2>
+        <p>Активность: <strong>{{ bot_status.active }}</strong></p>
+        <p>Запусков: <strong>{{ bot_status.runs }}</strong></p>
+        <div class="button-row">
+            <button class="btn" onclick="document.getElementById('start-form').submit();">Запустить бота</button>
+            <button class="btn" onclick="document.getElementById('stop-form').submit();">Остановить бота</button>
+        </div>
+    </div>
+    <form id="start-form" method="post" style="display:none;">
+        <input type="hidden" name="action" value="start_bot">
+    </form>
+    <form id="stop-form" method="post" style="display:none;">
+        <input type="hidden" name="action" value="stop_bot">
+    </form>
+    <div class="card">
+        <h2>Выбор стратегии</h2>
+        <form method="post">
+            <input type="hidden" name="action" value="save_strategy">
+            <div class="field-group">
+                <label for="strategy">Стратегия</label>
+                <select id="strategy" name="strategy">
+                    <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                    <option value="hft_momentum" {% if current_strategy == 'hft_momentum' %}selected{% endif %}>HFT Momentum</option>
+                    <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="leverage">Леверидж</label>
+                <input type="text" id="leverage" name="leverage" value="{{ config.leverage }}">
+            </div>
+            <div class="field-group">
+                <label for="risk_tolerance">Риск</label>
+                <input type="text" id="risk_tolerance" name="risk_tolerance" value="{{ config.risk_tolerance }}">
+            </div>
+            <button type="submit" class="btn">Сохранить стратегию</button>
+        </form>
+    </div>
+    <div class="card">
+        <h2>Ручная сделка</h2>
+        <form method="post">
+            <input type="hidden" name="action" value="manual_trade">
+            <div class="field-group">
+                <label for="news_sentiment">Новостной сентимент</label>
+                <input type="text" id="news_sentiment" name="news_sentiment" value="0.0">
+            </div>
+            <div class="field-group">
+                <label for="price_change">Изменение цены (%)</label>
+                <input type="text" id="price_change" name="price_change" value="0.0">
+            </div>
+            <div class="field-group">
+                <label for="current_balance">Текущий баланс</label>
+                <input type="text" id="current_balance" name="current_balance" value="100.0">
+            </div>
+            <button class="btn" type="submit">Симуляция сделки</button>
+        </form>
+        {% if manual_trade_result %}
+            <div class="card" style="margin-top: 15px;">
+                <h3>Результат симуляции</h3>
+                <p>Стратегия: {{ manual_trade_result.strategy }}</p>
+                <p>Сигнал: {{ manual_trade_result.signal }}</p>
+                <p>Баланс после сделки: {{ manual_trade_result.next_balance }}</p>
+                <p>Леверидж: {{ manual_trade_result.leverage }}</p>
+            </div>
+        {% endif %}
+    </div>
+    <div class="card">
+        <h2>График баланса</h2>
+        <div class="balance-chart" style="margin-top: 10px;">
+            {% for point in balance_history %}
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>{{ point.time }}</span>
+                    <span>{{ point.value }}</span>
+                </div>
+                <div style="height: 14px; background: #e2e8f0; border-radius: 4px; margin-bottom: 10px;">
+                    <div style="width: {{ (point.value / 200) * 100 }}%; background: #3182ce; height: 100%; border-radius: 4px;"></div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}
