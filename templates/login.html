@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Вход в Super CMS</h1>
+    <p class="lead">Введите свои учетные данные, чтобы получить доступ к панели управления ботом и настройкам.</p>
+    {% if message %}
+        <div class="message">{{ message }}</div>
+    {% endif %}
+    <form method="post">
+        <div class="field-group">
+            <label for="username">Email или Имя пользователя</label>
+            <input type="text" id="username" name="username" placeholder="Введите email или username" required>
+        </div>
+        <div class="field-group">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" placeholder="Введите пароль" required>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 20px;">
+            <label><input type="checkbox" name="remember"> Запомнить меня</label>
+            <a class="footer-link" href="{{ url_for('forgot_password_page') }}">Забыли пароль?</a>
+        </div>
+        <button type="submit" class="btn">Войти</button>
+    </form>
+    <p style="margin-top: 20px;">Нет аккаунта? <a href="{{ url_for('register_page') }}">Зарегистрироваться</a></p>
+    <div class="small-note">или войти через</div>
+    <div class="social-btns">
+        <a class="social-btn google" href="#">Google</a>
+        <a class="social-btn github" href="#">GitHub</a>
+        <a class="social-btn telegram" href="#">Telegram</a>
+    </div>
+{% endblock %}

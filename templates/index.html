@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Добро пожаловать в Super CMS V12 Ultimate</h1>
+    <p class="lead">Платформа управления AI-ботом, криптоторговлей и системой плагинов.</p>
+    <div class="button-row">
+        <a class="btn" href="{{ url_for('login_page') }}">Войти</a>
+        <a class="btn" href="{{ url_for('register_page') }}">Регистрация</a>
+    </div>
+{% endblock %}

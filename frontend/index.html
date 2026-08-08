@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Daily Compound Harvester CMS</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="card">
+        <h2>Harvester CMS</h2>
+        <input type="text" id="exchange" value="binance">
+        <input type="text" id="apiKey" placeholder="API Key">
+        <input type="password" id="apiSecret" placeholder="API Secret">
+        <button onclick="connect()">Подключить биржу</button>
+        <div id="result"></div>
+    </div>
+    <script>
+        async function connect() {
+            const exchange = document.getElementById('exchange').value;
+            const api_key = document.getElementById('apiKey').value;
+            const api_secret = document.getElementById('apiSecret').value;
+            const res = document.getElementById('result');
+            res.innerText = "Подключение...";
+
+            const response = await fetch('/api/user/connect-exchange', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({exchange_name: exchange, api_key: api_key, api_secret: api_secret})
+            });
+
+            const data = await response.json();
+            res.innerText = data.message || data.detail || 'Неизвестный ответ';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+import numpy as np
+from datetime import datetime
+
+class AICryptoMemoryBrain:
+    def __init__(self):
+        self.memory_history = []
+        self.params = {
+            "leverage": 3.0,
+            "fee": 0.0001,
+            "ai_confidence_cutoff": 0.38
+        }
+
+    def record_action(self, action_type: str, result_roi: float):
+        self.memory_history.append({
+            "action": action_type,
+            "roi": result_roi,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    def summarize(self):
+        return {
+            "actions": len(self.memory_history),
+            "history": self.memory_history
+        }
+
+class CMSProductionHFTBot:
+    def __init__(self, initial_capital: float = 100.0, brain: AICryptoMemoryBrain | None = None):
+        self.capital = initial_capital
+        self.brain = brain or AICryptoMemoryBrain()
+        self.trade_history = []
+
+    def trade_loop(self, market_data, ai_stream):
+        if len(market_data) != len(ai_stream):
+            raise ValueError("market_data and ai_stream must be the same length")
+
+        prices = np.array(market_data, dtype=float)
+        confidences = np.array(ai_stream, dtype=float)
+
+        for i in range(len(prices) - 1):
+            change = prices[i + 1] - prices[i]
+            pct_change = change / prices[i] if prices[i] != 0 else 0.0
+            confidence = confidences[i]
+
+            if abs(change) > 35.0 and confidence > self.brain.params["ai_confidence_cutoff"]:
+                direction = 1 if change > 0 else -1
+                net_ret = (direction * pct_change * self.brain.params["leverage"]) - self.brain.params["fee"]
+                self.capital *= (1 + net_ret)
+                action = "long" if direction > 0 else "short"
+                self.brain.record_action(action, net_ret)
+                self.trade_history.append({
+                    "index": i,
+                    "action": action,
+                    "price": float(prices[i]),
+                    "next_price": float(prices[i + 1]),
+                    "roi": float(net_ret),
+                    "capital": float(self.capital)
+                })
+
+        return float(self.capital)
+
+    def metrics(self):
+        return {
+            "capital": float(self.capital),
+            "trades": len(self.trade_history),
+            "trade_history": self.trade_history,
+            "brain_summary": self.brain.summarize()
+        }

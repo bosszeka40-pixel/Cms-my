@@ -1,0 +1,4 @@
+strategy: pure_harvester
+leverage: 1.5
+risk_tolerance: 0.03
+log_level: info

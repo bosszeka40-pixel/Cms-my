@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Регистрация Super CMS</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --panel:#101b2d; --accent:#2dd4bf; --text:#f8fafc; --muted:#94a3b8; --border:#243447; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,sans-serif;background:linear-gradient(135deg,#07111f,#0f172a);color:var(--text);min-height:100vh;display:grid;place-items:center;padding:24px}
+    .card{width:min(100%,500px);background:rgba(16,27,45,.96);border:1px solid var(--border);box-shadow:0 20px 50px rgba(0,0,0,.35);border-radius:20px;padding:28px}
+    h1{font-size:1.5rem;margin:0 0 6px}.sub{color:var(--muted);margin-bottom:22px}
+    .field{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}.label{font-size:.95rem;color:#cbd5e1}
+    .input-wrap{display:flex;align-items:center;gap:10px;background:#0b1422;border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+    .input-wrap input{background:transparent;border:none;outline:none;color:var(--text);width:100%}
+    .btn{width:100%;border:none;border-radius:12px;padding:13px 16px;background:linear-gradient(135deg,var(--accent),#38bdf8);color:#07111f;font-weight:700;cursor:pointer;margin-top:8px}
+    .small{font-size:.9rem;color:var(--muted);margin-top:10px}
+    .link{margin-top:12px;text-align:center} .link a{color:var(--accent);text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Создание аккаунта Super CMS V12</h1>
+    <div class="sub">Создайте безопасный доступ к панели управления и торговым модулям.</div>
+    <div class="field"><label class="label">Имя пользователя</label><div class="input-wrap"><input type="text" placeholder="unique_login"></div></div>
+    <div class="field"><label class="label">Email</label><div class="input-wrap"><input type="email" placeholder="mail@example.com"></div></div>
+    <div class="field"><label class="label">Пароль</label><div class="input-wrap"><input type="password" placeholder="••••••••"></div></div>
+    <div class="field"><label class="label">Подтверждение пароля</label><div class="input-wrap"><input type="password" placeholder="••••••••"></div></div>
+    <label class="small"><input type="checkbox" /> Я согласен с условиями использования и политикой конфиденциальности</label>
+    <button class="btn" type="button" onclick="location.href='dashboard.html'">Зарегистрироваться</button>
+    <div class="link">Уже есть аккаунт? <a href="login.html">Войти</a></div>
+  </div>
+</body>
+</html>

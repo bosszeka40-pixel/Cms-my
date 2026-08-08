@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Личный кабинет</h1>
+    <p class="lead">Добро пожаловать, <strong>{{ username }}</strong>!</p>
+    <div class="grid" style="margin-top: 20px;">
+        <div class="card">
+            <h2>Баланс SYSTEM_COIN</h2>
+            <p style="font-size: 24px; font-weight: bold;">€{{ balance }}</p>
+            <div class="button-row">
+                <a class="btn" href="#">Пополнить</a>
+                <a class="btn" href="#">Перевести</a>
+            </div>
+        </div>
+        <div class="card">
+            <h2>ИИ-ассистент</h2>
+            <p>Введите запрос, чтобы получить помощь от AI-модуля.</p>
+            <textarea style="height: 120px;"></textarea>
+            <button class="btn" style="margin-top: 10px;">Отправить запрос</button>
+        </div>
+        <div class="card">
+            <h2>Плагины и управление</h2>
+            <p>Здесь будут доступные системные плагины и управление ботом.</p>
+            <div class="button-row">
+                <a class="btn" href="#">Маркетплейс</a>
+                <a class="btn" href="#">Управление ботом</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}
