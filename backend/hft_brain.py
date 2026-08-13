@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from datetime import datetime
 
 class AICryptoMemoryBrain:
@@ -6,7 +7,7 @@ class AICryptoMemoryBrain:
         self.memory_history = []
         self.params = {
             "leverage": 3.0,
-            "fee": 0.0001,
+            "fee": float(os.getenv("HFT_FEE_RATE", "0.0001")),
             "ai_confidence_cutoff": 0.38
         }
 
