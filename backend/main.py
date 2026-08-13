@@ -52,6 +52,10 @@ class StrategyPayload(BaseModel):
 async def serve_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "user_id": request.session.get("user_email")})
 
+@app.get("/home", name="home")
+async def home(request: Request):
+    return await serve_root(request)
+
 @app.get("/login", name="login")
 async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request, "message": None, "user_id": request.session.get("user_email")})
@@ -96,7 +100,17 @@ async def dashboard(request: Request):
     user = engine.get_user(user_email)
     username = user.email if user else user_email
     balance = "—"
-    return templates.TemplateResponse("dashboard.html", {"request": request, "username": username, "email": user_email, "balance": balance, "user_id": user_email})
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "username": username,
+            "email": user_email,
+            "balance": balance,
+            "wallet": {"balance": 0.0, "provider": None, "address": None},
+            "user_id": user_email,
+        },
+    )
 
 @app.get("/marketplace", name="marketplace")
 async def marketplace(request: Request):
@@ -135,6 +149,34 @@ async def bot_management(request: Request):
             "message": None,
             "manual_trade_result": None,
             "balance_history": [{"time": "start", "value": 100}],
+        },
+    )
+
+@app.get("/wallet", name="wallet_page")
+async def wallet_page(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse(
+        "wallet.html",
+        {"request": request, "user_id": user_email, "wallet": {"balance": 0.0}, "message": None},
+    )
+
+@app.get("/admin", name="admin_panel")
+async def admin_panel(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse(
+        "admin.html",
+        {
+            "request": request,
+            "user_id": user_email,
+            "users": [],
+            "plugins": engine.list_plugins(),
+            "purchases": [],
+            "wallets": [],
+            "message": None,
         },
     )
 

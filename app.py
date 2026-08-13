@@ -59,8 +59,20 @@ def init_db():
                         plugin_name TEXT,
                         purchased_at TEXT)''')
     conn.commit()
+    cursor.execute("PRAGMA table_info('users')")
+    user_columns = [row[1] for row in cursor.fetchall()]
+    if 'role' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
     cursor.execute("PRAGMA table_info('wallets')")
     columns = [row[1] for row in cursor.fetchall()]
+    for column, definition in (
+        ('provider', 'TEXT'),
+        ('address', 'TEXT'),
+        ('telegram', 'TEXT'),
+        ('telegram_token', 'TEXT'),
+    ):
+        if column not in columns:
+            cursor.execute(f'ALTER TABLE wallets ADD COLUMN {column} {definition}')
     if 'exchange_provider' not in columns:
         cursor.execute('ALTER TABLE wallets ADD COLUMN exchange_provider TEXT')
     if 'exchange_address' not in columns:
