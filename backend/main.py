@@ -28,7 +28,13 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend")), name="st
 app.include_router(admin_router)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-templates.env.globals['url_for'] = app.url_path_for
+
+def template_url_for(name: str, **values):
+    if name == "static" and "filename" in values:
+        values["path"] = values.pop("filename")
+    return app.url_path_for(name, **values)
+
+templates.env.globals["url_for"] = template_url_for
 engine = CMSEngine()
 bot = HFTBot()
 production_bot = CMSProductionHFTBot()
