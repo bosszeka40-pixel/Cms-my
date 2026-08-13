@@ -134,11 +134,20 @@ async def dashboard(request: Request):
         },
     )
 
-@app.get("/marketplace", name="marketplace")
+@app.api_route("/marketplace", methods=["GET", "POST"], name="marketplace")
 async def marketplace(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
+    plugin_message = None
+    if request.method == "POST":
+        form = await request.form()
+        if form.get("action") == "buy_plugin":
+            purchase = engine.purchase_plugin(user_email, str(form.get("plugin_name", "")))
+            plugin_message = (
+                "Стратегия добавлена в ваши покупки."
+                if purchase else "Стратегия не найдена."
+            )
     return templates.TemplateResponse(
         "marketplace.html",
         {
@@ -156,7 +165,7 @@ async def marketplace(request: Request):
             "purchases": engine.user_plugins(user_email),
             "message": None,
             "exchange_info": None,
-            "plugin_message": None,
+            "plugin_message": plugin_message,
         },
     )
 
