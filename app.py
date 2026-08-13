@@ -12,6 +12,7 @@ import math
 from backend.bot import HFTBot
 from backend.cms_core import CMSEngine
 from backend.modules.strategy_manager import StrategyManager
+from backend.exchange_service import ExchangeService
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'development-only-change-me')
@@ -21,6 +22,7 @@ DATABASE = str(BASE_DIR / 'cms_v12.db')
 cmse = CMSEngine()
 bot = HFTBot()
 strategy_manager = StrategyManager(config_path='backend/config.yaml')
+exchange_service = ExchangeService()
 
 EXCHANGES = ['binance', 'kraken', 'okx', 'bybit', 'bitfinex']
 WALLETS = ['Metamask', 'Trust Wallet', 'Coinbase', 'Phantom', 'Ledger']
@@ -422,14 +424,14 @@ def marketplace():
             api_key = request.form.get('api_key', '')
             api_secret = request.form.get('api_secret', '')
             try:
-                exchange_class = getattr(ccxt, provider)
-                exchange = exchange_class({
-                    'apiKey': api_key,
-                    'secret': api_secret,
-                    'enableRateLimit': True,
-                })
-                markets = exchange.load_markets()
-                exchange_info = f'Подключено {provider}. Найдено {len(markets)} рынков.'
+                status = exchange_service.connect(
+                    session['user_id'], provider, api_key, api_secret,
+                    request.form.get('api_password'), request.form.get('sandbox') == 'on',
+                )
+                exchange_info = (
+                    f"Подключено {provider}. "
+                    f"{'Sandbox' if status['sandbox'] else 'Основной аккаунт'}."
+                )
                 update_wallet(session['user_id'], exchange_provider=provider, exchange_address=api_key[:6] + '...' if api_key else None)
                 wallet = get_wallet(session['user_id'])
             except Exception as e:
@@ -576,6 +578,54 @@ def trading_status():
     return bot.status()
 
 
+@app.get('/api/exchange/status')
+def exchange_status():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    return exchange_service.status(session['user_id'])
+
+
+@app.post('/api/exchange/connect')
+def connect_exchange_api():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        return exchange_service.connect(
+            session['user_id'],
+            payload.get('exchange_name'),
+            payload.get('api_key'),
+            payload.get('api_secret'),
+            payload.get('api_password'),
+            bool(payload.get('sandbox', True)),
+        )
+    except (TypeError, ValueError, ccxt.BaseError) as exc:
+        return {'error': f'Ошибка подключения: {exc}'}, 400
+
+
+@app.post('/api/exchange/disconnect')
+def disconnect_exchange_api():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    exchange_service.disconnect(session['user_id'])
+    return {'status': 'disconnected'}
+
+
+@app.get('/api/exchange/balance')
+def exchange_balance():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    try:
+        balance = exchange_service.balance(session['user_id'])
+        return {
+            'free': balance.get('free', {}),
+            'used': balance.get('used', {}),
+            'total': balance.get('total', {}),
+        }
+    except (LookupError, ccxt.BaseError) as exc:
+        return {'error': str(exc)}, 400
+
+
 def _public_exchange(name):
     if name not in EXCHANGES:
         raise ValueError('Неизвестная биржа.')
@@ -644,6 +694,70 @@ def manual_trade():
         return {'status': 'filled', 'pair': pair, 'side': side, 'price': price,
                 'amount': amount, 'fee': fee, 'pnl': -fee, 'balance': next_balance}
     except (KeyError, TypeError, ValueError) as exc:
+        return {'error': str(exc)}, 400
+
+
+@app.post('/api/trading/order')
+def create_exchange_order():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    payload = request.get_json(silent=True) or {}
+    live = bool(payload.get('live', False))
+    if live and (
+        os.getenv('LIVE_TRADING_ENABLED', 'false').lower() != 'true'
+        or payload.get('confirm_live') is not True
+    ):
+        return {
+            'error': (
+                'Реальная торговля отключена. Установите LIVE_TRADING_ENABLED=true '
+                'и передайте confirm_live=true.'
+            )
+        }, 403
+    try:
+        symbol = payload.get('symbol')
+        side = payload.get('side', '').lower()
+        order_type = payload.get('type', 'market').lower()
+        amount = float(payload.get('amount'))
+        price = payload.get('price')
+        price = float(price) if price is not None else None
+        if side not in {'buy', 'sell'} or order_type not in {'market', 'limit'}:
+            raise ValueError('Допустимы только buy/sell и market/limit.')
+        if not math.isfinite(amount) or amount <= 0:
+            raise ValueError('Количество должно быть положительным числом.')
+        if price is not None and (not math.isfinite(price) or price <= 0):
+            raise ValueError('Цена должна быть положительным числом.')
+        if not live:
+            return {
+                'status': 'dry_run',
+                'symbol': symbol,
+                'type': order_type,
+                'side': side,
+                'amount': amount,
+                'price': price,
+            }
+        order = exchange_service.create_order(
+            session['user_id'], symbol, order_type, side, amount, price, payload.get('params'),
+        )
+        record_trade(
+            session['user_id'], 'live', symbol, 'manual', 1 if side == 'buy' else -1,
+            order.get('average') or order.get('price'), order.get('filled') or amount,
+            0.0, 0.0,
+        )
+        return {'status': 'submitted', 'order': order}
+    except (KeyError, TypeError, ValueError, LookupError, ccxt.BaseError) as exc:
+        return {'error': str(exc)}, 400
+
+
+@app.delete('/api/trading/order/<order_id>')
+def cancel_exchange_order(order_id):
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    symbol = request.args.get('symbol')
+    if not symbol:
+        return {'error': 'Укажите symbol.'}, 400
+    try:
+        return exchange_service.cancel_order(session['user_id'], order_id, symbol)
+    except (LookupError, ccxt.BaseError) as exc:
         return {'error': str(exc)}, 400
 
 
