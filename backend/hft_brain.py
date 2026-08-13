@@ -37,13 +37,16 @@ class CMSProductionHFTBot:
         prices = np.array(market_data, dtype=float)
         confidences = np.array(ai_stream, dtype=float)
 
-        for i in range(len(prices) - 1):
-            change = prices[i + 1] - prices[i]
-            pct_change = change / prices[i] if prices[i] != 0 else 0.0
+        # The signal at index i may use only candles through i.  The next
+        # candle is used solely to settle the already-created trade.
+        for i in range(1, len(prices) - 1):
+            observed_change = prices[i] - prices[i - 1]
+            next_change = prices[i + 1] - prices[i]
+            pct_change = next_change / prices[i] if prices[i] != 0 else 0.0
             confidence = confidences[i]
 
-            if abs(change) > 35.0 and confidence > self.brain.params["ai_confidence_cutoff"]:
-                direction = 1 if change > 0 else -1
+            if abs(observed_change) > 35.0 and confidence > self.brain.params["ai_confidence_cutoff"]:
+                direction = 1 if observed_change > 0 else -1
                 net_ret = (direction * pct_change * self.brain.params["leverage"]) - self.brain.params["fee"]
                 self.capital *= (1 + net_ret)
                 action = "long" if direction > 0 else "short"
@@ -53,6 +56,7 @@ class CMSProductionHFTBot:
                     "action": action,
                     "price": float(prices[i]),
                     "next_price": float(prices[i + 1]),
+                    "signal_change": float(observed_change),
                     "roi": float(net_ret),
                     "capital": float(self.capital)
                 })
