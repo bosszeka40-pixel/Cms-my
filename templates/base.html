@@ -7,22 +7,25 @@
 </head>
 <body class="{{ theme|default('light') }}">
     <header>
-        <h2>Super CMS V12</h2>
-        <nav>
-            <a href="{{ url_for('index') }}">Главная</a>
+        <div class="brand"><span class="win-logo" aria-hidden="true">▦</span><h2>Super CMS V12</h2></div>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">
+            <span aria-hidden="true">☰</span> Меню
+        </button>
+        <nav id="main-menu">
+            <a href="{{ url_for('index') }}"><span class="nav-icon" aria-hidden="true">⌂</span>Главная</a>
             {% if user_id %}
-                <a href="{{ url_for('dashboard') }}">Дашборд</a>
-                <a href="{{ url_for('wallet_page') }}">Кошелёк</a>
-                <a href="{{ url_for('marketplace') }}">Маркетплейс</a>
-                <a href="{{ url_for('bot_management') }}">Бот</a>
-                <a href="{{ url_for('settings') }}">Настройки</a>
+                <a href="{{ url_for('dashboard') }}"><span class="nav-icon" aria-hidden="true">▣</span>Дашборд</a>
+                <a href="{{ url_for('wallet_page') }}"><span class="nav-icon" aria-hidden="true">▤</span>Кошелёк</a>
+                <a href="{{ url_for('marketplace') }}"><span class="nav-icon" aria-hidden="true">▦</span>Маркетплейс</a>
+                <a href="{{ url_for('bot_management') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Бот</a>
+                <a href="{{ url_for('settings') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Настройки</a>
                 {% if is_admin %}
-                    <a href="{{ url_for('admin_panel') }}">Админ</a>
+                    <a href="{{ url_for('admin_panel') }}"><span class="nav-icon" aria-hidden="true">★</span>Админ</a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}">Выйти</a>
+                <a href="{{ url_for('logout') }}"><span class="nav-icon" aria-hidden="true">↪</span>Выйти</a>
             {% else %}
-                <a href="{{ url_for('login') }}">Войти</a>
-                <a href="{{ url_for('register') }}">Регистрация</a>
+                <a href="{{ url_for('login') }}"><span class="nav-icon" aria-hidden="true">➜</span>Войти</a>
+                <a href="{{ url_for('register') }}"><span class="nav-icon" aria-hidden="true">✚</span>Регистрация</a>
             {% endif %}
         </nav>
     </header>
@@ -30,5 +33,14 @@
         {% block content %}{% endblock %}
     </div>
     {% block scripts %}{% endblock %}
+    <script>
+        const menuToggle = document.querySelector('.menu-toggle');
+        const mainMenu = document.getElementById('main-menu');
+        menuToggle?.addEventListener('click', () => {
+            const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+            menuToggle.setAttribute('aria-expanded', String(!expanded));
+            mainMenu.classList.toggle('is-open', !expanded);
+        });
+    </script>
 </body>
 </html>

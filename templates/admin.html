@@ -6,9 +6,9 @@
     {% if message %}
         <div class="message">{{ message }}</div>
     {% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Получение средств от продаж</h2>
+    <div class="grid admin-grid">
+        <details class="card" open>
+            <summary>Получение средств от продаж</summary>
             <p class="muted">Укажите реквизиты для зачисления выручки. Платёжные операции выполняются только после подключения соответствующего сервиса.</p>
             <form method="post">
                 <input type="hidden" name="action" value="save_payout_settings">
@@ -45,9 +45,9 @@
                 <p class="small-note">Выплаты на банковскую карту доступны только в EUR. Номер карты в CMS не сохраняется.</p>
                 <button type="submit" class="btn">Сохранить реквизиты выплат</button>
             </form>
-        </div>
-        <div class="card">
-            <h2>Настройки торговой платформы</h2>
+        </details>
+        <details class="card" open>
+            <summary>Настройки торговой платформы</summary>
             <p class="muted">Эти параметры применяются к стратегиям и тестам пользователей.</p>
             <form method="post">
                 <input type="hidden" name="action" value="save_admin_settings">
@@ -69,9 +69,9 @@
                 </div>
                 <button type="submit" class="btn">Сохранить настройки</button>
             </form>
-        </div>
-        <div class="card">
-            <h2>Добавить плагин</h2>
+        </details>
+        <details class="card" open>
+            <summary>Добавить плагин</summary>
             <form method="post">
                 <input type="hidden" name="action" value="create_plugin">
                 <div class="field-group"><label for="plugin_name">Название</label><input type="text" id="plugin_name" name="plugin_name" required></div>
@@ -79,22 +79,22 @@
                 <div class="field-group"><label for="plugin_description">Описание</label><textarea id="plugin_description" name="plugin_description" rows="4"></textarea></div>
                 <button type="submit" class="btn">Создать плагин</button>
             </form>
-        </div>
-        <div class="card">
-            <h2>Пользователи</h2>
+        </details>
+        <details class="card">
+            <summary>Пользователи</summary>
             {% if users %}<ul>{% for user in users %}<li>{{ user[1] }} ({{ user[2] }}) — роль: {{ user[3] }}</li>{% endfor %}</ul>{% else %}<p>Нет пользователей.</p>{% endif %}
-        </div>
-        <div class="card">
-            <h2>Плагины</h2>
+        </details>
+        <details class="card">
+            <summary>Плагины</summary>
             {% if plugins %}<ul>{% for plugin in plugins %}<li>{{ plugin.name }} — €{{ '%.2f'|format(plugin.price) }}<br>{{ plugin.description }}</li>{% endfor %}</ul>{% else %}<p>Нет плагинов.</p>{% endif %}
-        </div>
-        <div class="card">
-            <h2>Кошельки пользователей</h2>
+        </details>
+        <details class="card">
+            <summary>Кошельки пользователей</summary>
             {% if wallets %}<ul>{% for wallet in wallets %}<li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>{% endfor %}</ul>{% else %}<p>Нет данных кошельков.</p>{% endif %}
-        </div>
-        <div class="card">
-            <h2>Покупки</h2>
+        </details>
+        <details class="card">
+            <summary>Покупки</summary>
             {% if purchases %}<ul>{% for item in purchases %}<li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>{% endfor %}</ul>{% else %}<p>Нет покупок.</p>{% endif %}
-        </div>
+        </details>
     </div>
 {% endblock %}
