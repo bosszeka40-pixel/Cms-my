@@ -15,7 +15,7 @@ from .hft_brain import CMSProductionHFTBot
 from .modules.strategy_manager import StrategyManager
 from .market_history import (
     ensure_table, load_candles, refresh_candles, load_history, refresh_history,
-    load_news, refresh_news,
+    load_news, refresh_news, analyze_news_sentiment,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -383,6 +383,7 @@ def market_news(request: Request, refresh: bool = True, limit: int = 100):
         return {
             "news": news,
             "count": len(news),
+            "sentiment": analyze_news_sentiment(news),
             "source": "сохранённая история CoinDesk RSS",
             "analysis_policy": "В историю и анализ попадают только новости, опубликованные к моменту запроса.",
         }
@@ -411,7 +412,21 @@ def chat(payload: ChatPayload, request: Request):
     memories = engine.recent_memories(email, 10)
     profitable = [item for item in memories if item["result"] > 0]
     lower_message = message.lower()
-    if any(word in lower_message for word in ("сигнал", "прогноз", "рынок", "btc", "eth", "час")):
+    if any(word in lower_message for word in ("новост", "news")):
+        try:
+            refresh_news(MARKET_DATABASE)
+            news = load_news(MARKET_DATABASE, limit=5)
+            sentiment = analyze_news_sentiment(news)
+            answer = (
+                f"В истории {len(news)} последних новостей, агрегированный сентимент "
+                f"{sentiment:+.2f}. "
+                + ("Последние заголовки: " + "; ".join(item["title"] for item in news)
+                   if news else "Свежих новостей пока нет.")
+                + " Это информационный анализ, не финансовая рекомендация."
+            )
+        except Exception:
+            answer = "Не удалось получить историю новостей. Повторите запрос позже."
+    elif any(word in lower_message for word in ("сигнал", "прогноз", "рынок", "btc", "eth", "час")):
         pair = "ETH/USDT" if "eth" in lower_message else "BTC/USDT"
         try:
             signal = _market_signal(pair, "binance")

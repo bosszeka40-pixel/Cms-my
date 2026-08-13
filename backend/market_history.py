@@ -264,6 +264,17 @@ def load_news(database, as_of=None, limit=100):
             for row in rows]
 
 
+def analyze_news_sentiment(news):
+    positive = {"surge", "gain", "gains", "bullish", " роста", "рост", "прибыль", "одобр"}
+    negative = {"crash", "drop", "loss", "bearish", "паден", "убыт", "запрет", "взлом"}
+    score = 0
+    for item in news:
+        title = item["title"].lower()
+        score += any(word in title for word in positive)
+        score -= any(word in title for word in negative)
+    return max(-1.0, min(1.0, score / max(1, len(news))))
+
+
 def refresh_news(database, feed_url="https://www.coindesk.com/arc/outboundfeeds/rss/"):
     request = Request(feed_url, headers={"User-Agent": "CMS market news reader/1.0"})
     with urlopen(request, timeout=10) as response:
