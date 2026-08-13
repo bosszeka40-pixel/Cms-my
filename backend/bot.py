@@ -22,3 +22,17 @@ class HFTBot:
         trade = {"time": datetime.utcnow().isoformat(), "result": "simulated", "pl": 0.0}
         self.stats.append(trade)
         return trade
+
+    def simulate(self, pair, strategy, result):
+        trade = {
+            "time": datetime.utcnow().isoformat(),
+            "event": "test_trade",
+            "pair": pair,
+            "strategy": strategy,
+            "signal": result["signal"],
+            "previous_balance": result["previous_balance"],
+            "next_balance": result["next_balance"],
+            "pl": result["next_balance"] - result["previous_balance"],
+        }
+        self.stats.append(trade)
+        return trade

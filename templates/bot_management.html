@@ -3,13 +3,44 @@
 {% block content %}
     <h1 class="page-title">Управление ботом</h1>
     <p class="lead">Запустите или остановите вашего торгового бота и настройте стратегию.</p>
+    <div class="terminal-grid">
+        <div class="card">
+            <h2>Рынок <span id="market-source" class="status-pill">нет данных</span></h2>
+            <div class="field-group">
+                <label for="market-pair">Пара</label>
+                <select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select>
+            </div>
+            <button class="btn" id="refresh-market" type="button">Загрузить котировки</button>
+            <div id="ticker" class="market-stats muted">Нажмите для получения данных с публичного API биржи.</div>
+            <canvas id="price-chart" height="150" aria-label="График цены"></canvas>
+        </div>
+        <div class="card">
+            <h2>Стакан</h2>
+            <div class="order-book">
+                <div><strong>Покупки</strong><div id="bids">—</div></div>
+                <div><strong>Продажи</strong><div id="asks">—</div></div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Ручная торговля</h2>
+            <p class="muted">Симуляция исполнения, реальные ордера не отправляются.</p>
+            <form id="manual-trade-form">
+                <div class="field-group"><label for="manual-side">Направление</label><select id="manual-side"><option value="buy">Купить</option><option value="sell">Продать</option></select></div>
+                <div class="field-group"><label for="manual-price">Цена</label><input id="manual-price" type="number" min="0" step="any" required></div>
+                <div class="field-group"><label for="manual-amount">Количество</label><input id="manual-amount" type="number" min="0" step="any" required></div>
+                <div class="field-group"><label for="manual-balance">Баланс</label><input id="manual-balance" type="number" min="0" step="any" value="100" required></div>
+                <button class="btn" type="submit">Исполнить симуляцию</button>
+            </form>
+            <div id="manual-result" class="small-note" role="status"></div>
+        </div>
+    </div>
     {% if message %}
         <div class="message">{{ message }}</div>
     {% endif %}
     <div class="card">
         <h2>Статус бота</h2>
         <p>Активность: <strong>{{ bot_status.active }}</strong></p>
-        <p>Запусков: <strong>{{ bot_status.runs }}</strong></p>
+        <p>Событий: <strong id="bot-runs">{{ bot_status.runs }}</strong></p>
         <div class="button-row">
             <button class="btn" onclick="document.getElementById('start-form').submit();">Запустить бота</button>
             <button class="btn" onclick="document.getElementById('stop-form').submit();">Остановить бота</button>
@@ -29,7 +60,7 @@
                 <label for="strategy">Стратегия</label>
                 <select id="strategy" name="strategy">
                     <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
-                    <option value="hft_momentum" {% if current_strategy == 'hft_momentum' %}selected{% endif %}>HFT Momentum</option>
+                    <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
                     <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
                 </select>
             </div>
@@ -45,32 +76,30 @@
         </form>
     </div>
     <div class="card">
-        <h2>Ручная сделка</h2>
-        <form method="post">
-            <input type="hidden" name="action" value="manual_trade">
+        <h2>Тест стратегии без перезагрузки</h2>
+        <p class="muted">Результат появится в этом окне и не запускает реальную сделку.</p>
+        <form id="trade-test-form">
+            <div class="field-group">
+                <label for="pair">Торговая пара</label>
+                <select id="pair" name="pair">
+                    {% for pair in trading_pairs %}<option value="{{ pair }}">{{ pair }}</option>{% endfor %}
+                </select>
+            </div>
             <div class="field-group">
                 <label for="news_sentiment">Новостной сентимент</label>
-                <input type="text" id="news_sentiment" name="news_sentiment" value="0.0">
+                <input type="number" step="0.01" id="news_sentiment" name="news_sentiment" value="0.0">
             </div>
             <div class="field-group">
                 <label for="price_change">Изменение цены (%)</label>
-                <input type="text" id="price_change" name="price_change" value="0.0">
+                <input type="number" step="0.01" id="price_change" name="price_change" value="0.0">
             </div>
             <div class="field-group">
                 <label for="current_balance">Текущий баланс</label>
-                <input type="text" id="current_balance" name="current_balance" value="100.0">
+                <input type="number" step="0.01" min="0" id="current_balance" name="current_balance" value="100.0">
             </div>
-            <button class="btn" type="submit">Симуляция сделки</button>
+            <button class="btn" id="test-submit" type="submit">Запустить тест</button>
         </form>
-        {% if manual_trade_result %}
-            <div class="card" style="margin-top: 15px;">
-                <h3>Результат симуляции</h3>
-                <p>Стратегия: {{ manual_trade_result.strategy }}</p>
-                <p>Сигнал: {{ manual_trade_result.signal }}</p>
-                <p>Баланс после сделки: {{ manual_trade_result.next_balance }}</p>
-                <p>Леверидж: {{ manual_trade_result.leverage }}</p>
-            </div>
-        {% endif %}
+        <div class="card" id="trade-result" hidden></div>
     </div>
     <div class="card">
         <h2>График баланса</h2>
@@ -86,4 +115,107 @@
             {% endfor %}
         </div>
     </div>
+    <div class="card">
+        <h2>История сделок</h2>
+        <p class="muted">Общая история ручных и бот-сделок.</p>
+        <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead>
+        <tbody id="trade-history">{% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>{% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+    <div class="card">
+        <h2>Исторический тест всех стратегий</h2>
+        <p class="muted">Тест использует сохранённую годовую историю дневных свечей. Сигнал строится только по данным, доступным до сделки.</p>
+        <button class="btn" id="run-backtest" type="button">Запустить backtest за 365 дней</button>
+        <div id="backtest-result" class="table-wrap"></div>
+    </div>
+{% endblock %}
+{% block scripts %}
+<script>
+const testForm = document.getElementById('trade-test-form');
+testForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('test-submit');
+    const resultBox = document.getElementById('trade-result');
+    button.disabled = true;
+    button.textContent = 'Тестирование...';
+    resultBox.hidden = false;
+    resultBox.textContent = 'Рассчитываем результат...';
+    const payload = Object.fromEntries(new FormData(testForm));
+    ['news_sentiment', 'price_change', 'current_balance'].forEach(key => payload[key] = Number(payload[key]));
+    try {
+        const response = await fetch('{{ url_for("trading_test") }}', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Ошибка теста');
+        resultBox.innerHTML = `<h3>Результат теста</h3><p>Пара: <strong>${data.pair}</strong></p><p>Сигнал: <strong>${data.signal}</strong></p><p>Баланс: <strong>${Number(data.next_balance).toFixed(2)}</strong></p><p>P/L: <strong>${Number(data.trade.pl).toFixed(2)}</strong></p>`;
+        document.getElementById('bot-runs').textContent = Number(document.getElementById('bot-runs').textContent) + 1;
+    } catch (error) { resultBox.textContent = error.message; }
+    finally { button.disabled = false; button.textContent = 'Запустить тест'; }
+});
+
+const pairSelect = document.getElementById('market-pair');
+const renderLevels = (target, levels) => {
+    document.getElementById(target).innerHTML = (levels || []).map(level =>
+        `<div class="book-row"><span>${Number(level[0]).toFixed(2)}</span><span>${Number(level[1]).toFixed(5)}</span></div>`
+    ).join('') || 'Нет данных';
+};
+function drawChart(candles) {
+    const canvas = document.getElementById('price-chart');
+    const context = canvas.getContext('2d');
+    const values = candles.map(item => Number(item[4])).filter(Number.isFinite);
+    if (!values.length) return;
+    const width = canvas.clientWidth || 500;
+    canvas.width = width * 2;
+    canvas.height = 300;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const min = Math.min(...values), max = Math.max(...values);
+    context.strokeStyle = '#2563eb';
+    context.lineWidth = 4;
+    context.beginPath();
+    values.forEach((value, index) => {
+        const x = index * canvas.width / Math.max(values.length - 1, 1);
+        const y = canvas.height - ((value - min) / Math.max(max - min, 1)) * (canvas.height - 20) - 10;
+        index ? context.lineTo(x, y) : context.moveTo(x, y);
+    });
+    context.stroke();
+}
+document.getElementById('refresh-market').addEventListener('click', async () => {
+    const response = await fetch(`/api/market/data?pair=${encodeURIComponent(pairSelect.value)}`);
+    const data = await response.json();
+    if (!response.ok) { document.getElementById('ticker').textContent = data.error; return; }
+    document.getElementById('market-source').textContent = `${data.exchange} · live`;
+    document.getElementById('ticker').innerHTML = `Цена: <strong>${Number(data.ticker.last).toFixed(2)}</strong> · Изменение: ${Number(data.ticker.change || 0).toFixed(2)}%`;
+    document.getElementById('manual-price').value = data.ticker.last || '';
+    renderLevels('bids', data.order_book.bids);
+    renderLevels('asks', data.order_book.asks);
+    drawChart(data.candles);
+});
+document.getElementById('manual-trade-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {pair: pairSelect.value, side: document.getElementById('manual-side').value,
+        price: Number(document.getElementById('manual-price').value), amount: Number(document.getElementById('manual-amount').value),
+        balance: Number(document.getElementById('manual-balance').value)};
+    const response = await fetch('/api/trading/manual', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+    const data = await response.json();
+    document.getElementById('manual-result').textContent = response.ok ? `Исполнено. Комиссия: ${Number(data.fee).toFixed(4)}. Баланс: ${Number(data.balance).toFixed(2)}` : data.error;
+    if (response.ok) loadHistory();
+});
+async function loadHistory() {
+    const response = await fetch('/api/trading/history');
+    if (!response.ok) return;
+    const data = await response.json();
+    document.getElementById('trade-history').innerHTML = data.trades.map(trade =>
+        `<tr><td>${trade.created_at}</td><td>${trade.mode}</td><td>${trade.pair}</td><td>${trade.strategy}</td><td>${Number(trade.pnl).toFixed(4)}</td><td>${Number(trade.balance).toFixed(2)}</td></tr>`
+    ).join('') || '<tr><td colspan="6">Сделок пока нет.</td></tr>';
+}
+document.getElementById('run-backtest').addEventListener('click', async () => {
+    const response = await fetch('/api/bot/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pair: pairSelect.value, exchange: 'binance', initial_balance: 10})});
+    const data = await response.json();
+    document.getElementById('backtest-result').innerHTML = response.ok
+        ? `<table><thead><tr><th>Стратегия</th><th>Баланс</th><th>P/L</th><th>ROI</th><th>Победы</th></tr></thead><tbody>${data.results.map(item =>
+            `<tr><td>${item.strategy}</td><td>${item.final_balance.toFixed(2)}</td><td>${item.pnl.toFixed(2)}</td><td>${item.roi.toFixed(2)}%</td><td>${item.wins}/${item.trades}</td></tr>`).join('')}</tbody></table>`
+        : `<p class="message">${data.error}</p>`;
+});
+</script>
 {% endblock %}

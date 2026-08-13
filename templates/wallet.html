@@ -13,14 +13,28 @@
         <p>Telegram: {{ wallet.telegram or '—' }}</p>
     </div>
     <div class="card">
-        <h2>Купить USDT</h2>
+        <h2>CMS Credits (CMSC)</h2>
+        <p class="muted">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный биржевой курс.</p>
         <form method="post">
-            <input type="hidden" name="action" value="buy_usdt">
+            <input type="hidden" name="action" value="buy_credits">
             <div class="field-group">
-                <label for="amount">Сумма (USD)</label>
-                <input type="text" id="amount" name="amount" placeholder="100.00">
+                <label for="amount">Количество CMSC</label>
+                <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
             </div>
-            <button type="submit" class="btn">Купить USDT</button>
+            <div class="field-group">
+                <label for="currency">Валюта оплаты</label>
+                <select id="currency" name="currency">
+                    {% for currency in payment_currencies %}
+                        <option value="{{ currency }}">{{ currency }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn">Купить CMSC</button>
         </form>
+    </div>
+    <div class="card">
+        <h2>Реферальная программа</h2>
+        <p>Ваш код: <strong>{{ user_email|replace('@', '-') }}</strong></p>
+        <p class="muted">Приглашайте пользователей и получайте CMSC-бонусы.</p>
     </div>
 {% endblock %}

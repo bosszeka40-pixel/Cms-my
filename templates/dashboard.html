@@ -3,10 +3,11 @@
 {% block content %}
     <h1 class="page-title">Личный кабинет</h1>
     <p class="lead">Добро пожаловать, <strong>{{ username }}</strong>!</p>
-    <div class="grid" style="margin-top: 20px;">
+    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
+    <div class="grid">
         <div class="card">
-            <h2>Баланс SYSTEM_COIN</h2>
-            <p style="font-size: 24px; font-weight: bold;">€{{ balance }}</p>
+            <h2>Баланс CMSC</h2>
+            <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.credits) }} CMSC</p>
             <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
             <p>Адрес кошелька: {{ wallet.address or 'Не указан' }}</p>
             <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>
@@ -15,11 +16,30 @@
                 <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
             </div>
         </div>
+        <div class="card account-settings">
+            <h2>Аккаунт и оформление</h2>
+            <p class="muted">Выберите тему интерфейса для этого аккаунта.</p>
+            <form method="post">
+                <input type="hidden" name="action" value="save_theme">
+                <div class="field-group">
+                    <label for="theme">Тема</label>
+                    <select id="theme" name="theme">
+                        <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Светлая</option>
+                        <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Тёмная</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Сохранить оформление</button>
+            </form>
+        </div>
         <div class="card">
             <h2>ИИ-ассистент</h2>
-            <p>Введите запрос, чтобы получить помощь от AI-модуля.</p>
-            <textarea style="height: 120px;"></textarea>
-            <button class="btn" style="margin-top: 10px;">Отправить запрос</button>
+            <p>Чат использует сохранённую память тестов и рекомендации по стратегиям.</p>
+            <div id="chat-history" class="small-note" role="log"></div>
+            <form id="chat-form">
+                <textarea id="chat-message" style="height: 80px;" required
+                    placeholder="Например: какую стратегию протестировать?"></textarea>
+                <button class="btn" style="margin-top: 10px;">Отправить запрос</button>
+            </form>
         </div>
         <div class="card">
             <h2>Плагины и управление</h2>
@@ -30,4 +50,30 @@
             </div>
         </div>
     </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('chat-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('chat-message');
+    const history = document.getElementById('chat-history');
+    const message = input.value.trim();
+    if (!message) return;
+    const addMessage = (author, text) => {
+        const row = document.createElement('p');
+        const label = document.createElement('strong');
+        label.textContent = `${author}:`;
+        row.append(label, ` ${text}`);
+        history.appendChild(row);
+    };
+    addMessage('Вы', message);
+    input.value = '';
+    const response = await fetch('/api/chat', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message})
+    });
+    const data = await response.json();
+    addMessage('Бот', response.ok ? data.answer : (data.detail || 'Ошибка чата'));
+});
+</script>
 {% endblock %}

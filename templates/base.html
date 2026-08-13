@@ -3,57 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super CMS V12 Ultimate</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f6f9; color: #333; }
-        header { background: #1a365d; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
-        nav a { color: white; text-decoration: none; margin-left: 20px; font-weight: 500; }
-        nav a:hover { text-decoration: underline; }
-        .container { max-width: 600px; margin: 40px auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .page-title { margin-top: 0; font-size: 2rem; margin-bottom: 10px; }
-        .lead { color: #4a5568; line-height: 1.8; margin-bottom: 20px; }
-        .btn { display: inline-block; background: #3182ce; color: white; padding: 10px 20px; border: none; border-radius: 4px; text-decoration: none; cursor: pointer; text-align: center; }
-        .btn:hover { background: #2b6cb0; }
-        input[type="text"], input[type="email"], input[type="password"], textarea { width: 100%; padding: 10px; margin: 10px 0 20px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        .social-btns { display: flex; gap: 10px; margin-top: 15px; }
-        .social-btn { flex: 1; padding: 10px; text-align: center; border-radius: 4px; text-decoration: none; color: white; font-weight: bold; font-size: 14px; }
-        .google { background: #db4437; }
-        .github { background: #333; }
-        .telegram { background: #0088cc; }
-        .form-title { margin-bottom: 20px; }
-        .message { color: #d53f8c; margin-bottom: 15px; }
-        .field-group { margin-bottom: 15px; }
-        .field-group label { display: block; font-weight: 600; margin-bottom: 6px; }
-        .footer-link { display: block; margin-top: 15px; color: #4a5568; text-decoration: none; }
-        .footer-link:hover { text-decoration: underline; }
-        .card { padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f7fafc; }
-        .grid { display: grid; gap: 20px; }
-        .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
-        .small-note { color: #718096; margin-top: 30px; text-align: center; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="{{ theme|default('light') }}">
     <header>
-        <h2>Super CMS V12</h2>
-        <nav>
-            <a href="{{ url_for('index') }}">Главная</a>
+        <div class="brand"><span class="win-logo" aria-hidden="true">▦</span><h2>Super CMS V12</h2></div>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">
+            <span aria-hidden="true">☰</span> Меню
+        </button>
+        <nav id="main-menu">
+            <a href="{{ url_for('index') }}"><span class="nav-icon" aria-hidden="true">⌂</span>Главная</a>
             {% if user_id %}
-                <a href="{{ url_for('dashboard') }}">Дашборд</a>
-                <a href="{{ url_for('wallet_page') }}">Кошелёк</a>
-                <a href="{{ url_for('marketplace') }}">Маркетплейс</a>
-                <a href="{{ url_for('bot_management') }}">Бот</a>
+                <a href="{{ url_for('dashboard') }}"><span class="nav-icon" aria-hidden="true">▣</span>Дашборд</a>
+                <a href="{{ url_for('wallet_page') }}"><span class="nav-icon" aria-hidden="true">▤</span>Кошелёк</a>
+                <a href="{{ url_for('marketplace') }}"><span class="nav-icon" aria-hidden="true">▦</span>Маркетплейс</a>
+                <a href="{{ url_for('bot_management') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Бот</a>
+                <a href="{{ url_for('settings') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Настройки</a>
                 {% if is_admin %}
-                    <a href="{{ url_for('admin_panel') }}">Админ</a>
+                    <a href="{{ url_for('admin_panel') }}"><span class="nav-icon" aria-hidden="true">★</span>Админ</a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}">Выйти</a>
+                <a href="{{ url_for('logout') }}"><span class="nav-icon" aria-hidden="true">↪</span>Выйти</a>
+                <form class="theme-switcher" method="post" action="{{ url_for('dashboard') }}">
+                    <input type="hidden" name="action" value="save_theme">
+                    <input type="hidden" name="theme" value="{{ 'dark' if theme|default('light') == 'light' else 'light' }}">
+                    <button class="theme-button" type="submit" title="Переключить тему">
+                        {{ '☀ Светлая' if theme|default('light') == 'dark' else '☾ Тёмная' }}
+                    </button>
+                </form>
             {% else %}
-                <a href="{{ url_for('login') }}">Войти</a>
-                <a href="{{ url_for('register') }}">Регистрация</a>
+                <a href="{{ url_for('login') }}"><span class="nav-icon" aria-hidden="true">➜</span>Войти</a>
+                <a href="{{ url_for('register') }}"><span class="nav-icon" aria-hidden="true">✚</span>Регистрация</a>
             {% endif %}
         </nav>
     </header>
     <div class="container">
         {% block content %}{% endblock %}
     </div>
+    {% block scripts %}{% endblock %}
+    <script>
+        const menuToggle = document.querySelector('.menu-toggle');
+        const mainMenu = document.getElementById('main-menu');
+        menuToggle?.addEventListener('click', () => {
+            const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+            menuToggle.setAttribute('aria-expanded', String(!expanded));
+            mainMenu.classList.toggle('is-open', !expanded);
+        });
+    </script>
 </body>
 </html>

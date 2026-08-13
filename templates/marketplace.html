@@ -9,7 +9,8 @@
     <div class="grid">
         <div class="card">
             <h2>Баланс</h2>
-            <p>€{{ wallet.balance }}</p>
+            <p><strong>{{ '%.2f'|format(wallet.credits) }} CMSC</strong></p>
+            <p class="muted">Цены стратегий указаны в евро (€), срок доступа к платной стратегии — 15 дней.</p>
             <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
             <p>Адрес: {{ wallet.address or 'Не указано' }}</p>
             <p>Подключенная биржа: {{ wallet.exchange_provider or 'Не подключена' }}</p>
@@ -40,6 +41,9 @@
                 <div class="field-group">
                     <label for="api_secret">API Secret</label>
                     <input type="password" id="api_secret" name="api_secret" placeholder="API Secret">
+                    <label for="api_password">Passphrase (если требуется)</label>
+                    <input type="password" id="api_password" name="api_password" placeholder="Passphrase">
+                    <label><input type="checkbox" name="sandbox" checked> Использовать sandbox/testnet</label>
                 </div>
                 <button type="submit" class="btn">Подключить биржу</button>
             </form>
@@ -88,10 +92,21 @@
             <div class="card" style="margin-bottom: 15px;">
                 <h3>{{ plugin.name }}</h3>
                 <p>{{ plugin.description }}</p>
-                <p>Цена: €{{ '%.2f'|format(plugin.price) }}</p>
+                <p>Категория: <strong>{{ plugin.category }}</strong></p>
+                <p>Результат за 30 дней: <strong>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</strong>,
+                    баланс €100 → €{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</p>
+                <p>Цена: <strong>{% if plugin.price_eur %}€{{ '%.2f'|format(plugin.price_eur) }} / 15 дней{% else %}Бесплатно{% endif %}</strong></p>
                 <form method="post" style="margin-top: 10px;">
                     <input type="hidden" name="action" value="buy_plugin">
                     <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
+                    {% if plugin.license_options %}
+                        <label for="duration-{{ plugin.name }}">Срок доступа</label>
+                        <select id="duration-{{ plugin.name }}" name="duration_days">
+                            {% for option in plugin.license_options %}
+                                <option value="{{ option.days }}">{{ option.days }} дн. — €{{ '%.2f'|format(option.price_eur) }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
                     <button class="btn" type="submit">Купить</button>
                 </form>
             </div>
