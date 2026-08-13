@@ -23,6 +23,13 @@
                     <a href="{{ url_for('admin_panel') }}"><span class="nav-icon" aria-hidden="true">★</span>Админ</a>
                 {% endif %}
                 <a href="{{ url_for('logout') }}"><span class="nav-icon" aria-hidden="true">↪</span>Выйти</a>
+                <form class="theme-switcher" method="post" action="{{ url_for('dashboard') }}">
+                    <input type="hidden" name="action" value="save_theme">
+                    <input type="hidden" name="theme" value="{{ 'dark' if theme|default('light') == 'light' else 'light' }}">
+                    <button class="theme-button" type="submit" title="Переключить тему">
+                        {{ '☀ Светлая' if theme|default('light') == 'dark' else '☾ Тёмная' }}
+                    </button>
+                </form>
             {% else %}
                 <a href="{{ url_for('login') }}"><span class="nav-icon" aria-hidden="true">➜</span>Войти</a>
                 <a href="{{ url_for('register') }}"><span class="nav-icon" aria-hidden="true">✚</span>Регистрация</a>

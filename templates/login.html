@@ -24,8 +24,8 @@
     <p style="margin-top: 20px;">Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a></p>
     <div class="small-note">или войти через</div>
     <div class="social-btns">
-        <a class="social-btn google" href="#">Google</a>
-        <a class="social-btn github" href="#">GitHub</a>
-        <a class="social-btn telegram" href="#">Telegram</a>
+        <a class="social-btn google" href="{{ url_for('social_login', provider='google') }}">Google</a>
+        <a class="social-btn github" href="{{ url_for('social_login', provider='github') }}">GitHub</a>
+        <a class="social-btn telegram" href="{{ url_for('social_login', provider='telegram') }}">Telegram</a>
     </div>
 {% endblock %}

@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 import ccxt
+from urllib.parse import urlencode
 
 from .admin import router as admin_router
 from .bot import HFTBot
@@ -54,6 +55,10 @@ production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
+SOCIAL_PROVIDERS = {
+    "google": ("GOOGLE_CLIENT_ID", "https://accounts.google.com/o/oauth2/v2/auth"),
+    "github": ("GITHUB_CLIENT_ID", "https://github.com/login/oauth/authorize"),
+}
 
 class ExchangeConfig(BaseModel):
     exchange_name: str
@@ -97,6 +102,46 @@ def _require_admin(request: Request):
     if not user or user.role != "admin":
         raise HTTPException(status_code=403, detail="Требуются права администратора.")
     return email
+
+@app.get("/auth/{provider}", name="social_login")
+async def social_login(provider: str, request: Request):
+    provider = provider.lower()
+    if provider == "telegram":
+        raise HTTPException(
+            status_code=501,
+            detail="Telegram OAuth ещё не настроен: задайте официальный bot callback.",
+        )
+    config = SOCIAL_PROVIDERS.get(provider)
+    if not config:
+        raise HTTPException(status_code=404, detail="Неизвестный social provider.")
+    env_name, authorize_url = config
+    client_id = os.getenv(env_name)
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{provider.capitalize()} login не настроен ({env_name}).",
+        )
+    state = os.urandom(24).hex()
+    request.session[f"oauth_state_{provider}"] = state
+    callback = str(request.url_for("social_callback", provider=provider))
+    params = {
+        "client_id": client_id,
+        "redirect_uri": callback,
+        "response_type": "code",
+        "scope": "openid email profile" if provider == "google" else "read:user user:email",
+        "state": state,
+    }
+    return RedirectResponse(f"{authorize_url}?{urlencode(params)}", status_code=302)
+
+@app.get("/auth/{provider}/callback", name="social_callback")
+async def social_callback(provider: str, request: Request, code: str = "", state: str = ""):
+    expected = request.session.pop(f"oauth_state_{provider.lower()}", None)
+    if not code or not state or not expected or state != expected:
+        raise HTTPException(status_code=400, detail="Недействительный OAuth callback.")
+    raise HTTPException(
+        status_code=501,
+        detail="OAuth provider настроен, но обмен code на профиль требует production credentials.",
+    )
 
 
 def _public_exchange(name: str):
@@ -192,6 +237,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
     user = engine.secure_login(username, password)
     if user:
         request.session["user_email"] = user.email
+        request.session["is_admin"] = user.role == "admin"
         return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse("login.html", {"request": request, "message": "Неверный логин или пароль.", "user_id": None})
 
@@ -346,8 +392,16 @@ async def admin_panel(request: Request):
             "purchases": [],
             "wallets": [],
             "message": None,
+            "risk": risk_manager.status(),
         },
     )
+
+@app.post("/admin/risk", name="admin_risk_action")
+async def admin_risk_action(request: Request, enabled: str = Form("true")):
+    email = _require_admin(request)
+    risk_manager.set_kill_switch(enabled.lower() == "true")
+    engine.record_audit("kill_switch", enabled, email)
+    return RedirectResponse(url="/admin", status_code=303)
 
 @app.get("/logout", name="logout")
 async def logout(request: Request):

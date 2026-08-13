@@ -25,6 +25,12 @@ header {
 }
 header h2 { margin: 0; font-size: 1.15rem; text-shadow: 1px 1px #164c78; }
 nav { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
+.theme-switcher { display: inline-flex; align-items: center; }
+.theme-button {
+    padding: .4rem .65rem; color: #fff; font: inherit; border: 1px solid rgba(255,255,255,.45);
+    border-radius: 3px; background: rgba(0,0,0,.12); cursor: pointer;
+}
+.theme-button:hover, .theme-button:focus-visible { background: rgba(255,255,255,.2); }
 nav a {
     color: #fff; text-decoration: none; padding: .4rem .65rem; border-radius: 3px;
     text-shadow: 1px 1px #164c78;

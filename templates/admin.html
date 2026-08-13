@@ -70,6 +70,15 @@
                 <button type="submit" class="btn">Сохранить настройки</button>
             </form>
         </details>
+        <section class="card admin-risk-card">
+            <h2>Безопасность торговли</h2>
+            <p class="muted">Контроль kill switch и лимитов применяется ко всем пользователям.</p>
+            <p><strong>Kill switch:</strong> {{ risk.kill_switch|default(false) }}</p>
+            <p><strong>Дневной P/L:</strong> {{ risk.daily_pnl|default(0) }}</p>
+            <form method="post" action="{{ url_for('admin_risk_action') }}">
+                <button class="btn" type="submit" name="enabled" value="true">Остановить торговлю</button>
+            </form>
+        </section>
         <details class="card" open>
             <summary>Добавить плагин</summary>
             <form method="post">
