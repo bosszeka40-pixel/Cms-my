@@ -7,6 +7,7 @@ import sqlite3
 import hashlib
 import yaml
 import ccxt
+import math
 
 from backend.bot import HFTBot
 from backend.cms_core import CMSEngine
@@ -62,6 +63,18 @@ def init_db():
                         user_id INTEGER,
                         plugin_name TEXT,
                         purchased_at TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS trade_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        mode TEXT NOT NULL,
+                        pair TEXT NOT NULL,
+                        strategy TEXT NOT NULL,
+                        signal INTEGER NOT NULL,
+                        price REAL,
+                        amount REAL,
+                        pnl REAL NOT NULL,
+                        balance REAL NOT NULL,
+                        created_at TEXT NOT NULL)''')
     conn.commit()
     cursor.execute("PRAGMA table_info('users')")
     user_columns = [row[1] for row in cursor.fetchall()]
@@ -184,6 +197,35 @@ def get_purchases(user_id):
     rows = cursor.fetchall()
     conn.close()
     return [{'name': row[0], 'when': row[1]} for row in rows]
+
+
+def record_trade(user_id, mode, pair, strategy, signal, price, amount, pnl, balance):
+    conn = sqlite3.connect(DATABASE)
+    conn.execute(
+        '''INSERT INTO trade_history
+           (user_id, mode, pair, strategy, signal, price, amount, pnl, balance, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (user_id, mode, pair, strategy, int(signal), price, amount, pnl, balance,
+         datetime.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_trade_history(user_id, limit=100):
+    conn = sqlite3.connect(DATABASE)
+    rows = conn.execute(
+        '''SELECT mode, pair, strategy, signal, price, amount, pnl, balance, created_at
+           FROM trade_history WHERE user_id = ? ORDER BY id DESC LIMIT ?''',
+        (user_id, limit),
+    ).fetchall()
+    conn.close()
+    return [
+        {'mode': row[0], 'pair': row[1], 'strategy': row[2], 'signal': row[3],
+         'price': row[4], 'amount': row[5], 'pnl': row[6], 'balance': row[7],
+         'created_at': row[8]}
+        for row in rows
+    ]
 
 
 def get_all_users():
@@ -472,7 +514,12 @@ def bot_management():
             pair = request.form.get('pair', TRADING_PAIRS[0])
             manual_trade_result = strategy_manager.execute(news_sentiment, price_change, current_balance)
             manual_trade_result['pair'] = pair
-            bot.simulate(pair, strategy_manager.current_strategy(), manual_trade_result)
+            trade = bot.simulate(pair, strategy_manager.current_strategy(), manual_trade_result)
+            record_trade(
+                session['user_id'], 'manual', pair, strategy_manager.current_strategy(),
+                manual_trade_result['signal'], None, None, trade['pl'],
+                manual_trade_result['next_balance'],
+            )
             message = 'Ручная сделка выполнена.'
 
     bot_status = bot.status()
@@ -493,6 +540,7 @@ def bot_management():
         message=message,
         manual_trade_result=manual_trade_result,
         balance_history=balance_history,
+        trade_history=get_trade_history(session['user_id']),
         trading_pairs=TRADING_PAIRS,
     )
 
@@ -512,6 +560,10 @@ def trading_test():
         result = strategy_manager.execute(news_sentiment, price_change, current_balance)
         result['pair'] = pair
         result['trade'] = bot.simulate(pair, strategy_manager.current_strategy(), result)
+        record_trade(
+            session['user_id'], 'manual', pair, strategy_manager.current_strategy(),
+            result['signal'], None, None, result['trade']['pl'], result['next_balance'],
+        )
         return result
     except (TypeError, ValueError):
         return {'error': 'Проверьте числовые параметры сделки.'}, 400
@@ -522,6 +574,111 @@ def trading_status():
     if 'user_id' not in session:
         return {'error': 'Требуется авторизация.'}, 401
     return bot.status()
+
+
+def _public_exchange(name):
+    if name not in EXCHANGES:
+        raise ValueError('Неизвестная биржа.')
+    exchange_class = getattr(ccxt, name, None)
+    if exchange_class is None:
+        raise ValueError('Биржа не поддерживается установленной версией CCXT.')
+    return exchange_class({'enableRateLimit': True, 'timeout': 10000})
+
+
+@app.get('/api/market/data')
+def market_data():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    exchange_name = request.args.get('exchange', 'binance').lower()
+    pair = request.args.get('pair', TRADING_PAIRS[0])
+    if pair not in TRADING_PAIRS:
+        return {'error': 'Недоступная торговая пара.'}, 400
+    try:
+        exchange = _public_exchange(exchange_name)
+        ticker = exchange.fetch_ticker(pair)
+        order_book = exchange.fetch_order_book(pair, limit=10)
+        return {
+            'exchange': exchange_name, 'pair': pair,
+            'ticker': {'last': ticker.get('last'), 'change': ticker.get('percentage'),
+                       'high': ticker.get('high'), 'low': ticker.get('low'),
+                       'timestamp': ticker.get('timestamp')},
+            'order_book': {'bids': order_book.get('bids', [])[:10],
+                           'asks': order_book.get('asks', [])[:10]},
+            'source': 'public exchange API', 'live': True,
+        }
+    except Exception as exc:
+        return {'error': f'Не удалось получить данные биржи: {exc}', 'live': False}, 502
+
+
+@app.get('/api/trading/history')
+def trading_history():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    return {'trades': get_trade_history(session['user_id'])}
+
+
+@app.post('/api/trading/manual')
+def manual_trade():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        pair = payload.get('pair', TRADING_PAIRS[0])
+        side = payload.get('side', 'buy')
+        price = float(payload['price'])
+        amount = float(payload['amount'])
+        balance = max(0.0, float(payload.get('balance', 100)))
+        if pair not in TRADING_PAIRS or side not in {'buy', 'sell'}:
+            raise ValueError('Проверьте пару и направление сделки.')
+        if not all(math.isfinite(value) for value in (price, amount, balance)) or price <= 0 or amount <= 0:
+            raise ValueError('Цена, количество и баланс должны быть положительными числами.')
+        notional = price * amount
+        if notional > balance:
+            raise ValueError('Недостаточно баланса для сделки.')
+        fee = notional * 0.001
+        next_balance = balance - fee
+        record_trade(session['user_id'], 'manual', pair, 'manual', 1 if side == 'buy' else -1,
+                     price, amount, -fee, next_balance)
+        return {'status': 'filled', 'pair': pair, 'side': side, 'price': price,
+                'amount': amount, 'fee': fee, 'pnl': -fee, 'balance': next_balance}
+    except (KeyError, TypeError, ValueError) as exc:
+        return {'error': str(exc)}, 400
+
+
+@app.post('/api/bot/backtest')
+def backtest():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        prices = [float(value) for value in payload.get('prices', [])]
+        sentiment = [float(value) for value in payload.get('sentiment', [])]
+        initial = max(0.0, float(payload.get('initial_balance', 100)))
+        if len(prices) < 2 or len(prices) != len(sentiment) or initial <= 0:
+            raise ValueError('Нужны одинаковые ряды цен и сигналов минимум из 2 значений.')
+        strategies = {
+            'pure_harvester': strategy_manager.module.process_tick,
+            'high_frequency_momentum': strategy_manager.module.process_high_frequency,
+            'compound_defender': strategy_manager.module.process_defender,
+        }
+        results = []
+        for name, processor in strategies.items():
+            balance, wins = initial, 0
+            for index in range(len(prices) - 1):
+                change = ((prices[index + 1] - prices[index]) / prices[index] * 100
+                          if prices[index] else 0)
+                next_balance, _ = processor(sentiment[index], change, balance, 1.5)
+                wins += next_balance > balance
+                balance = max(0.0, next_balance)
+            results.append({
+                'strategy': name, 'initial_balance': initial,
+                'final_balance': round(balance, 8), 'pnl': round(balance - initial, 8),
+                'roi': round((balance / initial - 1) * 100, 4),
+                'trades': len(prices) - 1, 'wins': wins,
+            })
+        return {'results': results, 'source': 'historical input data', 'tested_points': len(prices)}
+    except (TypeError, ValueError) as exc:
+        return {'error': str(exc)}, 400
 
 
 @app.route('/admin', methods=['GET', 'POST'])

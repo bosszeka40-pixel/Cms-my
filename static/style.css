@@ -39,8 +39,19 @@ input:focus, textarea:focus, select:focus, .btn:focus-visible, a:focus-visible {
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 1rem; }
 .button-row { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
 .small-note { margin-top: 1.5rem; text-align: center; }
+.terminal-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.status-pill { display: inline-block; font-size: .7rem; padding: .25rem .5rem; border-radius: 999px; background: #e2e8f0; color: var(--muted); vertical-align: middle; }
+.market-stats { min-height: 2.4rem; padding: .6rem 0; }
+.order-book { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; font-size: .85rem; }
+.book-row { display: flex; justify-content: space-between; padding: .25rem .35rem; border-bottom: 1px solid var(--border); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; }
+canvas { width: 100%; margin-top: .5rem; }
 body.dark { --surface: #172033; --surface-muted: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #a8b4c5; --primary: #60a5fa; --primary-hover: #93c5fd; background: #0f172a; color: var(--text); }
 body.dark header, body.dark .container { background: var(--surface); }
 body.dark header h2 { color: #bfdbfe; }
 body.dark input, body.dark textarea, body.dark select { border-color: #475569; }
 @media (max-width: 700px) { header { align-items: flex-start; flex-direction: column; } nav { justify-content: flex-start; } .container { margin: 1rem auto; } .social-btns { flex-direction: column; } }
+@media (max-width: 950px) { .terminal-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); } }

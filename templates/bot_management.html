@@ -3,6 +3,37 @@
 {% block content %}
     <h1 class="page-title">Управление ботом</h1>
     <p class="lead">Запустите или остановите вашего торгового бота и настройте стратегию.</p>
+    <div class="terminal-grid">
+        <div class="card">
+            <h2>Рынок <span id="market-source" class="status-pill">нет данных</span></h2>
+            <div class="field-group">
+                <label for="market-pair">Пара</label>
+                <select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select>
+            </div>
+            <button class="btn" id="refresh-market" type="button">Загрузить котировки</button>
+            <div id="ticker" class="market-stats muted">Нажмите для получения данных с публичного API биржи.</div>
+            <canvas id="price-chart" height="150" aria-label="График цены"></canvas>
+        </div>
+        <div class="card">
+            <h2>Стакан</h2>
+            <div class="order-book">
+                <div><strong>Покупки</strong><div id="bids">—</div></div>
+                <div><strong>Продажи</strong><div id="asks">—</div></div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Ручная торговля</h2>
+            <p class="muted">Симуляция исполнения, реальные ордера не отправляются.</p>
+            <form id="manual-trade-form">
+                <div class="field-group"><label for="manual-side">Направление</label><select id="manual-side"><option value="buy">Купить</option><option value="sell">Продать</option></select></div>
+                <div class="field-group"><label for="manual-price">Цена</label><input id="manual-price" type="number" min="0" step="any" required></div>
+                <div class="field-group"><label for="manual-amount">Количество</label><input id="manual-amount" type="number" min="0" step="any" required></div>
+                <div class="field-group"><label for="manual-balance">Баланс</label><input id="manual-balance" type="number" min="0" step="any" value="100" required></div>
+                <button class="btn" type="submit">Исполнить симуляцию</button>
+            </form>
+            <div id="manual-result" class="small-note" role="status"></div>
+        </div>
+    </div>
     {% if message %}
         <div class="message">{{ message }}</div>
     {% endif %}
@@ -84,6 +115,20 @@
             {% endfor %}
         </div>
     </div>
+    <div class="card">
+        <h2>История сделок</h2>
+        <p class="muted">Общая история ручных и бот-сделок.</p>
+        <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead>
+        <tbody id="trade-history">{% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>{% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+    <div class="card">
+        <h2>Исторический тест всех стратегий</h2>
+        <p class="muted">Введите цены через запятую и сентимент для каждой точки, чтобы сравнить результат.</p>
+        <textarea id="backtest-prices" rows="2">100,102,101,105,107,104</textarea>
+        <textarea id="backtest-sentiment" rows="2">0.2,0.4,-0.1,0.8,0.5,-0.2</textarea>
+        <button class="btn" id="run-backtest" type="button">Запустить backtest</button>
+        <div id="backtest-result" class="table-wrap"></div>
+    </div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -108,6 +153,51 @@ testForm.addEventListener('submit', async (event) => {
         document.getElementById('bot-runs').textContent = Number(document.getElementById('bot-runs').textContent) + 1;
     } catch (error) { resultBox.textContent = error.message; }
     finally { button.disabled = false; button.textContent = 'Запустить тест'; }
+});
+
+const pairSelect = document.getElementById('market-pair');
+const renderLevels = (target, levels) => {
+    document.getElementById(target).innerHTML = (levels || []).map(level =>
+        `<div class="book-row"><span>${Number(level[0]).toFixed(2)}</span><span>${Number(level[1]).toFixed(5)}</span></div>`
+    ).join('') || 'Нет данных';
+};
+document.getElementById('refresh-market').addEventListener('click', async () => {
+    const response = await fetch(`/api/market/data?pair=${encodeURIComponent(pairSelect.value)}`);
+    const data = await response.json();
+    if (!response.ok) { document.getElementById('ticker').textContent = data.error; return; }
+    document.getElementById('market-source').textContent = `${data.exchange} · live`;
+    document.getElementById('ticker').innerHTML = `Цена: <strong>${Number(data.ticker.last).toFixed(2)}</strong> · Изменение: ${Number(data.ticker.change || 0).toFixed(2)}%`;
+    document.getElementById('manual-price').value = data.ticker.last || '';
+    renderLevels('bids', data.order_book.bids);
+    renderLevels('asks', data.order_book.asks);
+});
+document.getElementById('manual-trade-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {pair: pairSelect.value, side: document.getElementById('manual-side').value,
+        price: Number(document.getElementById('manual-price').value), amount: Number(document.getElementById('manual-amount').value),
+        balance: Number(document.getElementById('manual-balance').value)};
+    const response = await fetch('/api/trading/manual', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+    const data = await response.json();
+    document.getElementById('manual-result').textContent = response.ok ? `Исполнено. Комиссия: ${Number(data.fee).toFixed(4)}. Баланс: ${Number(data.balance).toFixed(2)}` : data.error;
+    if (response.ok) loadHistory();
+});
+async function loadHistory() {
+    const response = await fetch('/api/trading/history');
+    if (!response.ok) return;
+    const data = await response.json();
+    document.getElementById('trade-history').innerHTML = data.trades.map(trade =>
+        `<tr><td>${trade.created_at}</td><td>${trade.mode}</td><td>${trade.pair}</td><td>${trade.strategy}</td><td>${Number(trade.pnl).toFixed(4)}</td><td>${Number(trade.balance).toFixed(2)}</td></tr>`
+    ).join('') || '<tr><td colspan="6">Сделок пока нет.</td></tr>';
+}
+document.getElementById('run-backtest').addEventListener('click', async () => {
+    const parse = id => document.getElementById(id).value.split(',').map(Number);
+    const response = await fetch('/api/bot/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prices: parse('backtest-prices'), sentiment: parse('backtest-sentiment'), initial_balance: 100})});
+    const data = await response.json();
+    document.getElementById('backtest-result').innerHTML = response.ok
+        ? `<table><thead><tr><th>Стратегия</th><th>Баланс</th><th>P/L</th><th>ROI</th><th>Победы</th></tr></thead><tbody>${data.results.map(item =>
+            `<tr><td>${item.strategy}</td><td>${item.final_balance.toFixed(2)}</td><td>${item.pnl.toFixed(2)}</td><td>${item.roi.toFixed(2)}%</td><td>${item.wins}/${item.trades}</td></tr>`).join('')}</tbody></table>`
+        : `<p class="message">${data.error}</p>`;
 });
 </script>
 {% endblock %}
