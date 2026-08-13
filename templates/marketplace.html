@@ -9,7 +9,8 @@
     <div class="grid">
         <div class="card">
             <h2>Баланс</h2>
-            <p>€{{ wallet.balance }}</p>
+            <p><strong>{{ '%.2f'|format(wallet.credits) }} CMSC</strong></p>
+            <p class="muted">{{ internal_currency }} используются только для покупок в маркете и реферальных бонусов.</p>
             <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
             <p>Адрес: {{ wallet.address or 'Не указано' }}</p>
             <p>Подключенная биржа: {{ wallet.exchange_provider or 'Не подключена' }}</p>
@@ -88,7 +89,7 @@
             <div class="card" style="margin-bottom: 15px;">
                 <h3>{{ plugin.name }}</h3>
                 <p>{{ plugin.description }}</p>
-                <p>Цена: €{{ '%.2f'|format(plugin.price) }}</p>
+                <p>Цена: {{ '%.2f'|format(plugin.price) }} CMSC</p>
                 <form method="post" style="margin-top: 10px;">
                     <input type="hidden" name="action" value="buy_plugin">
                     <input type="hidden" name="plugin_name" value="{{ plugin.name }}">

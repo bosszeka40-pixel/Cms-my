@@ -6,8 +6,8 @@
     {% if message %}<div class="message success">{{ message }}</div>{% endif %}
     <div class="grid">
         <div class="card">
-            <h2>Баланс SYSTEM_COIN</h2>
-            <p style="font-size: 24px; font-weight: bold;">€{{ balance }}</p>
+            <h2>Баланс CMSC</h2>
+            <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.credits) }} CMSC</p>
             <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
             <p>Адрес кошелька: {{ wallet.address or 'Не указан' }}</p>
             <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>

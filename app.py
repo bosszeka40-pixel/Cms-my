@@ -23,6 +23,8 @@ strategy_manager = StrategyManager(config_path='backend/config.yaml')
 
 EXCHANGES = ['binance', 'kraken', 'okx', 'bybit', 'bitfinex']
 WALLETS = ['Metamask', 'Trust Wallet', 'Coinbase', 'Phantom', 'Ledger']
+TRADING_PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
+INTERNAL_CURRENCY = 'CMS Credits (CMSC)'
 
 DEFAULT_PLUGINS = [
     {'name': 'Sentiment Analyzer', 'price': 29.99, 'description': 'AI-модуль для анализа новостей и торговых сигналов.'},
@@ -53,7 +55,8 @@ def init_db():
                         exchange_provider TEXT,
                         exchange_address TEXT,
                         telegram TEXT,
-                        telegram_token TEXT)''')
+                        telegram_token TEXT,
+                        credits REAL DEFAULT 0)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS plugin_purchases (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER,
@@ -73,6 +76,7 @@ def init_db():
         ('address', 'TEXT'),
         ('telegram', 'TEXT'),
         ('telegram_token', 'TEXT'),
+        ('credits', 'REAL DEFAULT 0'),
     ):
         if column not in columns:
             cursor.execute(f'ALTER TABLE wallets ADD COLUMN {column} {definition}')
@@ -87,7 +91,7 @@ def init_db():
         cursor.execute('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
                        ('admin', 'admin@cms.local', password, 'admin'))
         admin_id = cursor.lastrowid
-        cursor.execute('INSERT OR IGNORE INTO wallets (user_id, balance) VALUES (?, ?)', (admin_id, 1000.0))
+        cursor.execute('INSERT OR IGNORE INTO wallets (user_id, balance, credits) VALUES (?, ?, ?)', (admin_id, 1000.0, 500.0))
         conn.commit()
     conn.close()
 
@@ -110,7 +114,7 @@ def get_user(user_id):
 def get_wallet(user_id):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-    cursor.execute('SELECT balance, provider, address, exchange_provider, exchange_address, telegram, telegram_token FROM wallets WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT balance, provider, address, exchange_provider, exchange_address, telegram, telegram_token, COALESCE(credits, 0) FROM wallets WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -122,6 +126,7 @@ def get_wallet(user_id):
             'exchange_address': row[4],
             'telegram': row[5],
             'telegram_token': row[6],
+            'credits': row[7],
         }
     return {
         'balance': 0.0,
@@ -131,16 +136,17 @@ def get_wallet(user_id):
         'exchange_address': None,
         'telegram': None,
         'telegram_token': None,
+        'credits': 0.0,
     }
 
 
-def update_wallet(user_id, balance=None, provider=None, address=None, exchange_provider=None, exchange_address=None, telegram=None, telegram_token=None):
+def update_wallet(user_id, balance=None, provider=None, address=None, exchange_provider=None, exchange_address=None, telegram=None, telegram_token=None, credits=None):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute('SELECT user_id FROM wallets WHERE user_id = ?', (user_id,))
     if cursor.fetchone() is None:
-        cursor.execute('INSERT INTO wallets (user_id, balance, provider, address, exchange_provider, exchange_address, telegram, telegram_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                       (user_id, balance or 0.0, provider, address, exchange_provider, exchange_address, telegram, telegram_token))
+        cursor.execute('INSERT INTO wallets (user_id, balance, provider, address, exchange_provider, exchange_address, telegram, telegram_token, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                       (user_id, balance or 0.0, provider, address, exchange_provider, exchange_address, telegram, telegram_token, credits or 0.0))
     else:
         if balance is not None:
             cursor.execute('UPDATE wallets SET balance = ? WHERE user_id = ?', (balance, user_id))
@@ -156,6 +162,8 @@ def update_wallet(user_id, balance=None, provider=None, address=None, exchange_p
             cursor.execute('UPDATE wallets SET telegram = ? WHERE user_id = ?', (telegram, user_id))
         if telegram_token is not None:
             cursor.execute('UPDATE wallets SET telegram_token = ? WHERE user_id = ?', (telegram_token, user_id))
+        if credits is not None:
+            cursor.execute('UPDATE wallets SET credits = ? WHERE user_id = ?', (credits, user_id))
     conn.commit()
     conn.close()
 
@@ -287,7 +295,7 @@ def register():
                 cursor.execute('INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
                                (username, email, hashed_pw))
                 user_id = cursor.lastrowid
-                cursor.execute('INSERT INTO wallets (user_id, balance) VALUES (?, ?)', (user_id, 100.0))
+                cursor.execute('INSERT INTO wallets (user_id, balance, credits) VALUES (?, ?, ?)', (user_id, 100.0, 100.0))
                 conn.commit()
                 conn.close()
                 session['user_id'] = user_id
@@ -398,16 +406,24 @@ def marketplace():
                 update_wallet(session['user_id'], telegram=telegram, telegram_token=telegram_token)
                 wallet = get_wallet(session['user_id'])
                 message = f'Telegram @{telegram} подключен.'
+        elif action == 'buy_credits':
+            amount = float(request.form.get('amount', 0))
+            if amount > 0:
+                update_wallet(session['user_id'], credits=wallet['credits'] + amount)
+                wallet = get_wallet(session['user_id'])
+                message = f'Куплено {amount:.0f} CMSC.'
+            else:
+                message = 'Введите положительное количество CMSC.'
         elif action == 'buy_plugin':
             plugin_name = request.form.get('plugin_name')
             plugin = next((p for p in plugins if p.name == plugin_name), None)
             if plugin:
-                if wallet['balance'] >= plugin.price:
-                    new_balance = wallet['balance'] - plugin.price
-                    update_wallet(session['user_id'], balance=new_balance)
+                if wallet['credits'] >= plugin.price:
+                    new_balance = wallet['credits'] - plugin.price
+                    update_wallet(session['user_id'], credits=new_balance)
                     save_plugin_purchase(session['user_id'], plugin_name)
                     wallet = get_wallet(session['user_id'])
-                    plugin_message = f'Плагин {plugin_name} куплен. Баланс: €{new_balance:.2f}.'
+                    plugin_message = f'Плагин {plugin_name} куплен. Баланс: {new_balance:.2f} CMSC.'
                 else:
                     plugin_message = 'Недостаточно средств для покупки плагина.'
             else:
@@ -416,6 +432,8 @@ def marketplace():
     return render_template(
         'marketplace.html',
         exchanges=EXCHANGES,
+        trading_pairs=TRADING_PAIRS,
+        internal_currency=INTERNAL_CURRENCY,
         wallets=WALLETS,
         wallet=wallet,
         plugins=plugins,
@@ -443,15 +461,18 @@ def bot_management():
             message = 'Бот остановлен.'
         elif action == 'save_strategy':
             strategy = request.form.get('strategy')
-            leverage = float(request.form.get('leverage', 1.5))
-            risk_tolerance = float(request.form.get('risk_tolerance', 0.03))
+            leverage = max(0.1, min(float(request.form.get('leverage', 1.5)), 10))
+            risk_tolerance = max(0.0, min(float(request.form.get('risk_tolerance', 0.03)), 1))
             save_strategy_config(strategy, leverage, risk_tolerance)
             message = 'Настройки стратегии сохранены.'
         elif action == 'manual_trade':
             news_sentiment = float(request.form.get('news_sentiment', 0.0))
             price_change = float(request.form.get('price_change', 0.0))
             current_balance = float(request.form.get('current_balance', 100.0))
+            pair = request.form.get('pair', TRADING_PAIRS[0])
             manual_trade_result = strategy_manager.execute(news_sentiment, price_change, current_balance)
+            manual_trade_result['pair'] = pair
+            bot.simulate(pair, strategy_manager.current_strategy(), manual_trade_result)
             message = 'Ручная сделка выполнена.'
 
     bot_status = bot.status()
@@ -472,7 +493,36 @@ def bot_management():
         message=message,
         manual_trade_result=manual_trade_result,
         balance_history=balance_history,
+        trading_pairs=TRADING_PAIRS,
     )
+
+
+@app.post('/api/trading/test')
+def trading_test():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    try:
+        payload = request.get_json(silent=True) or {}
+        pair = payload.get('pair', TRADING_PAIRS[0])
+        if pair not in TRADING_PAIRS:
+            return {'error': 'Недоступная торговая пара.'}, 400
+        news_sentiment = float(payload.get('news_sentiment', 0))
+        price_change = float(payload.get('price_change', 0))
+        current_balance = max(0.0, float(payload.get('current_balance', 100)))
+        result = strategy_manager.execute(news_sentiment, price_change, current_balance)
+        result['pair'] = pair
+        result['trade'] = bot.simulate(pair, strategy_manager.current_strategy(), result)
+        return result
+    except (TypeError, ValueError):
+        return {'error': 'Проверьте числовые параметры сделки.'}, 400
+
+
+@app.get('/api/trading/status')
+def trading_status():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    return bot.status()
+
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
@@ -504,7 +554,18 @@ def wallet_page():
     message = None
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'buy_usdt':
+        if action == 'buy_credits':
+            try:
+                amount = float(request.form.get('amount', '0'))
+                if amount <= 0:
+                    message = 'Введите положительное количество CMSC.'
+                else:
+                    update_wallet(session['user_id'], credits=wallet['credits'] + amount)
+                    wallet = get_wallet(session['user_id'])
+                    message = f'Куплено {amount:.0f} CMSC.'
+            except ValueError:
+                message = 'Неверное количество CMSC.'
+        elif action == 'buy_usdt':
             try:
                 amount = float(request.form.get('amount', '0'))
                 if amount <= 0:

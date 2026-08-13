@@ -9,7 +9,7 @@
     <div class="card">
         <h2>Статус бота</h2>
         <p>Активность: <strong>{{ bot_status.active }}</strong></p>
-        <p>Запусков: <strong>{{ bot_status.runs }}</strong></p>
+        <p>Событий: <strong id="bot-runs">{{ bot_status.runs }}</strong></p>
         <div class="button-row">
             <button class="btn" onclick="document.getElementById('start-form').submit();">Запустить бота</button>
             <button class="btn" onclick="document.getElementById('stop-form').submit();">Остановить бота</button>
@@ -29,7 +29,7 @@
                 <label for="strategy">Стратегия</label>
                 <select id="strategy" name="strategy">
                     <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
-                    <option value="hft_momentum" {% if current_strategy == 'hft_momentum' %}selected{% endif %}>HFT Momentum</option>
+                    <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
                     <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
                 </select>
             </div>
@@ -45,32 +45,30 @@
         </form>
     </div>
     <div class="card">
-        <h2>Ручная сделка</h2>
-        <form method="post">
-            <input type="hidden" name="action" value="manual_trade">
+        <h2>Тест стратегии без перезагрузки</h2>
+        <p class="muted">Результат появится в этом окне и не запускает реальную сделку.</p>
+        <form id="trade-test-form">
+            <div class="field-group">
+                <label for="pair">Торговая пара</label>
+                <select id="pair" name="pair">
+                    {% for pair in trading_pairs %}<option value="{{ pair }}">{{ pair }}</option>{% endfor %}
+                </select>
+            </div>
             <div class="field-group">
                 <label for="news_sentiment">Новостной сентимент</label>
-                <input type="text" id="news_sentiment" name="news_sentiment" value="0.0">
+                <input type="number" step="0.01" id="news_sentiment" name="news_sentiment" value="0.0">
             </div>
             <div class="field-group">
                 <label for="price_change">Изменение цены (%)</label>
-                <input type="text" id="price_change" name="price_change" value="0.0">
+                <input type="number" step="0.01" id="price_change" name="price_change" value="0.0">
             </div>
             <div class="field-group">
                 <label for="current_balance">Текущий баланс</label>
-                <input type="text" id="current_balance" name="current_balance" value="100.0">
+                <input type="number" step="0.01" min="0" id="current_balance" name="current_balance" value="100.0">
             </div>
-            <button class="btn" type="submit">Симуляция сделки</button>
+            <button class="btn" id="test-submit" type="submit">Запустить тест</button>
         </form>
-        {% if manual_trade_result %}
-            <div class="card" style="margin-top: 15px;">
-                <h3>Результат симуляции</h3>
-                <p>Стратегия: {{ manual_trade_result.strategy }}</p>
-                <p>Сигнал: {{ manual_trade_result.signal }}</p>
-                <p>Баланс после сделки: {{ manual_trade_result.next_balance }}</p>
-                <p>Леверидж: {{ manual_trade_result.leverage }}</p>
-            </div>
-        {% endif %}
+        <div class="card" id="trade-result" hidden></div>
     </div>
     <div class="card">
         <h2>График баланса</h2>
@@ -86,4 +84,30 @@
             {% endfor %}
         </div>
     </div>
+{% endblock %}
+{% block scripts %}
+<script>
+const testForm = document.getElementById('trade-test-form');
+testForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('test-submit');
+    const resultBox = document.getElementById('trade-result');
+    button.disabled = true;
+    button.textContent = 'Тестирование...';
+    resultBox.hidden = false;
+    resultBox.textContent = 'Рассчитываем результат...';
+    const payload = Object.fromEntries(new FormData(testForm));
+    ['news_sentiment', 'price_change', 'current_balance'].forEach(key => payload[key] = Number(payload[key]));
+    try {
+        const response = await fetch('{{ url_for("trading_test") }}', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Ошибка теста');
+        resultBox.innerHTML = `<h3>Результат теста</h3><p>Пара: <strong>${data.pair}</strong></p><p>Сигнал: <strong>${data.signal}</strong></p><p>Баланс: <strong>${Number(data.next_balance).toFixed(2)}</strong></p><p>P/L: <strong>${Number(data.trade.pl).toFixed(2)}</strong></p>`;
+        document.getElementById('bot-runs').textContent = Number(document.getElementById('bot-runs').textContent) + 1;
+    } catch (error) { resultBox.textContent = error.message; }
+    finally { button.disabled = false; button.textContent = 'Запустить тест'; }
+});
+</script>
 {% endblock %}

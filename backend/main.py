@@ -48,6 +48,12 @@ class StrategyPayload(BaseModel):
     price_change: float
     current_balance: float
 
+class TradingTestPayload(BaseModel):
+    pair: str
+    news_sentiment: float
+    price_change: float
+    current_balance: float
+
 @app.get("/", name="index")
 async def serve_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "user_id": request.session.get("user_email")})
@@ -113,7 +119,7 @@ async def dashboard(request: Request):
             "username": username,
             "email": user_email,
             "balance": balance,
-            "wallet": {"balance": 0.0, "provider": None, "address": None},
+            "wallet": {"balance": 0.0, "provider": None, "address": None, "credits": 0.0},
             "user_id": user_email,
             "theme": request.session.get("theme", "light"),
             "selected_theme": request.session.get("theme", "light"),
@@ -131,7 +137,8 @@ async def marketplace(request: Request):
         {
             "request": request,
             "user_id": user_email,
-            "wallet": {"balance": 0.0},
+            "wallet": {"balance": 0.0, "credits": 0.0},
+            "internal_currency": "CMS Credits (CMSC)",
             "exchanges": [],
             "wallets": [],
             "plugins": engine.list_plugins(),
@@ -158,6 +165,7 @@ async def bot_management(request: Request):
             "message": None,
             "manual_trade_result": None,
             "balance_history": [{"time": "start", "value": 100}],
+            "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
         },
     )
 
@@ -168,7 +176,8 @@ async def wallet_page(request: Request):
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse(
         "wallet.html",
-        {"request": request, "user_id": user_email, "wallet": {"balance": 0.0}, "message": None},
+        {"request": request, "user_id": user_email,         "wallet": {"balance": 0.0, "credits": 0.0}, "message": None},
+        "internal_currency": "CMS Credits (CMSC)", "message": None},
     )
 
 @app.get("/admin", name="admin_panel")
@@ -208,6 +217,26 @@ def connect_exchange(config: ExchangeConfig):
         return {"status": "success", "message": f"Успешное подключение к {config.exchange_name.capitalize()}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка API: {str(e)}")
+
+@app.post("/api/trading/test")
+def trading_test(payload: TradingTestPayload, request: Request):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    allowed_pairs = {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}
+    if payload.pair not in allowed_pairs:
+        raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    result = strategy_manager.execute(
+        payload.news_sentiment, payload.price_change, max(0.0, payload.current_balance)
+    )
+    result["pair"] = payload.pair
+    result["trade"] = bot.simulate(payload.pair, strategy_manager.current_strategy(), result)
+    return result
+
+@app.get("/api/trading/status")
+def trading_status(request: Request):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    return bot.status()
 
 @app.post("/api/bot/start")
 def start_bot():
