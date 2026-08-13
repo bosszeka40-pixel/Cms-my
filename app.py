@@ -299,7 +299,7 @@ def login():
 
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
-        cursor.execute('SELECT id, username, email, role FROM users WHERE (username = ? OR email = ?) AND password = ?',
+        cursor.execute('SELECT id, username, email, role, COALESCE(theme, "light") FROM users WHERE (username = ? OR email = ?) AND password = ?',
                    (username, username, hashed_pw))
         row = cursor.fetchone()
         conn.close()
@@ -597,6 +597,7 @@ def market_data():
         exchange = _public_exchange(exchange_name)
         ticker = exchange.fetch_ticker(pair)
         order_book = exchange.fetch_order_book(pair, limit=10)
+        candles = exchange.fetch_ohlcv(pair, timeframe='1h', limit=48)
         return {
             'exchange': exchange_name, 'pair': pair,
             'ticker': {'last': ticker.get('last'), 'change': ticker.get('percentage'),
@@ -604,6 +605,7 @@ def market_data():
                        'timestamp': ticker.get('timestamp')},
             'order_book': {'bids': order_book.get('bids', [])[:10],
                            'asks': order_book.get('asks', [])[:10]},
+            'candles': candles,
             'source': 'public exchange API', 'live': True,
         }
     except Exception as exc:

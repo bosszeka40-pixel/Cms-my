@@ -161,6 +161,26 @@ const renderLevels = (target, levels) => {
         `<div class="book-row"><span>${Number(level[0]).toFixed(2)}</span><span>${Number(level[1]).toFixed(5)}</span></div>`
     ).join('') || 'Нет данных';
 };
+function drawChart(candles) {
+    const canvas = document.getElementById('price-chart');
+    const context = canvas.getContext('2d');
+    const values = candles.map(item => Number(item[4])).filter(Number.isFinite);
+    if (!values.length) return;
+    const width = canvas.clientWidth || 500;
+    canvas.width = width * 2;
+    canvas.height = 300;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const min = Math.min(...values), max = Math.max(...values);
+    context.strokeStyle = '#2563eb';
+    context.lineWidth = 4;
+    context.beginPath();
+    values.forEach((value, index) => {
+        const x = index * canvas.width / Math.max(values.length - 1, 1);
+        const y = canvas.height - ((value - min) / Math.max(max - min, 1)) * (canvas.height - 20) - 10;
+        index ? context.lineTo(x, y) : context.moveTo(x, y);
+    });
+    context.stroke();
+}
 document.getElementById('refresh-market').addEventListener('click', async () => {
     const response = await fetch(`/api/market/data?pair=${encodeURIComponent(pairSelect.value)}`);
     const data = await response.json();
@@ -170,6 +190,7 @@ document.getElementById('refresh-market').addEventListener('click', async () => 
     document.getElementById('manual-price').value = data.ticker.last || '';
     renderLevels('bids', data.order_book.bids);
     renderLevels('asks', data.order_book.asks);
+    drawChart(data.candles);
 });
 document.getElementById('manual-trade-form').addEventListener('submit', async (event) => {
     event.preventDefault();
