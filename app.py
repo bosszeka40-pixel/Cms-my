@@ -728,6 +728,29 @@ def _public_exchange(name):
     return exchange_class({'enableRateLimit': True, 'timeout': 10000})
 
 
+def _configured_fee_rate():
+    rate = float(os.getenv('SIMULATION_FEE_RATE', '0.001'))
+    if not math.isfinite(rate) or rate < 0:
+        raise ValueError('SIMULATION_FEE_RATE должен быть неотрицательным числом.')
+    return rate
+
+
+def _exchange_fee_rate(exchange, symbol):
+    if not exchange.markets:
+        exchange.load_markets()
+    market = exchange.markets.get(symbol) or {}
+    rate = market.get('taker') or market.get('maker')
+    return float(rate) if rate is not None else _configured_fee_rate()
+
+
+def _order_fee(order, fallback_notional, fallback_rate):
+    fees = order.get('fees') or []
+    if not fees and order.get('fee'):
+        fees = [order['fee']]
+    total = sum(float(item.get('cost', 0)) for item in fees if item.get('cost') is not None)
+    return total if total > 0 else fallback_notional * fallback_rate
+
+
 @app.get('/api/market/data')
 def market_data():
     if 'user_id' not in session:
@@ -800,12 +823,14 @@ def manual_trade():
         notional = price * amount
         if notional > balance:
             raise ValueError('Недостаточно баланса для сделки.')
-        fee = notional * 0.001
+        fee_rate = _configured_fee_rate()
+        fee = notional * fee_rate
         next_balance = balance - fee
         record_trade(session['user_id'], 'manual', pair, 'manual', 1 if side == 'buy' else -1,
                      price, amount, -fee, next_balance)
         return {'status': 'filled', 'pair': pair, 'side': side, 'price': price,
-                'amount': amount, 'fee': fee, 'pnl': -fee, 'balance': next_balance}
+                'amount': amount, 'fee_rate': fee_rate, 'fee': fee, 'pnl': -fee,
+                'balance': next_balance}
     except (KeyError, TypeError, ValueError) as exc:
         return {'error': str(exc)}, 400
 
@@ -871,12 +896,17 @@ def create_exchange_order():
         order = exchange_service.create_order(
             session['user_id'], symbol, order_type, side, amount, price, payload.get('params'),
         )
+        filled = order.get('filled') or amount
+        execution_price = order.get('average') or order.get('price') or reference_price
+        notional = float(execution_price) * float(filled)
+        fee_rate = exchange_service.trading_fee(session['user_id'], symbol)
+        fee = _order_fee(order, notional, fee_rate)
         record_trade(
             session['user_id'], 'live', symbol, 'manual', 1 if side == 'buy' else -1,
-            order.get('average') or order.get('price'), order.get('filled') or amount,
-            0.0, 0.0,
+            execution_price, filled, -fee, -fee,
         )
-        return {'status': 'submitted', 'order': order}
+        return {'status': 'submitted', 'order': order, 'fee': fee, 'fee_rate': fee_rate,
+                'pnl': -fee}
     except (KeyError, TypeError, ValueError, LookupError, ccxt.BaseError) as exc:
         return {'error': str(exc)}, 400
 
@@ -922,7 +952,7 @@ def backtest():
         }
         results = []
         for name, processor in strategies.items():
-            balance, wins = initial, 0
+            balance, wins, total_fees = initial, 0, 0.0
             for index in range(1, len(prices) - 1):
                 previous_change = ((prices[index] - prices[index - 1]) / prices[index - 1] * 100
                                    if prices[index - 1] else 0)
@@ -932,7 +962,11 @@ def backtest():
                 _, signal = processor(sentiment, previous_change, balance, 1.5)
                 next_change = ((prices[index + 1] - prices[index]) / prices[index] * 100
                                if prices[index] else 0)
-                next_balance = balance * (1 + signal * next_change / 100 * 1.5)
+                gross_balance = balance * (1 + signal * next_change / 100 * 1.5)
+                fee_rate = _exchange_fee_rate(exchange, pair)
+                fee = balance * 1.5 * fee_rate * 2
+                total_fees += fee
+                next_balance = max(0.0, gross_balance - fee)
                 wins += next_balance > balance
                 balance = max(0.0, next_balance)
             results.append({
@@ -940,6 +974,8 @@ def backtest():
                 'final_balance': round(balance, 8), 'pnl': round(balance - initial, 8),
                 'roi': round((balance / initial - 1) * 100, 4),
                 'trades': len(prices) - 2, 'wins': wins,
+                'fee_rate': fee_rate,
+                'fees_paid': round(total_fees, 8),
             })
         return {'results': results, 'source': 'stored public daily OHLCV',
                 'pair': pair, 'exchange': exchange_name, 'tested_points': len(prices),

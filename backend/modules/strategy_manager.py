@@ -22,9 +22,13 @@ class StrategyManager:
     def current_strategy(self) -> str:
         return self.config.get("strategy", HarvesterStrategy.PURE.value)
 
-    def execute(self, news_sentiment: float, price_change: float, current_balance: float) -> dict:
+    def execute(self, news_sentiment: float, price_change: float, current_balance: float,
+                fee_rate: float | None = None) -> dict:
         strategy = self.current_strategy()
         leverage = float(self.config.get("leverage", 1.5))
+        fee_rate = float(self.config.get("fee_rate", 0.001) if fee_rate is None else fee_rate)
+        if fee_rate < 0:
+            raise ValueError("Комиссия не может быть отрицательной.")
 
         if strategy == HarvesterStrategy.PURE.value:
             next_balance, signal = self.module.process_tick(news_sentiment, price_change, current_balance, leverage)
@@ -35,10 +39,16 @@ class StrategyManager:
         else:
             next_balance, signal = self.module.process_tick(news_sentiment, price_change, current_balance, leverage)
 
+        fee = current_balance * leverage * fee_rate * 2
+        net_balance = max(0.0, next_balance - fee)
         return {
             "strategy": strategy,
             "previous_balance": current_balance,
-            "next_balance": next_balance,
+            "gross_next_balance": next_balance,
+            "next_balance": net_balance,
+            "fee_rate": fee_rate,
+            "fee": fee,
+            "pnl": net_balance - current_balance,
             "signal": signal,
             "leverage": leverage
         }

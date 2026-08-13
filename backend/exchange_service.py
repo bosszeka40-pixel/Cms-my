@@ -83,6 +83,24 @@ class ExchangeService:
         connection = self.get(user_id)
         return connection["client"].fetch_ticker(symbol)
 
+    def trading_fee(self, user_id, symbol):
+        connection = self.get(user_id)
+        client = connection["client"]
+        try:
+            fee = client.fetch_trading_fee(symbol)
+            rate = fee.get("taker") or fee.get("rate")
+            if rate is not None and math.isfinite(float(rate)):
+                return float(rate)
+        except (AttributeError, ccxt.BaseError):
+            pass
+        market = client.markets.get(symbol) or {}
+        rate = market.get("taker")
+        if rate is None:
+            rate = (client.fees.get("trading") or {}).get("taker")
+        if rate is None:
+            rate = float(os.getenv("SIMULATION_FEE_RATE", "0.001"))
+        return float(rate)
+
     def minimum_order_amount(self, user_id, symbol, price=None):
         connection = self.get(user_id)
         market = connection["client"].markets.get(symbol)
