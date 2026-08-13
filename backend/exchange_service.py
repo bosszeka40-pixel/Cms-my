@@ -83,6 +83,19 @@ class ExchangeService:
         connection = self.get(user_id)
         return connection["client"].fetch_ticker(symbol)
 
+    def minimum_order_amount(self, user_id, symbol, price=None):
+        connection = self.get(user_id)
+        market = connection["client"].markets.get(symbol)
+        if not market:
+            raise ValueError("Торговая пара недоступна на подключенной бирже.")
+        amount_min = ((market.get("limits") or {}).get("amount") or {}).get("min")
+        cost_min = ((market.get("limits") or {}).get("cost") or {}).get("min")
+        if cost_min and price and price > 0:
+            amount_min = max(amount_min or 0, cost_min / price)
+        if not amount_min or amount_min <= 0:
+            raise ValueError("Биржа не сообщила минимальный размер ордера.")
+        return float(connection["client"].amount_to_precision(symbol, amount_min))
+
     def create_order(self, user_id, symbol, order_type, side, amount, price=None, params=None):
         connection = self.get(user_id)
         client = connection["client"]
@@ -94,6 +107,9 @@ class ExchangeService:
             raise ValueError("Количество должно быть положительным числом.")
         if symbol not in client.markets:
             raise ValueError("Торговая пара недоступна на подключенной бирже.")
+        minimum_amount = self.minimum_order_amount(user_id, symbol, price)
+        if amount < minimum_amount:
+            raise ValueError(f"Минимальное количество для {symbol}: {minimum_amount}.")
         if order_type == "market":
             return client.create_order(symbol, order_type, side, amount, None, params or {})
         if price is None or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
