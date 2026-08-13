@@ -395,7 +395,13 @@ def activate_strategy(payload: PluginActionPayload, request: Request):
     plugin = next((item for item in engine.list_plugins() if item.name == payload.plugin_name), None)
     if not plugin:
         raise HTTPException(status_code=404, detail="Стратегия не найдена.")
-    if plugin.price > 0 and not engine.set_plugin_active(email, plugin.name, True):
+    try:
+        performance = _strategy_performance()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось проверить цену стратегии: {exc}") from exc
+    if performance.get(plugin.name, {}).get("price_eur", 0) > 0 and not engine.set_plugin_active(
+        email, plugin.name, True
+    ):
         raise HTTPException(status_code=402, detail="Сначала купите стратегию.")
     strategy_manager.config["strategy"] = plugin.name
     return {"status": "active", "strategy": plugin.name}
