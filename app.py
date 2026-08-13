@@ -33,7 +33,7 @@ INTERNAL_CURRENCY = 'CMS Credits (CMSC)'
 CRYPTO_PAYOUT_ASSETS = ('USDT', 'USDC', 'BTC')
 CARD_PAYOUT_SERVICES = ('Stripe', 'PayPal', 'Adyen', 'Revolut Business')
 CMSC_EUR_RATE = 1.0
-CMSC_PAYMENT_CURRENCIES = ('EUR', 'USD', 'GBP')
+CMSC_PAYMENT_CURRENCIES = ('EUR', 'USD', 'GBP', 'RUB', 'CHF')
 
 DEFAULT_PLUGINS = [
     {'name': 'Sentiment Analyzer', 'price': 29.99, 'description': 'AI-модуль для анализа новостей и торговых сигналов.'},
