@@ -1,4 +1,5 @@
 import os
+import math
 from threading import Lock
 
 import ccxt
@@ -25,6 +26,10 @@ class ExchangeService:
         return exchange_name, exchange_class
 
     def connect(self, user_id, name, api_key, api_secret, passphrase=None, sandbox=False):
+        if not user_id or not isinstance(api_key, str) or not isinstance(api_secret, str):
+            raise ValueError("API key и API secret обязательны.")
+        api_key = api_key.strip()
+        api_secret = api_secret.strip()
         if not api_key or not api_secret:
             raise ValueError("API key и API secret обязательны.")
         exchange_name, exchange_class = self._exchange_class(name)
@@ -45,7 +50,7 @@ class ExchangeService:
                 "name": exchange_name,
                 "client": client,
                 "sandbox": bool(sandbox),
-                "api_key_hint": f"{api_key[:4]}...{api_key[-4:]}",
+                "api_key_hint": f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "****",
             }
         return self.status(user_id)
 
@@ -81,11 +86,17 @@ class ExchangeService:
     def create_order(self, user_id, symbol, order_type, side, amount, price=None, params=None):
         connection = self.get(user_id)
         client = connection["client"]
+        order_type = (order_type or "").lower()
+        side = (side or "").lower()
+        if not symbol or order_type not in {"market", "limit"} or side not in {"buy", "sell"}:
+            raise ValueError("Допустимы только market/limit и buy/sell.")
+        if not isinstance(amount, (int, float)) or not math.isfinite(amount) or amount <= 0:
+            raise ValueError("Количество должно быть положительным числом.")
         if symbol not in client.markets:
             raise ValueError("Торговая пара недоступна на подключенной бирже.")
         if order_type == "market":
             return client.create_order(symbol, order_type, side, amount, None, params or {})
-        if price is None or price <= 0:
+        if price is None or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
             raise ValueError("Для лимитного ордера нужна положительная цена.")
         return client.create_order(symbol, order_type, side, amount, price, params or {})
 

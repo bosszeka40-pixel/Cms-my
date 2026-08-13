@@ -722,6 +722,8 @@ def create_exchange_order():
         price = float(price) if price is not None else None
         if side not in {'buy', 'sell'} or order_type not in {'market', 'limit'}:
             raise ValueError('Допустимы только buy/sell и market/limit.')
+        if not symbol or symbol not in TRADING_PAIRS:
+            raise ValueError('Недоступная торговая пара.')
         if not math.isfinite(amount) or amount <= 0:
             raise ValueError('Количество должно быть положительным числом.')
         if price is not None and (not math.isfinite(price) or price <= 0):
@@ -740,6 +742,8 @@ def create_exchange_order():
             ticker = exchange_service.ticker(session['user_id'], symbol)
             reference_price = ticker.get('last')
         max_notional = float(os.getenv('MAX_ORDER_NOTIONAL', '1000'))
+        if not math.isfinite(max_notional) or max_notional <= 0:
+            raise ValueError('MAX_ORDER_NOTIONAL должен быть положительным числом.')
         if not reference_price or amount * reference_price > max_notional:
             raise ValueError(
                 f'Номинал сделки превышает лимит {max_notional:.2f} или цена недоступна.'
@@ -761,7 +765,10 @@ def create_exchange_order():
 def cancel_exchange_order(order_id):
     if 'user_id' not in session:
         return {'error': 'Требуется авторизация.'}, 401
-    if os.getenv('LIVE_TRADING_ENABLED', 'false').lower() != 'true':
+    if (
+        os.getenv('LIVE_TRADING_ENABLED', 'false').lower() != 'true'
+        or request.args.get('confirm_live', '').lower() != 'true'
+    ):
         return {'error': 'Операции с реальным аккаунтом отключены.'}, 403
     symbol = request.args.get('symbol')
     if not symbol:

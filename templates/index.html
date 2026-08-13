@@ -11,12 +11,22 @@
             <a class="btn" href="{{ url_for('logout') }}">Выйти</a>
         </div>
     {% else %}
-        <h1 class="page-title">Добро пожаловать в Super CMS V12 Ultimate</h1>
-        <p class="lead">Платформа управления AI-ботом, криптоторговлей и системой плагинов.</p>
+        <div class="hero">
+            <div>
+                <span class="eyebrow">CMS TRADING CONTROL</span>
+                <h1 class="page-title">Управляйте торговлей безопасно</h1>
+                <p class="lead">Публичные котировки, sandbox-проверки и контролируемые live-ордера в одном интерфейсе.</p>
+            </div>
+            <div class="hero-badge"><strong>DRY-RUN</strong><span>по умолчанию</span></div>
+        </div>
+        <div class="feature-grid">
+            <div class="card"><h2>Проверка API</h2><p class="muted">Ключи проверяются без сохранения секретов в базе данных.</p></div>
+            <div class="card"><h2>Sandbox first</h2><p class="muted">Сначала тестовая сеть, затем отдельное подтверждение live-режима.</p></div>
+            <div class="card"><h2>Контроль риска</h2><p class="muted">Лимит номинала сделки и журнал операций защищают ручные действия.</p></div>
+        </div>
         <div class="button-row">
             <a class="btn" href="{{ url_for('login') }}">Войти</a>
             <a class="btn" href="{{ url_for('register') }}">Регистрация</a>
-            <a class="btn" href="{{ url_for('home') }}">Главная</a>
         </div>
     {% endif %}
 {% endblock %}
