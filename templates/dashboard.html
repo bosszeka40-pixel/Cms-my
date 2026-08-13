@@ -33,9 +33,13 @@
         </div>
         <div class="card">
             <h2>ИИ-ассистент</h2>
-            <p>Введите запрос, чтобы получить помощь от AI-модуля.</p>
-            <textarea style="height: 120px;"></textarea>
-            <button class="btn" style="margin-top: 10px;">Отправить запрос</button>
+            <p>Чат использует сохранённую память тестов и рекомендации по стратегиям.</p>
+            <div id="chat-history" class="small-note" role="log"></div>
+            <form id="chat-form">
+                <textarea id="chat-message" style="height: 80px;" required
+                    placeholder="Например: какую стратегию протестировать?"></textarea>
+                <button class="btn" style="margin-top: 10px;">Отправить запрос</button>
+            </form>
         </div>
         <div class="card">
             <h2>Плагины и управление</h2>
@@ -46,4 +50,30 @@
             </div>
         </div>
     </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('chat-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('chat-message');
+    const history = document.getElementById('chat-history');
+    const message = input.value.trim();
+    if (!message) return;
+    const addMessage = (author, text) => {
+        const row = document.createElement('p');
+        const label = document.createElement('strong');
+        label.textContent = `${author}:`;
+        row.append(label, ` ${text}`);
+        history.appendChild(row);
+    };
+    addMessage('Вы', message);
+    input.value = '';
+    const response = await fetch('/api/chat', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message})
+    });
+    const data = await response.json();
+    addMessage('Бот', response.ok ? data.answer : (data.detail || 'Ошибка чата'));
+});
+</script>
 {% endblock %}

@@ -54,6 +54,12 @@ class TradingTestPayload(BaseModel):
     price_change: float
     current_balance: float
 
+class ChatPayload(BaseModel):
+    message: str
+
+class PluginActionPayload(BaseModel):
+    plugin_name: str
+
 @app.get("/", name="index")
 async def serve_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "user_id": request.session.get("user_email")})
@@ -124,6 +130,7 @@ async def dashboard(request: Request):
             "theme": request.session.get("theme", "light"),
             "selected_theme": request.session.get("theme", "light"),
             "message": message,
+            "memories": engine.recent_memories(user_email, 5),
         },
     )
 
@@ -141,8 +148,12 @@ async def marketplace(request: Request):
             "internal_currency": "CMS Credits (CMSC)",
             "exchanges": [],
             "wallets": [],
-            "plugins": engine.list_plugins(),
-            "purchases": [],
+            "plugins": [
+                {"id": plugin.id, "name": plugin.name, "price": plugin.price,
+                 "description": plugin.description}
+                for plugin in engine.list_plugins()
+            ],
+            "purchases": engine.user_plugins(user_email),
             "message": None,
             "exchange_info": None,
             "plugin_message": None,
@@ -235,7 +246,74 @@ def trading_test(payload: TradingTestPayload, request: Request):
     )
     result["pair"] = payload.pair
     result["trade"] = bot.simulate(payload.pair, strategy_manager.current_strategy(), result)
+    engine.record_memory(
+        "strategy_test", result["trade"]["pl"],
+        f"{payload.pair}; signal={result['signal']}; strategy={result['strategy']}",
+        request.session.get("user_email"),
+    )
     return result
+
+@app.get("/api/strategies")
+def strategies(request: Request):
+    email = request.session.get("user_email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    purchased = {item["name"]: item["active"] for item in engine.user_plugins(email)}
+    return [
+        {"name": plugin.name, "price": plugin.price, "description": plugin.description,
+         "available": plugin.price == 0 or plugin.name in purchased,
+         "active": purchased.get(plugin.name, plugin.price == 0)}
+        for plugin in engine.list_plugins()
+    ]
+
+@app.post("/api/strategies/purchase")
+def purchase_strategy(payload: PluginActionPayload, request: Request):
+    email = request.session.get("user_email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    purchase = engine.purchase_plugin(email, payload.plugin_name)
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Стратегия не найдена.")
+    return purchase
+
+@app.post("/api/strategies/activate")
+def activate_strategy(payload: PluginActionPayload, request: Request):
+    email = request.session.get("user_email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    plugin = next((item for item in engine.list_plugins() if item.name == payload.plugin_name), None)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Стратегия не найдена.")
+    if plugin.price > 0 and not engine.set_plugin_active(email, plugin.name, True):
+        raise HTTPException(status_code=402, detail="Сначала купите стратегию.")
+    strategy_manager.config["strategy"] = plugin.name
+    return {"status": "active", "strategy": plugin.name}
+
+@app.post("/api/chat")
+def chat(payload: ChatPayload, request: Request):
+    email = request.session.get("user_email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Сообщение не может быть пустым.")
+    memories = engine.recent_memories(email, 10)
+    profitable = [item for item in memories if item["result"] > 0]
+    if "стратег" in message.lower() or "рекоменд" in message.lower():
+        answer = (
+            f"Текущая стратегия: {strategy_manager.current_strategy()}. "
+            f"В памяти {len(memories)} наблюдений, прибыльных: {len(profitable)}. "
+            "Рекомендация: тестируйте изменения на истории и не используйте риск выше лимита."
+        )
+    elif memories:
+        answer = (
+            f"Я сохранил ваши последние действия. Последний результат: "
+            f"{memories[0]['result']:.4f}. Могу подсказать стратегию или разобрать тест."
+        )
+    else:
+        answer = "Память пока пуста. Запустите тест стратегии, и я начну сохранять результаты."
+    engine.record_memory("chat", 0.0, message, email)
+    return {"answer": answer, "memory_count": len(memories)}
 
 @app.get("/api/trading/status")
 def trading_status(request: Request):
