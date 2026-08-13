@@ -3,7 +3,8 @@
 {% block content %}
     <h1 class="page-title">Личный кабинет</h1>
     <p class="lead">Добро пожаловать, <strong>{{ username }}</strong>!</p>
-    <div class="grid" style="margin-top: 20px;">
+    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
+    <div class="grid">
         <div class="card">
             <h2>Баланс SYSTEM_COIN</h2>
             <p style="font-size: 24px; font-weight: bold;">€{{ balance }}</p>
@@ -13,6 +14,21 @@
             <div class="button-row">
                 <a class="btn" href="{{ url_for('marketplace') }}">Кошелек и биржи</a>
                 <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
+            </div>
+            <div class="card account-settings">
+                <h2>Аккаунт и оформление</h2>
+                <p class="muted">Выберите тему интерфейса для этого аккаунта.</p>
+                <form method="post">
+                    <input type="hidden" name="action" value="save_theme">
+                    <div class="field-group">
+                        <label for="theme">Тема</label>
+                        <select id="theme" name="theme">
+                            <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Светлая</option>
+                            <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Тёмная</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">Сохранить оформление</button>
+                </form>
             </div>
         </div>
         <div class="card">

@@ -43,7 +43,8 @@ def init_db():
                         username TEXT UNIQUE,
                         email TEXT UNIQUE,
                         password TEXT,
-                        role TEXT DEFAULT 'user')''')
+                        role TEXT DEFAULT 'user',
+                        theme TEXT DEFAULT 'light')''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS wallets (
                         user_id INTEGER PRIMARY KEY,
                         balance REAL,
@@ -63,6 +64,8 @@ def init_db():
     user_columns = [row[1] for row in cursor.fetchall()]
     if 'role' not in user_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
+    if 'theme' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'light'")
     cursor.execute("PRAGMA table_info('wallets')")
     columns = [row[1] for row in cursor.fetchall()]
     for column, definition in (
@@ -98,7 +101,7 @@ def load_plugins():
 def get_user(user_id):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, email, role FROM users WHERE id = ?', (user_id,))
+    cursor.execute('SELECT id, username, email, role, COALESCE(theme, "light") FROM users WHERE id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
     return row
@@ -184,6 +187,13 @@ def get_all_users():
     return rows
 
 
+def update_user_theme(user_id, theme):
+    conn = sqlite3.connect(DATABASE)
+    conn.execute('UPDATE users SET theme = ? WHERE id = ?', (theme, user_id))
+    conn.commit()
+    conn.close()
+
+
 def get_all_purchases():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -213,6 +223,7 @@ def inject_user():
         'user_name': session.get('user_name'),
         'user_email': session.get('user_email'),
         'is_admin': session.get('is_admin', False),
+        'theme': session.get('theme', 'light'),
     }
 
 
@@ -248,6 +259,7 @@ def login():
             session['user_name'] = row[1]
             session['user_email'] = row[2]
             session['is_admin'] = row[3] == 'admin'
+            session['theme'] = row[4] or 'light'
             return redirect(url_for('dashboard'))
         message = 'Неверный логин или пароль.'
 
@@ -282,6 +294,7 @@ def register():
                 session['user_name'] = username
                 session['user_email'] = email
                 session['is_admin'] = False
+                session['theme'] = 'light'
                 return redirect(url_for('dashboard'))
             except sqlite3.IntegrityError:
                 message = 'Пользователь с таким именем или email уже существует.'
@@ -302,15 +315,31 @@ def forgot_password():
     return render_template('forgot_password.html', message=message)
 
 
-@app.route('/dashboard')
+@app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
     user = get_user(session['user_id'])
     wallet = get_wallet(session['user_id'])
+    message = None
+    if request.method == 'POST' and request.form.get('action') == 'save_theme':
+        theme = request.form.get('theme', 'light')
+        if theme in {'light', 'dark'}:
+            update_user_theme(session['user_id'], theme)
+            session['theme'] = theme
+            user = get_user(session['user_id'])
+            message = 'Тема оформления сохранена.'
 
-    return render_template('dashboard.html', username=user[1], email=user[2], balance=wallet['balance'], wallet=wallet)
+    return render_template(
+        'dashboard.html',
+        username=user[1],
+        email=user[2],
+        balance=wallet['balance'],
+        wallet=wallet,
+        selected_theme=user[4] or 'light',
+        message=message,
+    )
 
 
 def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float):

@@ -1,4 +1,4 @@
-body { font-family: sans-serif; background: #0f172a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-.card { background: #1e293b; padding: 30px; border-radius: 12px; width: 350px; }
-input, button { width: 100%; padding: 10px; margin: 10px 0; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 6px; box-sizing: border-box; }
-button { background: #0284c7; border: none; cursor: pointer; }
+body { font-family: Inter, "Segoe UI", sans-serif; background: #f3f6fb; color: #1f2937; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 1rem; }
+.card { background: #fff; border: 1px solid #dbe3ef; box-shadow: 0 10px 30px rgba(30, 64, 175, .08); padding: 30px; border-radius: 12px; width: min(100%, 420px); }
+input, button { width: 100%; padding: 10px; margin: 10px 0; background: #fff; color: #1f2937; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font: inherit; }
+button { background: #2563eb; color: #fff; border: none; cursor: pointer; font-weight: 600; }
