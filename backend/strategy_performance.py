@@ -1,0 +1,71 @@
+from datetime import datetime, timezone
+
+
+INITIAL_BALANCE_EUR = 100.0
+TRADING_FEE_RATE = 0.001
+
+
+def pricing_for_return(monthly_return_pct: float) -> tuple[str, float]:
+    """Return a transparent category and 15-day euro price for a monthly result."""
+    if monthly_return_pct < 0:
+        return "Неудачные", 0.0
+    if monthly_return_pct < 5:
+        return "Безубыточные", 0.0
+    if monthly_return_pct < 15:
+        return "Стабильные", 1.0
+    if monthly_return_pct < 30:
+        return "Прибыльные", 1.5
+    if monthly_return_pct < 50:
+        return "Высокоприбыльные", 2.25
+    if monthly_return_pct < 100:
+        return "Очень прибыльные", 5.0
+    return "Исключительно прибыльные", 10.0
+
+
+def _signal(strategy: str, previous_change: float) -> int:
+    if strategy in {"compound_defender", "trend_breakout_compound"}:
+        return -1 if previous_change > 0 else 1
+    return 1 if previous_change > 0 else -1
+
+
+def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
+    """Backtest one strategy using only the preceding closed daily candle."""
+    balance = INITIAL_BALANCE_EUR
+    trades = 0
+    wins = 0
+    for index in range(1, len(candles)):
+        previous_close = float(candles[index - 1]["close"])
+        current_close = float(candles[index]["close"])
+        if previous_close <= 0:
+            continue
+        previous_change = (
+            (previous_close - float(candles[index - 2]["close"]))
+            / float(candles[index - 2]["close"])
+            if index > 1 and float(candles[index - 2]["close"]) > 0
+            else 0.0
+        )
+        signal = _signal(strategy, previous_change)
+        trade_return = signal * ((current_close - previous_close) / previous_close)
+        net_return = trade_return - TRADING_FEE_RATE
+        balance = max(0.0, balance * (1 + net_return))
+        trades += 1
+        wins += net_return > 0
+    monthly_return = (balance / INITIAL_BALANCE_EUR - 1) * 100
+    category, price = pricing_for_return(monthly_return)
+    return {
+        "initial_balance_eur": INITIAL_BALANCE_EUR,
+        "final_balance_eur": round(balance, 2),
+        "monthly_return_pct": round(monthly_return, 2),
+        "category": category,
+        "price_eur": price,
+        "access_days": 15 if price else None,
+        "trades": trades,
+        "win_rate_pct": round(wins / trades * 100, 2) if trades else 0.0,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "data_source": "real closed daily OHLCV candles",
+        "data_days": len(candles),
+    }
+
+
+def evaluate_strategies(candles: list[dict], strategy_names: list[str]) -> dict[str, dict]:
+    return {name: evaluate_strategy(name, candles) for name in strategy_names}

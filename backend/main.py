@@ -17,6 +17,7 @@ from .market_history import (
     ensure_table, load_candles, refresh_candles, load_history, refresh_history,
     load_news, refresh_news, analyze_news_sentiment,
 )
+from .strategy_performance import evaluate_strategies
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -103,6 +104,39 @@ def _market_signal(pair: str, exchange_name: str):
         "source": "сохранённые публичные OHLCV-свечи",
         "disclaimer": "Сигнал информационный и не является гарантией доходности.",
     }
+
+
+def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT"):
+    client = _public_exchange(exchange_name)
+    daily = refresh_history(MARKET_DATABASE, client, exchange_name, pair)
+    month = daily[-31:]
+    names = [plugin.name for plugin in engine.list_plugins()]
+    return evaluate_strategies(month, names)
+
+
+def _strategy_catalog(email: str, performance: dict):
+    purchased = {item["name"]: item for item in engine.user_plugins(email)}
+    catalog = []
+    for plugin in engine.list_plugins():
+        result = performance.get(plugin.name, {})
+        price = result.get("price_eur", float(plugin.price))
+        owned = purchased.get(plugin.name)
+        catalog.append({
+            "id": plugin.id,
+            "name": plugin.name,
+            "description": plugin.description,
+            "price_eur": price,
+            "currency": "EUR",
+            "access_days": result.get("access_days"),
+            "category": result.get("category", "Нет данных"),
+            "monthly_return_pct": result.get("monthly_return_pct"),
+            "final_balance_eur": result.get("final_balance_eur"),
+            "win_rate_pct": result.get("win_rate_pct"),
+            "available": price == 0 or bool(owned and owned["active"]),
+            "active": bool(owned and owned["active"]),
+            "access_until": owned["access_until"] if owned else None,
+        })
+    return catalog
 
 class PluginActionPayload(BaseModel):
     plugin_name: str
@@ -195,6 +229,10 @@ async def marketplace(request: Request):
                 "Стратегия добавлена в ваши покупки."
                 if purchase else "Стратегия не найдена."
             )
+    try:
+        performance = _strategy_performance()
+    except Exception:
+        performance = {}
     return templates.TemplateResponse(
         "marketplace.html",
         {
@@ -204,11 +242,7 @@ async def marketplace(request: Request):
             "internal_currency": "CMS Credits (CMSC)",
             "exchanges": [],
             "wallets": [],
-            "plugins": [
-                {"id": plugin.id, "name": plugin.name, "price": plugin.price,
-                 "description": plugin.description}
-                for plugin in engine.list_plugins()
-            ],
+            "plugins": _strategy_catalog(user_email, performance),
             "purchases": engine.user_plugins(user_email),
             "message": None,
             "exchange_info": None,
@@ -314,23 +348,44 @@ def strategies(request: Request):
     email = request.session.get("user_email")
     if not email:
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
-    purchased = {item["name"]: item["active"] for item in engine.user_plugins(email)}
-    return [
-        {"name": plugin.name, "price": plugin.price, "description": plugin.description,
-         "available": plugin.price == 0 or plugin.name in purchased,
-         "active": purchased.get(plugin.name, plugin.price == 0)}
-        for plugin in engine.list_plugins()
-    ]
+    try:
+        performance = _strategy_performance()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить реальные данные: {exc}") from exc
+    return _strategy_catalog(email, performance)
 
 @app.post("/api/strategies/purchase")
 def purchase_strategy(payload: PluginActionPayload, request: Request):
     email = request.session.get("user_email")
     if not email:
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
-    purchase = engine.purchase_plugin(email, payload.plugin_name)
+    try:
+        performance = _strategy_performance()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось проверить месячную доходность: {exc}") from exc
+    result = performance.get(payload.plugin_name)
+    if not result or result["price_eur"] <= 0:
+        return engine.purchase_plugin(email, payload.plugin_name, 0.0)
+    purchase = engine.purchase_plugin(email, payload.plugin_name, result["price_eur"])
     if not purchase:
         raise HTTPException(status_code=404, detail="Стратегия не найдена.")
     return purchase
+
+
+@app.get("/api/strategies/performance")
+def strategy_performance(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    try:
+        return {
+            "pair": pair,
+            "exchange": exchange,
+            "period": "последние 30 дней",
+            "currency": "EUR",
+            "strategies": _strategy_performance(exchange, pair),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось рассчитать доходность: {exc}") from exc
 
 @app.post("/api/strategies/activate")
 def activate_strategy(payload: PluginActionPayload, request: Request):

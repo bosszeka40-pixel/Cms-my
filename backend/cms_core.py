@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -31,6 +31,7 @@ class UserPlugin(Base):
     plugin_id = Column(Integer, ForeignKey("plugins.id"), nullable=False, index=True)
     active = Column(Boolean, default=False, nullable=False)
     purchased_at = Column(DateTime, default=datetime.utcnow)
+    access_until = Column(DateTime, nullable=True)
 
 class LearningMemory(Base):
     __tablename__ = "learning_memory"
@@ -57,7 +58,16 @@ class CMSEngine:
 
     def init_db(self):
         Base.metadata.create_all(bind=self.engine)
+        self.ensure_user_plugin_access_column()
         self.ensure_strategy_plugins()
+
+    def ensure_user_plugin_access_column(self):
+        with self.engine.begin() as connection:
+            columns = connection.exec_driver_sql("PRAGMA table_info(user_plugins)").fetchall()
+            if not any(column[1] == "access_until" for column in columns):
+                connection.exec_driver_sql(
+                    "ALTER TABLE user_plugins ADD COLUMN access_until DATETIME"
+                )
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -122,7 +132,7 @@ class CMSEngine:
         finally:
             session.close()
 
-    def purchase_plugin(self, email: str, plugin_name: str):
+    def purchase_plugin(self, email: str, plugin_name: str, price: float | None = None):
         session = self.SessionLocal()
         try:
             user = session.query(User).filter(User.email == email).first()
@@ -133,10 +143,23 @@ class CMSEngine:
                 user_id=user.id, plugin_id=plugin.id
             ).first()
             if not purchase:
-                purchase = UserPlugin(user_id=user.id, plugin_id=plugin.id, active=False)
+                purchase = UserPlugin(
+                    user_id=user.id,
+                    plugin_id=plugin.id,
+                    active=False,
+                    access_until=datetime.utcnow() + timedelta(days=15),
+                )
                 session.add(purchase)
-                session.commit()
-            return {"name": plugin.name, "price": plugin.price, "active": purchase.active}
+            else:
+                purchase.access_until = datetime.utcnow() + timedelta(days=15)
+            session.commit()
+            return {
+                "name": plugin.name,
+                "price_eur": float(plugin.price if price is None else price),
+                "active": purchase.active,
+                "access_until": purchase.access_until.isoformat(),
+                "access_days": 15,
+            }
         finally:
             session.close()
 
@@ -152,6 +175,10 @@ class CMSEngine:
             ).first()
             if not purchase:
                 return False
+            if purchase.access_until and purchase.access_until <= datetime.utcnow():
+                purchase.active = False
+                session.commit()
+                return False
             purchase.active = active
             session.commit()
             return True
@@ -164,8 +191,19 @@ class CMSEngine:
             user = session.query(User).filter(User.email == email).first()
             if not user:
                 return []
+            now = datetime.utcnow()
             return [
-                {"name": item[0].name, "price": item[0].price, "active": item[1].active}
+                {
+                    "name": item[0].name,
+                    "price_eur": item[0].price,
+                    "active": item[1].active and (
+                        item[1].access_until is None or item[1].access_until > now
+                    ),
+                    "access_until": item[1].access_until.isoformat()
+                    if item[1].access_until else None,
+                    "when": item[1].purchased_at.isoformat()
+                    if item[1].purchased_at else None,
+                }
                 for item in session.query(Plugin, UserPlugin)
                 .join(UserPlugin, UserPlugin.plugin_id == Plugin.id)
                 .filter(UserPlugin.user_id == user.id)
