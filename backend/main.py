@@ -400,8 +400,8 @@ def chat(payload: ChatPayload, request: Request):
                 f"Проанализировано {signal['hourly_candles']} часовых и "
                 f"{signal['daily_candles']} дневных свечей. {signal['disclaimer']}"
             )
-        except (TypeError, ValueError, ccxt.BaseError) as exc:
-            answer = f"Не удалось получить свежий сигнал по {pair}: {exc}"
+        except (TypeError, ValueError, ccxt.BaseError):
+            answer = f"Не удалось получить свежий сигнал по {pair}. Повторите запрос позже."
     elif "стратег" in lower_message or "рекоменд" in lower_message:
         answer = (
             f"Текущая стратегия: {strategy_manager.current_strategy()}. "
