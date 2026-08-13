@@ -1,9 +1,21 @@
 from datetime import datetime, timedelta, timezone
 import sqlite3
+import re
+from email.utils import parsedate_to_datetime
+from urllib.request import Request, urlopen
+import xml.etree.ElementTree as ET
 
 
 HISTORY_DAYS = 365
 INTRADAY_HOURS = 30 * 24
+NEWS_DAYS = 365
+TIMEFRAME_MILLISECONDS = {
+    "1m": 60_000,
+    "5m": 5 * 60_000,
+    "15m": 15 * 60_000,
+    "1h": 60 * 60_000,
+    "1d": 24 * 60 * 60_000,
+}
 
 
 def ensure_table(database):
@@ -46,6 +58,21 @@ def ensure_table(database):
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_market_candles_lookup "
             "ON market_candles(exchange, pair, timeframe, timestamp)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS market_news (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                title TEXT NOT NULL,
+                url TEXT,
+                published_at INTEGER NOT NULL,
+                fetched_at TEXT NOT NULL,
+                UNIQUE(source, title, published_at)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_market_news_published "
+            "ON market_news(published_at)"
         )
 
 
@@ -109,6 +136,8 @@ def load_history(database, exchange_name, pair):
 
 
 def store_intraday_candles(database, exchange_name, pair, candles, timeframe="1h"):
+    if timeframe not in TIMEFRAME_MILLISECONDS:
+        raise ValueError(f"Неподдерживаемый таймфрейм: {timeframe}")
     fetched_at = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(database) as conn:
         conn.executemany(
@@ -161,12 +190,13 @@ def refresh_candles(database, exchange, exchange_name, pair, timeframe="1h", lim
         if not batch:
             break
         candles.extend(batch)
-        next_cursor = batch[-1][0] + 3600000
+        interval_ms = TIMEFRAME_MILLISECONDS[timeframe]
+        next_cursor = batch[-1][0] + interval_ms
         if next_cursor <= cursor or len(batch) < 1000:
             break
         cursor = next_cursor
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    interval_ms = 3600000 if timeframe == "1h" else 86400000
+    interval_ms = TIMEFRAME_MILLISECONDS[timeframe]
     candles = [candle for candle in candles if candle[0] + interval_ms <= now_ms]
     store_intraday_candles(database, exchange_name, pair, candles, timeframe)
     return load_candles(database, exchange_name, pair, timeframe, limit)
@@ -195,3 +225,58 @@ def refresh_history(database, exchange, exchange_name, pair):
             break
     store_candles(database, exchange_name, pair, candles)
     return load_history(database, exchange_name, pair)
+
+
+def store_news(database, items):
+    """Store only published news; future-dated items are ignored."""
+    ensure_table(database)
+    now = datetime.now(timezone.utc)
+    fetched_at = now.isoformat()
+    rows = []
+    for item in items:
+        title = str(item.get("title", "")).strip()
+        published_at = int(item.get("published_at", 0))
+        if title and published_at <= int(now.timestamp() * 1000):
+            rows.append((str(item.get("source", "unknown")), title,
+                         item.get("url"), published_at, fetched_at))
+    with sqlite3.connect(database) as conn:
+        conn.executemany(
+            """INSERT INTO market_news(source, title, url, published_at, fetched_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(source, title, published_at) DO UPDATE SET
+                 url=excluded.url, fetched_at=excluded.fetched_at""",
+            rows,
+        )
+        cutoff = int((now - timedelta(days=NEWS_DAYS)).timestamp() * 1000)
+        conn.execute("DELETE FROM market_news WHERE published_at < ?", (cutoff,))
+
+
+def load_news(database, as_of=None, limit=100):
+    ensure_table(database)
+    as_of = int(as_of if as_of is not None else datetime.now(timezone.utc).timestamp() * 1000)
+    with sqlite3.connect(database) as conn:
+        rows = conn.execute(
+            """SELECT source, title, url, published_at FROM market_news
+               WHERE published_at <= ? ORDER BY published_at DESC LIMIT ?""",
+            (as_of, max(1, min(int(limit), 1000))),
+        ).fetchall()
+    return [{"source": row[0], "title": row[1], "url": row[2], "published_at": row[3]}
+            for row in rows]
+
+
+def refresh_news(database, feed_url="https://www.coindesk.com/arc/outboundfeeds/rss/"):
+    request = Request(feed_url, headers={"User-Agent": "CMS market news reader/1.0"})
+    with urlopen(request, timeout=10) as response:
+        root = ET.fromstring(response.read())
+    items = []
+    for entry in root.findall(".//item"):
+        title = (entry.findtext("title") or "").strip()
+        published = entry.findtext("pubDate") or ""
+        try:
+            published_at = int(parsedate_to_datetime(published).timestamp() * 1000)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        items.append({"source": "coindesk", "title": re.sub(r"\s+", " ", title),
+                      "url": entry.findtext("link"), "published_at": published_at})
+    store_news(database, items)
+    return load_news(database)

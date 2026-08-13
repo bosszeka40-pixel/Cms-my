@@ -13,7 +13,10 @@ from .bot import HFTBot
 from .cms_core import CMSEngine
 from .hft_brain import CMSProductionHFTBot
 from .modules.strategy_manager import StrategyManager
-from .market_history import ensure_table, load_candles, refresh_candles, load_history, refresh_history
+from .market_history import (
+    ensure_table, load_candles, refresh_candles, load_history, refresh_history,
+    load_news, refresh_news,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -350,21 +353,41 @@ def market_history(request: Request, pair: str = "BTC/USDT", exchange: str = "bi
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
-    if timeframe not in {"1h", "1d"}:
-        raise HTTPException(status_code=400, detail="Поддерживаются таймфреймы 1h и 1d.")
+    if timeframe not in {"1m", "5m", "15m", "1h", "1d"}:
+        raise HTTPException(status_code=400, detail="Поддерживаются таймфреймы от 1m до 1d.")
     try:
         exchange = (exchange or "binance").lower()
         client = _public_exchange(exchange)
         if timeframe == "1d":
             history = refresh_history(MARKET_DATABASE, client, exchange, pair)
         else:
-            history = refresh_candles(MARKET_DATABASE, client, exchange, pair)
+            history = refresh_candles(
+                MARKET_DATABASE, client, exchange, pair, timeframe=timeframe
+            )
         return {"exchange": exchange, "pair": pair, "timeframe": timeframe,
                 "candles": history, "count": len(history),
                 "retention_days": 365 if timeframe == "1d" else 30,
                 "analysis_policy": "Сигналы используют только закрытые текущие и предыдущие свечи."}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось обновить историю: {exc}") from exc
+
+
+@app.get("/api/market/news")
+def market_news(request: Request, refresh: bool = True, limit: int = 100):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    try:
+        if refresh:
+            refresh_news(MARKET_DATABASE)
+        news = load_news(MARKET_DATABASE, limit=limit)
+        return {
+            "news": news,
+            "count": len(news),
+            "source": "сохранённая история CoinDesk RSS",
+            "analysis_policy": "В историю и анализ попадают только новости, опубликованные к моменту запроса.",
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось обновить новости: {exc}") from exc
 
 
 @app.get("/api/market/signal")
