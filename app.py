@@ -13,6 +13,7 @@ from backend.bot import HFTBot
 from backend.cms_core import CMSEngine
 from backend.modules.strategy_manager import StrategyManager
 from backend.exchange_service import ExchangeService
+from backend.market_history import ensure_table, load_history, refresh_history
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'development-only-change-me')
@@ -88,6 +89,7 @@ def init_db():
                         card_recipient TEXT,
                         card_currency TEXT NOT NULL DEFAULT 'EUR',
                         updated_at TEXT NOT NULL)''')
+    ensure_table(DATABASE)
     conn.commit()
     cursor.execute("PRAGMA table_info('users')")
     user_columns = [row[1] for row in cursor.fetchall()]
@@ -753,6 +755,26 @@ def market_data():
         return {'error': f'Не удалось получить данные биржи: {exc}', 'live': False}, 502
 
 
+@app.get('/api/market/history')
+def market_history():
+    if 'user_id' not in session:
+        return {'error': 'Требуется авторизация.'}, 401
+    exchange_name = request.args.get('exchange', 'binance').lower()
+    pair = request.args.get('pair', TRADING_PAIRS[0])
+    if pair not in TRADING_PAIRS:
+        return {'error': 'Недоступная торговая пара.'}, 400
+    try:
+        exchange = _public_exchange(exchange_name)
+        history = refresh_history(DATABASE, exchange, exchange_name, pair)
+        return {
+            'exchange': exchange_name, 'pair': pair, 'days': len(history),
+            'history': history, 'retention_days': 365,
+            'analysis_policy': 'Каждое решение использует только текущую и предыдущие свечи.',
+        }
+    except Exception as exc:
+        return {'error': f'Не удалось обновить историю: {exc}'}, 502
+
+
 @app.get('/api/trading/history')
 def trading_history():
     if 'user_id' not in session:
@@ -883,11 +905,16 @@ def backtest():
         return {'error': 'Требуется авторизация.'}, 401
     payload = request.get_json(silent=True) or {}
     try:
-        prices = [float(value) for value in payload.get('prices', [])]
-        sentiment = [float(value) for value in payload.get('sentiment', [])]
         initial = max(0.0, float(payload.get('initial_balance', 100)))
-        if len(prices) < 2 or len(prices) != len(sentiment) or initial <= 0:
-            raise ValueError('Нужны одинаковые ряды цен и сигналов минимум из 2 значений.')
+        pair = payload.get('pair', TRADING_PAIRS[0])
+        exchange_name = payload.get('exchange', 'binance').lower()
+        if pair not in TRADING_PAIRS:
+            raise ValueError('Недоступная торговая пара.')
+        exchange = _public_exchange(exchange_name)
+        history = refresh_history(DATABASE, exchange, exchange_name, pair)
+        prices = [row['close'] for row in history]
+        if len(prices) < 3 or initial <= 0:
+            raise ValueError('Нужно минимум 2 дневные свечи и положительный депозит.')
         strategies = {
             'pure_harvester': strategy_manager.module.process_tick,
             'high_frequency_momentum': strategy_manager.module.process_high_frequency,
@@ -896,19 +923,27 @@ def backtest():
         results = []
         for name, processor in strategies.items():
             balance, wins = initial, 0
-            for index in range(len(prices) - 1):
-                change = ((prices[index + 1] - prices[index]) / prices[index] * 100
-                          if prices[index] else 0)
-                next_balance, _ = processor(sentiment[index], change, balance, 1.5)
+            for index in range(1, len(prices) - 1):
+                previous_change = ((prices[index] - prices[index - 1]) / prices[index - 1] * 100
+                                   if prices[index - 1] else 0)
+                # The signal is formed at candle[index] close; candle[index + 1]
+                # is the first price that was unknown when the decision was made.
+                sentiment = 1.0 if previous_change > 0 else -1.0
+                _, signal = processor(sentiment, previous_change, balance, 1.5)
+                next_change = ((prices[index + 1] - prices[index]) / prices[index] * 100
+                               if prices[index] else 0)
+                next_balance = balance * (1 + signal * next_change / 100 * 1.5)
                 wins += next_balance > balance
                 balance = max(0.0, next_balance)
             results.append({
                 'strategy': name, 'initial_balance': initial,
                 'final_balance': round(balance, 8), 'pnl': round(balance - initial, 8),
                 'roi': round((balance / initial - 1) * 100, 4),
-                'trades': len(prices) - 1, 'wins': wins,
+                'trades': len(prices) - 2, 'wins': wins,
             })
-        return {'results': results, 'source': 'historical input data', 'tested_points': len(prices)}
+        return {'results': results, 'source': 'stored public daily OHLCV',
+                'pair': pair, 'exchange': exchange_name, 'tested_points': len(prices),
+                'retention_days': 365, 'lookahead_bias': False}
     except (TypeError, ValueError) as exc:
         return {'error': str(exc)}, 400
 

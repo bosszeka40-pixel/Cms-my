@@ -123,10 +123,8 @@
     </div>
     <div class="card">
         <h2>Исторический тест всех стратегий</h2>
-        <p class="muted">Введите цены через запятую и сентимент для каждой точки, чтобы сравнить результат.</p>
-        <textarea id="backtest-prices" rows="2">100,102,101,105,107,104</textarea>
-        <textarea id="backtest-sentiment" rows="2">0.2,0.4,-0.1,0.8,0.5,-0.2</textarea>
-        <button class="btn" id="run-backtest" type="button">Запустить backtest</button>
+        <p class="muted">Тест использует сохранённую годовую историю дневных свечей. Сигнал строится только по данным, доступным до сделки.</p>
+        <button class="btn" id="run-backtest" type="button">Запустить backtest за 365 дней</button>
         <div id="backtest-result" class="table-wrap"></div>
     </div>
 {% endblock %}
@@ -211,9 +209,8 @@ async function loadHistory() {
     ).join('') || '<tr><td colspan="6">Сделок пока нет.</td></tr>';
 }
 document.getElementById('run-backtest').addEventListener('click', async () => {
-    const parse = id => document.getElementById(id).value.split(',').map(Number);
     const response = await fetch('/api/bot/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({prices: parse('backtest-prices'), sentiment: parse('backtest-sentiment'), initial_balance: 100})});
+        body: JSON.stringify({pair: pairSelect.value, exchange: 'binance', initial_balance: 10})});
     const data = await response.json();
     document.getElementById('backtest-result').innerHTML = response.ok
         ? `<table><thead><tr><th>Стратегия</th><th>Баланс</th><th>P/L</th><th>ROI</th><th>Победы</th></tr></thead><tbody>${data.results.map(item =>
