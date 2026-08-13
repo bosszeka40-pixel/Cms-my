@@ -92,11 +92,17 @@ async def forgot_password_page(request: Request):
 async def forgot_password_submit(request: Request, email: str = Form(...)):
     return templates.TemplateResponse("forgot_password.html", {"request": request, "message": "Инструкции по восстановлению пароля отправлены на указанный email.", "user_id": request.session.get("user_email")})
 
-@app.get("/dashboard", name="dashboard")
+@app.api_route("/dashboard", methods=["GET", "POST"], name="dashboard")
 async def dashboard(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
+    message = None
+    if request.method == "POST":
+        form = await request.form()
+        if form.get("action") == "save_theme" and form.get("theme") in {"light", "dark"}:
+            request.session["theme"] = form["theme"]
+            message = "Тема оформления сохранена."
     user = engine.get_user(user_email)
     username = user.email if user else user_email
     balance = "—"
@@ -109,6 +115,9 @@ async def dashboard(request: Request):
             "balance": balance,
             "wallet": {"balance": 0.0, "provider": None, "address": None},
             "user_id": user_email,
+            "theme": request.session.get("theme", "light"),
+            "selected_theme": request.session.get("theme", "light"),
+            "message": message,
         },
     )
 
