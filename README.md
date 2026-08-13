@@ -42,6 +42,27 @@ http://127.0.0.1:8000
 - `POST /api/bot/simulate` — запустить HFT-симуляцию
 - `POST /api/user/connect-exchange` — подключить биржу через CCXT
 
+## Реальная торговля через API
+
+Подключение хранится только в памяти процесса; API-секреты не записываются в базу данных.
+По умолчанию все ордера работают в `dry_run`. Для отправки ордера на биржу необходимо:
+
+1. Подключить API-ключ с правами **trade**, без права вывода средств.
+2. Сначала проверить подключение через sandbox/testnet (`POST /api/exchange/connect` с `sandbox: true`).
+3. Явно включить `LIVE_TRADING_ENABLED=true`.
+4. Передать одновременно `live: true` и `confirm_live: true` в `POST /api/trading/order`.
+
+Основные endpoints:
+
+- `POST /api/exchange/connect` — подключение и проверка ключей (`exchange_name`, `api_key`, `api_secret`, опционально `api_password`, `sandbox`)
+- `GET /api/exchange/status` — состояние подключения
+- `GET /api/exchange/balance` — баланс подключенного аккаунта
+- `POST /api/trading/order` — market/limit ордер; без `live` только проверка параметров
+- `DELETE /api/trading/order/<id>?symbol=BTC/USDT` — отмена ордера
+
+Для live-режима используйте отдельный production secret и HTTPS. Никогда не передавайте ключи
+через URL и не включайте право вывода средств.
+
 ## Тестовые метрики
 
 - Initial Capital: €100.00

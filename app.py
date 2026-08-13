@@ -752,6 +752,8 @@ def create_exchange_order():
 def cancel_exchange_order(order_id):
     if 'user_id' not in session:
         return {'error': 'Требуется авторизация.'}, 401
+    if os.getenv('LIVE_TRADING_ENABLED', 'false').lower() != 'true':
+        return {'error': 'Операции с реальным аккаунтом отключены.'}, 403
     symbol = request.args.get('symbol')
     if not symbol:
         return {'error': 'Укажите symbol.'}, 400
