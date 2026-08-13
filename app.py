@@ -28,6 +28,8 @@ EXCHANGES = ['binance', 'kraken', 'okx', 'bybit', 'bitfinex', 'pionex']
 WALLETS = ['Metamask', 'Trust Wallet', 'Coinbase', 'Phantom', 'Ledger']
 TRADING_PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
 INTERNAL_CURRENCY = 'CMS Credits (CMSC)'
+CRYPTO_PAYOUT_ASSETS = ('USDT', 'USDC', 'BTC')
+CARD_PAYOUT_SERVICES = ('Stripe', 'PayPal', 'Adyen', 'Revolut Business')
 
 DEFAULT_PLUGINS = [
     {'name': 'Sentiment Analyzer', 'price': 29.99, 'description': 'AI-модуль для анализа новостей и торговых сигналов.'},
@@ -77,6 +79,15 @@ def init_db():
                         pnl REAL NOT NULL,
                         balance REAL NOT NULL,
                         created_at TEXT NOT NULL)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS admin_payout_settings (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        crypto_asset TEXT NOT NULL DEFAULT 'USDT',
+                        crypto_network TEXT,
+                        crypto_address TEXT,
+                        card_provider TEXT NOT NULL DEFAULT 'Stripe',
+                        card_recipient TEXT,
+                        card_currency TEXT NOT NULL DEFAULT 'EUR',
+                        updated_at TEXT NOT NULL)''')
     conn.commit()
     cursor.execute("PRAGMA table_info('users')")
     user_columns = [row[1] for row in cursor.fetchall()]
@@ -108,6 +119,61 @@ def init_db():
         admin_id = cursor.lastrowid
         cursor.execute('INSERT OR IGNORE INTO wallets (user_id, balance, credits) VALUES (?, ?, ?)', (admin_id, 1000.0, 500.0))
         conn.commit()
+    conn.close()
+
+
+def get_admin_payout_settings():
+    conn = sqlite3.connect(DATABASE)
+    row = conn.execute(
+        '''SELECT crypto_asset, crypto_network, crypto_address, card_provider,
+                  card_recipient, card_currency
+           FROM admin_payout_settings WHERE id = 1'''
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return {
+            'crypto_asset': 'USDT',
+            'crypto_network': '',
+            'crypto_address': '',
+            'card_provider': 'Stripe',
+            'card_recipient': '',
+            'card_currency': 'EUR',
+        }
+    return {
+        'crypto_asset': row[0],
+        'crypto_network': row[1] or '',
+        'crypto_address': row[2] or '',
+        'card_provider': row[3],
+        'card_recipient': row[4] or '',
+        'card_currency': row[5],
+    }
+
+
+def save_admin_payout_settings(settings):
+    conn = sqlite3.connect(DATABASE)
+    conn.execute(
+        '''INSERT INTO admin_payout_settings
+           (id, crypto_asset, crypto_network, crypto_address, card_provider,
+            card_recipient, card_currency, updated_at)
+           VALUES (1, ?, ?, ?, ?, ?, 'EUR', ?)
+           ON CONFLICT(id) DO UPDATE SET
+             crypto_asset=excluded.crypto_asset,
+             crypto_network=excluded.crypto_network,
+             crypto_address=excluded.crypto_address,
+             card_provider=excluded.card_provider,
+             card_recipient=excluded.card_recipient,
+             card_currency='EUR',
+             updated_at=excluded.updated_at''',
+        (
+            settings['crypto_asset'],
+            settings['crypto_network'],
+            settings['crypto_address'],
+            settings['card_provider'],
+            settings['card_recipient'],
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    conn.commit()
     conn.close()
 
 
@@ -876,6 +942,26 @@ def admin_panel():
                 message = 'Настройки торговой платформы сохранены.'
             except (TypeError, ValueError):
                 message = 'Проверьте значения левериджа и риска.'
+        elif action == 'save_payout_settings':
+            crypto_asset = request.form.get('crypto_asset', '')
+            card_provider = request.form.get('card_provider', '')
+            crypto_address = request.form.get('crypto_address', '').strip()
+            card_recipient = request.form.get('card_recipient', '').strip()
+            if crypto_asset not in CRYPTO_PAYOUT_ASSETS:
+                message = 'Выберите поддерживаемую криптовалюту для выплат.'
+            elif card_provider not in CARD_PAYOUT_SERVICES:
+                message = 'Выберите поддерживаемый платёжный сервис.'
+            elif not crypto_address or not card_recipient:
+                message = 'Укажите криптоадрес и реквизит аккаунта платёжного сервиса.'
+            else:
+                save_admin_payout_settings({
+                    'crypto_asset': crypto_asset,
+                    'crypto_network': request.form.get('crypto_network', '').strip(),
+                    'crypto_address': crypto_address,
+                    'card_provider': card_provider,
+                    'card_recipient': card_recipient,
+                })
+                message = 'Настройки выплат сохранены.'
 
     users = get_all_users()
     plugins = cmse.list_plugins()
@@ -890,6 +976,9 @@ def admin_panel():
         message=message,
         current_strategy=strategy_manager.current_strategy(),
         config=strategy_manager.config,
+        payout_settings=get_admin_payout_settings(),
+        crypto_payout_assets=CRYPTO_PAYOUT_ASSETS,
+        card_payout_services=CARD_PAYOUT_SERVICES,
     )
 
 

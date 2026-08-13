@@ -2,101 +2,99 @@
 
 {% block content %}
     <h1 class="page-title">Админ-панель</h1>
-    <p class="lead">Управление пользователями, плагинами и покупками.</p>
+    <p class="lead">Управление пользователями, плагинами, настройками платформы и выплатами.</p>
     {% if message %}
         <div class="message">{{ message }}</div>
     {% endif %}
     <div class="grid">
         <div class="card">
+            <h2>Получение средств от продаж</h2>
+            <p class="muted">Укажите реквизиты для зачисления выручки. Платёжные операции выполняются только после подключения соответствующего сервиса.</p>
+            <form method="post">
+                <input type="hidden" name="action" value="save_payout_settings">
+                <h3>Криптовалютные выплаты</h3>
+                <div class="field-group">
+                    <label for="crypto_asset">Валюта</label>
+                    <select id="crypto_asset" name="crypto_asset">
+                        {% for asset in crypto_payout_assets %}
+                            <option value="{{ asset }}" {% if payout_settings.crypto_asset == asset %}selected{% endif %}>{{ asset }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="crypto_network">Сеть</label>
+                    <input type="text" id="crypto_network" name="crypto_network" value="{{ payout_settings.crypto_network }}" placeholder="Например, ERC-20 или TRC-20" required>
+                </div>
+                <div class="field-group">
+                    <label for="crypto_address">Адрес получения</label>
+                    <input type="text" id="crypto_address" name="crypto_address" value="{{ payout_settings.crypto_address }}" autocomplete="off" required>
+                </div>
+                <h3>Выплаты на банковскую карту</h3>
+                <div class="field-group">
+                    <label for="card_provider">Платёжный сервис</label>
+                    <select id="card_provider" name="card_provider">
+                        {% for provider in card_payout_services %}
+                            <option value="{{ provider }}" {% if payout_settings.card_provider == provider %}selected{% endif %}>{{ provider }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="card_recipient">Аккаунт сервиса или merchant ID</label>
+                    <input type="text" id="card_recipient" name="card_recipient" value="{{ payout_settings.card_recipient }}" autocomplete="off" placeholder="Email или merchant ID" required>
+                </div>
+                <p class="small-note">Выплаты на банковскую карту доступны только в EUR. Номер карты в CMS не сохраняется.</p>
+                <button type="submit" class="btn">Сохранить реквизиты выплат</button>
+            </form>
+        </div>
+        <div class="card">
+            <h2>Настройки торговой платформы</h2>
+            <p class="muted">Эти параметры применяются к стратегиям и тестам пользователей.</p>
+            <form method="post">
+                <input type="hidden" name="action" value="save_admin_settings">
+                <div class="field-group">
+                    <label for="admin_strategy">Стратегия по умолчанию</label>
+                    <select id="admin_strategy" name="strategy">
+                        <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                        <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
+                        <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="admin_leverage">Леверидж</label>
+                    <input type="number" id="admin_leverage" name="leverage" min="0.1" max="10" step="0.1" value="{{ config.leverage }}">
+                </div>
+                <div class="field-group">
+                    <label for="admin_risk">Допустимый риск</label>
+                    <input type="number" id="admin_risk" name="risk_tolerance" min="0" max="1" step="0.01" value="{{ config.risk_tolerance }}">
+                </div>
+                <button type="submit" class="btn">Сохранить настройки</button>
+            </form>
+        </div>
+        <div class="card">
             <h2>Добавить плагин</h2>
             <form method="post">
                 <input type="hidden" name="action" value="create_plugin">
-                <div class="field-group">
-                    <label for="plugin_name">Название</label>
-                    <input type="text" id="plugin_name" name="plugin_name" required>
-                </div>
-                <div class="card">
-                    <h2>Настройки торговой платформы</h2>
-                    <p class="muted">Эти параметры применяются к стратегиям и тестам пользователей.</p>
-                    <form method="post">
-                        <input type="hidden" name="action" value="save_admin_settings">
-                        <div class="field-group">
-                            <label for="admin_strategy">Стратегия по умолчанию</label>
-                            <select id="admin_strategy" name="strategy">
-                                <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
-                                <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
-                                <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
-                            </select>
-                        </div>
-                        <div class="field-group">
-                            <label for="admin_leverage">Леверидж</label>
-                            <input type="number" id="admin_leverage" name="leverage" min="0.1" max="10" step="0.1" value="{{ config.leverage }}">
-                        </div>
-                        <div class="field-group">
-                            <label for="admin_risk">Допустимый риск</label>
-                            <input type="number" id="admin_risk" name="risk_tolerance" min="0" max="1" step="0.01" value="{{ config.risk_tolerance }}">
-                        </div>
-                        <button type="submit" class="btn">Сохранить настройки</button>
-                    </form>
-                </div>
-                <div class="field-group">
-                    <label for="plugin_price">Цена</label>
-                    <input type="text" id="plugin_price" name="plugin_price" required>
-                </div>
-                <div class="field-group">
-                    <label for="plugin_description">Описание</label>
-                    <textarea id="plugin_description" name="plugin_description" rows="4"></textarea>
-                </div>
+                <div class="field-group"><label for="plugin_name">Название</label><input type="text" id="plugin_name" name="plugin_name" required></div>
+                <div class="field-group"><label for="plugin_price">Цена CMSC</label><input type="number" id="plugin_price" name="plugin_price" min="0.01" step="0.01" required></div>
+                <div class="field-group"><label for="plugin_description">Описание</label><textarea id="plugin_description" name="plugin_description" rows="4"></textarea></div>
                 <button type="submit" class="btn">Создать плагин</button>
             </form>
         </div>
         <div class="card">
             <h2>Пользователи</h2>
-            {% if users %}
-                <ul>
-                    {% for user in users %}
-                        <li>{{ user[1] }} ({{ user[2] }}) — роль: {{ user[3] }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>Нет пользователей.</p>
-            {% endif %}
+            {% if users %}<ul>{% for user in users %}<li>{{ user[1] }} ({{ user[2] }}) — роль: {{ user[3] }}</li>{% endfor %}</ul>{% else %}<p>Нет пользователей.</p>{% endif %}
         </div>
         <div class="card">
             <h2>Плагины</h2>
-            {% if plugins %}
-                <ul>
-                    {% for plugin in plugins %}
-                        <li>{{ plugin.name }} — €{{ '%.2f'|format(plugin.price) }}<br>{{ plugin.description }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>Нет плагинов.</p>
-            {% endif %}
+            {% if plugins %}<ul>{% for plugin in plugins %}<li>{{ plugin.name }} — €{{ '%.2f'|format(plugin.price) }}<br>{{ plugin.description }}</li>{% endfor %}</ul>{% else %}<p>Нет плагинов.</p>{% endif %}
         </div>
         <div class="card">
             <h2>Кошельки пользователей</h2>
-            {% if wallets %}
-                <ul>
-                    {% for wallet in wallets %}
-                        <li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>Нет данных кошельков.</p>
-            {% endif %}
+            {% if wallets %}<ul>{% for wallet in wallets %}<li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>{% endfor %}</ul>{% else %}<p>Нет данных кошельков.</p>{% endif %}
         </div>
         <div class="card">
             <h2>Покупки</h2>
-            {% if purchases %}
-                <ul>
-                    {% for item in purchases %}
-                        <li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>Нет покупок.</p>
-            {% endif %}
+            {% if purchases %}<ul>{% for item in purchases %}<li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>{% endfor %}</ul>{% else %}<p>Нет покупок.</p>{% endif %}
         </div>
     </div>
 {% endblock %}
