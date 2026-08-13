@@ -3,6 +3,15 @@ from datetime import datetime, timezone
 
 INITIAL_BALANCE_EUR = 100.0
 TRADING_FEE_RATE = 0.001
+LICENSE_DURATIONS_DAYS = (1, 3, 7, 14, 30)
+
+
+def price_for_duration(price_eur: float, duration_days: int) -> float:
+    if duration_days not in LICENSE_DURATIONS_DAYS:
+        raise ValueError("Срок должен быть 1, 3, 7, 14 или 30 дней.")
+    if price_eur <= 0:
+        return 0.0
+    return round(max(0.01, price_eur * duration_days / 15), 2)
 
 
 def pricing_for_return(monthly_return_pct: float) -> tuple[str, float]:

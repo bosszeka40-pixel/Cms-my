@@ -17,7 +17,11 @@ from .market_history import (
     ensure_table, load_candles, refresh_candles, load_history, refresh_history,
     load_news, refresh_news, analyze_news_sentiment,
 )
-from .strategy_performance import evaluate_strategies
+from .strategy_performance import (
+    LICENSE_DURATIONS_DAYS,
+    evaluate_strategies,
+    price_for_duration,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -128,6 +132,10 @@ def _strategy_catalog(email: str, performance: dict):
             "price_eur": price,
             "currency": "EUR",
             "access_days": result.get("access_days"),
+            "license_options": [
+                {"days": days, "price_eur": price_for_duration(price, days)}
+                for days in LICENSE_DURATIONS_DAYS
+            ] if price > 0 else [],
             "category": result.get("category", "Нет данных"),
             "monthly_return_pct": result.get("monthly_return_pct"),
             "final_balance_eur": result.get("final_balance_eur"),
@@ -140,6 +148,7 @@ def _strategy_catalog(email: str, performance: dict):
 
 class PluginActionPayload(BaseModel):
     plugin_name: str
+    duration_days: int = 15
 
 @app.get("/", name="index")
 async def serve_root(request: Request):
@@ -221,18 +230,29 @@ async def marketplace(request: Request):
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
     plugin_message = None
-    if request.method == "POST":
-        form = await request.form()
-        if form.get("action") == "buy_plugin":
-            purchase = engine.purchase_plugin(user_email, str(form.get("plugin_name", "")))
-            plugin_message = (
-                "Стратегия добавлена в ваши покупки."
-                if purchase else "Стратегия не найдена."
-            )
     try:
         performance = _strategy_performance()
     except Exception:
         performance = {}
+    if request.method == "POST":
+        form = await request.form()
+        if form.get("action") == "buy_plugin":
+            plugin_name = str(form.get("plugin_name", ""))
+            try:
+                duration_days = int(form.get("duration_days", 15))
+                result = performance.get(plugin_name, {})
+                purchase = engine.purchase_plugin(
+                    user_email,
+                    plugin_name,
+                    price_for_duration(result.get("price_eur", 0.0), duration_days),
+                    duration_days,
+                )
+                plugin_message = (
+                    f"Стратегия добавлена на {duration_days} дн."
+                    if purchase else "Стратегия не найдена."
+                )
+            except (TypeError, ValueError) as exc:
+                plugin_message = str(exc)
     return templates.TemplateResponse(
         "marketplace.html",
         {
@@ -366,7 +386,13 @@ def purchase_strategy(payload: PluginActionPayload, request: Request):
     result = performance.get(payload.plugin_name)
     if not result or result["price_eur"] <= 0:
         return engine.purchase_plugin(email, payload.plugin_name, 0.0)
-    purchase = engine.purchase_plugin(email, payload.plugin_name, result["price_eur"])
+    try:
+        purchase_price = price_for_duration(result["price_eur"], payload.duration_days)
+        purchase = engine.purchase_plugin(
+            email, payload.plugin_name, purchase_price, payload.duration_days
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not purchase:
         raise HTTPException(status_code=404, detail="Стратегия не найдена.")
     return purchase

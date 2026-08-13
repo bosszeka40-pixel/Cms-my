@@ -99,6 +99,14 @@
                 <form method="post" style="margin-top: 10px;">
                     <input type="hidden" name="action" value="buy_plugin">
                     <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
+                    {% if plugin.license_options %}
+                        <label for="duration-{{ plugin.name }}">Срок доступа</label>
+                        <select id="duration-{{ plugin.name }}" name="duration_days">
+                            {% for option in plugin.license_options %}
+                                <option value="{{ option.days }}">{{ option.days }} дн. — €{{ '%.2f'|format(option.price_eur) }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
                     <button class="btn" type="submit">Купить</button>
                 </form>
             </div>

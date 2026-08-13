@@ -132,7 +132,12 @@ class CMSEngine:
         finally:
             session.close()
 
-    def purchase_plugin(self, email: str, plugin_name: str, price: float | None = None):
+    def purchase_plugin(
+        self, email: str, plugin_name: str, price: float | None = None,
+        duration_days: int = 15,
+    ):
+        if duration_days not in {1, 3, 7, 14, 15, 30}:
+            raise ValueError("Недопустимый срок доступа.")
         session = self.SessionLocal()
         try:
             user = session.query(User).filter(User.email == email).first()
@@ -147,18 +152,18 @@ class CMSEngine:
                     user_id=user.id,
                     plugin_id=plugin.id,
                     active=False,
-                    access_until=datetime.utcnow() + timedelta(days=15),
+                    access_until=datetime.utcnow() + timedelta(days=duration_days),
                 )
                 session.add(purchase)
             else:
-                purchase.access_until = datetime.utcnow() + timedelta(days=15)
+                purchase.access_until = datetime.utcnow() + timedelta(days=duration_days)
             session.commit()
             return {
                 "name": plugin.name,
                 "price_eur": float(plugin.price if price is None else price),
                 "active": purchase.active,
                 "access_until": purchase.access_until.isoformat(),
-                "access_days": 15,
+                "access_days": duration_days,
             }
         finally:
             session.close()
