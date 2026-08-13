@@ -85,6 +85,19 @@ table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 th, td { padding: .55rem .45rem; text-align: left; border-bottom: 1px solid #c1d4e3; white-space: nowrap; }
 th { color: #3e6179; background: #dcebf7; }
 canvas { width: 100%; margin-top: .5rem; }
+.auth-page { display: grid; place-items: center; padding: 1rem; }
+.auth-page .card { width: min(100%, 500px); }
+.auth-page h1 { margin-top: 0; color: #215d89; }
+.auth-page .sub, .auth-page .small { color: var(--muted); }
+.auth-page .field { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .75rem; }
+.auth-page .label { font-size: .95rem; font-weight: 600; }
+.auth-page .input-wrap { display: flex; align-items: center; gap: .5rem; padding: .1rem .55rem; }
+.auth-page .input-wrap input { margin: .4rem 0; border: 0; outline: 0; }
+.auth-page .row { display: flex; justify-content: space-between; gap: .5rem; margin: .4rem 0 1rem; }
+.auth-page .btn { width: 100%; margin-top: .35rem; }
+.auth-page .socials { margin-top: 1rem; }
+.auth-page .divider { margin: 1rem 0 .5rem; text-align: center; color: var(--muted); }
+.auth-page .link, .auth-page .link-row { margin-top: 1rem; text-align: center; }
 body.dark { --surface: #1d3447; --surface-muted: #24445b; --border: #527b99; --text: #edf6fc; --muted: #c0d2df; --primary: #8dccf3; --highlight: #315c77; background: #102535; }
 body.dark .container { background: linear-gradient(135deg, #1b3448, #122a3c); }
 body.dark .page-title, body.dark .card h2, body.dark .card h3 { color: #b9e1fa; }
