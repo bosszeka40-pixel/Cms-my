@@ -8,6 +8,7 @@ import hashlib
 import yaml
 import ccxt
 import math
+import requests
 
 from backend.bot import HFTBot
 from backend.cms_core import CMSEngine
@@ -31,6 +32,8 @@ TRADING_PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
 INTERNAL_CURRENCY = 'CMS Credits (CMSC)'
 CRYPTO_PAYOUT_ASSETS = ('USDT', 'USDC', 'BTC')
 CARD_PAYOUT_SERVICES = ('Stripe', 'PayPal', 'Adyen', 'Revolut Business')
+CMSC_EUR_RATE = 1.0
+CMSC_PAYMENT_CURRENCIES = ('EUR', 'USD', 'GBP')
 
 DEFAULT_PLUGINS = [
     {'name': 'Sentiment Analyzer', 'price': 29.99, 'description': 'AI-модуль для анализа новостей и торговых сигналов.'},
@@ -183,6 +186,30 @@ def load_plugins():
     if not cmse.list_plugins():
         for plugin in DEFAULT_PLUGINS:
             cmse.create_plugin(plugin['name'], plugin['price'], plugin['description'])
+
+
+def cmsc_price_in_currency(amount, currency):
+    """Return the payment quote for CMSC, pegged 1:1 to EUR."""
+    currency = (currency or 'EUR').upper()
+    if currency not in CMSC_PAYMENT_CURRENCIES:
+        raise ValueError('Неподдерживаемая валюта оплаты.')
+    if not math.isfinite(amount) or amount <= 0:
+        raise ValueError('Введите положительное количество CMSC.')
+    if currency == 'EUR':
+        return amount * CMSC_EUR_RATE
+    try:
+        response = requests.get(
+            'https://api.frankfurter.app/latest',
+            params={'from': 'EUR', 'to': currency},
+            timeout=5,
+        )
+        response.raise_for_status()
+        rate = float(response.json()['rates'][currency])
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError
+    except (requests.RequestException, KeyError, TypeError, ValueError) as exc:
+        raise ValueError('Не удалось получить актуальный курс валюты.') from exc
+    return amount * rate
 
 
 def get_user(user_id):
@@ -544,13 +571,15 @@ def marketplace():
                 wallet = get_wallet(session['user_id'])
                 message = f'Telegram @{telegram} подключен.'
         elif action == 'buy_credits':
-            amount = float(request.form.get('amount', 0))
-            if amount > 0:
+            try:
+                amount = float(request.form.get('amount', 0))
+                currency = request.form.get('currency', 'EUR')
+                quote = cmsc_price_in_currency(amount, currency)
                 update_wallet(session['user_id'], credits=wallet['credits'] + amount)
                 wallet = get_wallet(session['user_id'])
-                message = f'Куплено {amount:.0f} CMSC.'
-            else:
-                message = 'Введите положительное количество CMSC.'
+                message = f'Куплено {amount:.0f} CMSC. К оплате: {quote:.2f} {currency}.'
+            except ValueError as exc:
+                message = str(exc)
         elif action == 'buy_plugin':
             plugin_name = request.form.get('plugin_name')
             plugin = next((p for p in plugins if p.name == plugin_name), None)
@@ -1065,14 +1094,13 @@ def wallet_page():
         if action == 'buy_credits':
             try:
                 amount = float(request.form.get('amount', '0'))
-                if amount <= 0:
-                    message = 'Введите положительное количество CMSC.'
-                else:
-                    update_wallet(session['user_id'], credits=wallet['credits'] + amount)
-                    wallet = get_wallet(session['user_id'])
-                    message = f'Куплено {amount:.0f} CMSC.'
-            except ValueError:
-                message = 'Неверное количество CMSC.'
+                currency = request.form.get('currency', 'EUR')
+                quote = cmsc_price_in_currency(amount, currency)
+                update_wallet(session['user_id'], credits=wallet['credits'] + amount)
+                wallet = get_wallet(session['user_id'])
+                message = f'Куплено {amount:.0f} CMSC. К оплате: {quote:.2f} {currency}.'
+            except ValueError as exc:
+                message = str(exc)
         elif action == 'buy_usdt':
             try:
                 amount = float(request.form.get('amount', '0'))
@@ -1087,7 +1115,12 @@ def wallet_page():
             except ValueError:
                 message = 'Неверная сумма.'
 
-    return render_template('wallet.html', wallet=wallet, message=message)
+    return render_template(
+        'wallet.html',
+        wallet=wallet,
+        message=message,
+        payment_currencies=CMSC_PAYMENT_CURRENCIES,
+    )
 
 
 @app.route('/logout')

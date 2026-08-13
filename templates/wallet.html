@@ -14,12 +14,20 @@
     </div>
     <div class="card">
         <h2>CMS Credits (CMSC)</h2>
-        <p class="muted">Внутренняя валюта только для маркета и реферальной программы.</p>
+        <p class="muted">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный биржевой курс.</p>
         <form method="post">
             <input type="hidden" name="action" value="buy_credits">
             <div class="field-group">
                 <label for="amount">Количество CMSC</label>
                 <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
+            </div>
+            <div class="field-group">
+                <label for="currency">Валюта оплаты</label>
+                <select id="currency" name="currency">
+                    {% for currency in payment_currencies %}
+                        <option value="{{ currency }}">{{ currency }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <button type="submit" class="btn">Купить CMSC</button>
         </form>
