@@ -107,7 +107,10 @@ class ExchangeService:
             raise ValueError("Количество должно быть положительным числом.")
         if symbol not in client.markets:
             raise ValueError("Торговая пара недоступна на подключенной бирже.")
-        minimum_amount = self.minimum_order_amount(user_id, symbol, price)
+        minimum_price = price
+        if minimum_price is None:
+            minimum_price = client.fetch_ticker(symbol).get("last")
+        minimum_amount = self.minimum_order_amount(user_id, symbol, minimum_price)
         if amount < minimum_amount:
             raise ValueError(f"Минимальное количество для {symbol}: {minimum_amount}.")
         if order_type == "market":
