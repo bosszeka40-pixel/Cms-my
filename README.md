@@ -52,6 +52,8 @@ http://127.0.0.1:8000
 3. Явно включить `LIVE_TRADING_ENABLED=true`.
 4. Передать одновременно `live: true` и `confirm_live: true` в `POST /api/trading/order`.
 
+Лимит номинала одной live-сделки задается `MAX_ORDER_NOTIONAL` и по умолчанию равен `1000`.
+
 Основные endpoints:
 
 - `POST /api/exchange/connect` — подключение и проверка ключей (`exchange_name`, `api_key`, `api_secret`, опционально `api_password`, `sandbox`)

@@ -735,6 +735,15 @@ def create_exchange_order():
                 'amount': amount,
                 'price': price,
             }
+        reference_price = price
+        if reference_price is None:
+            ticker = exchange_service.ticker(session['user_id'], symbol)
+            reference_price = ticker.get('last')
+        max_notional = float(os.getenv('MAX_ORDER_NOTIONAL', '1000'))
+        if not reference_price or amount * reference_price > max_notional:
+            raise ValueError(
+                f'Номинал сделки превышает лимит {max_notional:.2f} или цена недоступна.'
+            )
         order = exchange_service.create_order(
             session['user_id'], symbol, order_type, side, amount, price, payload.get('params'),
         )
