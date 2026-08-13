@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import math
 
 
 INITIAL_BALANCE_EUR = 100.0
@@ -42,6 +43,9 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
     balance = INITIAL_BALANCE_EUR
     trades = 0
     wins = 0
+    returns = []
+    peak = INITIAL_BALANCE_EUR
+    max_drawdown = 0.0
     for index in range(1, len(candles)):
         previous_close = float(candles[index - 1]["close"])
         current_close = float(candles[index]["close"])
@@ -57,10 +61,25 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
         trade_return = signal * ((current_close - previous_close) / previous_close)
         net_return = trade_return - TRADING_FEE_RATE
         balance = max(0.0, balance * (1 + net_return))
+        returns.append(net_return)
+        peak = max(peak, balance)
+        max_drawdown = max(max_drawdown, (peak - balance) / peak if peak else 0.0)
         trades += 1
         wins += net_return > 0
     monthly_return = (balance / INITIAL_BALANCE_EUR - 1) * 100
     category, price = pricing_for_return(monthly_return)
+    mean_return = sum(returns) / len(returns) if returns else 0.0
+    variance = (
+        sum((value - mean_return) ** 2 for value in returns) / len(returns)
+        if returns else 0.0
+    )
+    downside = [min(0.0, value) for value in returns]
+    downside_deviation = math.sqrt(sum(value * value for value in downside) / len(returns)) if returns else 0.0
+    volatility = math.sqrt(variance)
+    sharpe = mean_return / volatility * math.sqrt(len(returns)) if volatility else 0.0
+    sortino = mean_return / downside_deviation * math.sqrt(len(returns)) if downside_deviation else 0.0
+    gross_profit = sum(value for value in returns if value > 0)
+    gross_loss = abs(sum(value for value in returns if value < 0))
     return {
         "initial_balance_eur": INITIAL_BALANCE_EUR,
         "final_balance_eur": round(balance, 2),
@@ -70,6 +89,10 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
         "access_days": 15 if price else None,
         "trades": trades,
         "win_rate_pct": round(wins / trades * 100, 2) if trades else 0.0,
+        "max_drawdown_pct": round(max_drawdown * 100, 2),
+        "sharpe": round(sharpe, 4),
+        "sortino": round(sortino, 4),
+        "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "data_source": "real closed daily OHLCV candles",
         "data_days": len(candles),

@@ -22,11 +22,14 @@ from .strategy_performance import (
     evaluate_strategies,
     price_for_duration,
 )
+from .risk_management import RiskManager
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 app = FastAPI(title="Daily Compound Harvester CMS", version="1.0.0")
+if os.getenv("APP_ENV", "development").lower() == "production" and not os.getenv("SECRET_KEY"):
+    raise RuntimeError("SECRET_KEY must be configured in production.")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SECRET_KEY", "development-only-change-me"),
@@ -45,6 +48,7 @@ def template_url_for(name: str, **values):
 
 templates.env.globals["url_for"] = template_url_for
 engine = CMSEngine()
+risk_manager = RiskManager()
 bot = HFTBot()
 production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
@@ -73,6 +77,26 @@ class TradingTestPayload(BaseModel):
 
 class ChatPayload(BaseModel):
     message: str
+
+class RiskConfigPayload(BaseModel):
+    stop_loss_pct: float = 0.02
+    leverage: float = 1.0
+
+class KillSwitchPayload(BaseModel):
+    enabled: bool
+
+def _require_user(request: Request):
+    email = request.session.get("user_email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    return email
+
+def _require_admin(request: Request):
+    email = _require_user(request)
+    user = engine.get_user(email)
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Требуются права администратора.")
+    return email
 
 
 def _public_exchange(name: str):
@@ -308,8 +332,9 @@ async def wallet_page(request: Request):
 
 @app.get("/admin", name="admin_panel")
 async def admin_panel(request: Request):
-    user_email = request.session.get("user_email")
-    if not user_email:
+    try:
+        user_email = _require_admin(request)
+    except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse(
         "admin.html",
@@ -346,8 +371,10 @@ def connect_exchange(config: ExchangeConfig):
 
 @app.post("/api/trading/test")
 def trading_test(payload: TradingTestPayload, request: Request):
-    if not request.session.get("user_email"):
-        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    email = _require_user(request)
+    decision = risk_manager.decide(payload.current_balance, 1.0)
+    if not decision.allowed:
+        raise HTTPException(status_code=429, detail=decision.reason)
     allowed_pairs = {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}
     if payload.pair not in allowed_pairs:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
@@ -359,8 +386,9 @@ def trading_test(payload: TradingTestPayload, request: Request):
     engine.record_memory(
         "strategy_test", result["trade"]["pl"],
         f"{payload.pair}; signal={result['signal']}; strategy={result['strategy']}",
-        request.session.get("user_email"),
+        email,
     )
+    risk_manager.record(result["trade"]["pl"], result["trade"]["next_balance"])
     return result
 
 @app.get("/api/strategies")
@@ -550,14 +578,20 @@ def trading_status(request: Request):
     return bot.status()
 
 @app.post("/api/bot/start")
-def start_bot():
+def start_bot(request: Request):
+    _require_admin(request)
+    if risk_manager.kill_switch:
+        raise HTTPException(status_code=423, detail="Сначала отключите аварийный выключатель.")
     result = bot.start()
+    engine.record_audit("bot_started", user_id=request.session.get("user_email"))
     engine.record_bot_stat("bot_status", "started")
     return result
 
 @app.post("/api/bot/stop")
-def stop_bot():
+def stop_bot(request: Request):
+    email = _require_admin(request)
     result = bot.stop()
+    engine.record_audit("bot_stopped", user_id=email)
     engine.record_bot_stat("bot_status", "stopped")
     return result
 
@@ -593,11 +627,30 @@ def get_metrics():
         "bot_status": bot.status(),
         "brain": production_bot.brain.summarize(),
         "strategy": strategy_manager.current_strategy(),
-        "config": strategy_manager.config
+        "config": strategy_manager.config,
+        "risk": risk_manager.status(),
     }
 
 @app.post("/api/strategy/execute")
-def execute_strategy(payload: StrategyPayload):
+def execute_strategy(payload: StrategyPayload, request: Request):
+    email = _require_user(request)
+    decision = risk_manager.decide(payload.current_balance, float(strategy_manager.config.get("leverage", 1.0)))
+    if not decision.allowed:
+        raise HTTPException(status_code=429, detail=decision.reason)
     result = strategy_manager.execute(payload.news_sentiment, payload.price_change, payload.current_balance)
+    risk_manager.record(result["pnl"], result["next_balance"])
+    engine.record_audit("strategy_execution", str(result), email)
     engine.record_bot_stat("strategy_execution", str(result))
     return result
+
+@app.get("/api/risk/status")
+def risk_status(request: Request):
+    _require_user(request)
+    return risk_manager.status()
+
+@app.post("/api/risk/kill-switch")
+def set_kill_switch(payload: KillSwitchPayload, request: Request):
+    email = _require_admin(request)
+    risk_manager.set_kill_switch(payload.enabled)
+    engine.record_audit("kill_switch", str(payload.enabled), email)
+    return risk_manager.status()

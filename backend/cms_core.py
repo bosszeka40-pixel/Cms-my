@@ -49,6 +49,14 @@ class BotStat(Base):
     value = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True, nullable=True)
+    action = Column(String, nullable=False)
+    context = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
         self.db_name = db_name
@@ -265,6 +273,15 @@ class CMSEngine:
             session.commit()
             session.refresh(stat)
             return stat
+        finally:
+            session.close()
+
+    def record_audit(self, action: str, context: str = "", user_id: str | None = None):
+        session = self.SessionLocal()
+        try:
+            entry = AuditLog(user_id=user_id, action=action, context=context)
+            session.add(entry)
+            session.commit()
         finally:
             session.close()
 
