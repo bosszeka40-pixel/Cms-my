@@ -78,6 +78,8 @@ def _public_exchange(name: str):
 
 
 def _market_signal(pair: str, exchange_name: str):
+    if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
+        raise ValueError("Недоступная торговая пара.")
     exchange = _public_exchange(exchange_name)
     candles = refresh_candles(MARKET_DATABASE, exchange, exchange_name, pair)
     daily = refresh_history(MARKET_DATABASE, exchange, exchange_name, pair)
@@ -351,6 +353,7 @@ def market_history(request: Request, pair: str = "BTC/USDT", exchange: str = "bi
     if timeframe not in {"1h", "1d"}:
         raise HTTPException(status_code=400, detail="Поддерживаются таймфреймы 1h и 1d.")
     try:
+        exchange = (exchange or "binance").lower()
         client = _public_exchange(exchange)
         if timeframe == "1d":
             history = refresh_history(MARKET_DATABASE, client, exchange, pair)

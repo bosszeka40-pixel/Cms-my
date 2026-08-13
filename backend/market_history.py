@@ -165,6 +165,9 @@ def refresh_candles(database, exchange, exchange_name, pair, timeframe="1h", lim
         if next_cursor <= cursor or len(batch) < 1000:
             break
         cursor = next_cursor
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    interval_ms = 3600000 if timeframe == "1h" else 86400000
+    candles = [candle for candle in candles if candle[0] + interval_ms <= now_ms]
     store_intraday_candles(database, exchange_name, pair, candles, timeframe)
     return load_candles(database, exchange_name, pair, timeframe, limit)
 
