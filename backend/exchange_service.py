@@ -5,7 +5,7 @@ from threading import Lock
 import ccxt
 
 
-SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
+SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
 
 
 class ExchangeService:

@@ -24,7 +24,7 @@ bot = HFTBot()
 strategy_manager = StrategyManager(config_path='backend/config.yaml')
 exchange_service = ExchangeService()
 
-EXCHANGES = ['binance', 'kraken', 'okx', 'bybit', 'bitfinex']
+EXCHANGES = ['binance', 'kraken', 'okx', 'bybit', 'bitfinex', 'pionex']
 WALLETS = ['Metamask', 'Trust Wallet', 'Coinbase', 'Phantom', 'Ledger']
 TRADING_PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
 INTERNAL_CURRENCY = 'CMS Credits (CMSC)'
