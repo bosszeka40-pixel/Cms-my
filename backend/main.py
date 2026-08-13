@@ -13,6 +13,7 @@ from .bot import HFTBot
 from .cms_core import CMSEngine
 from .hft_brain import CMSProductionHFTBot
 from .modules.strategy_manager import StrategyManager
+from .market_history import ensure_table, load_candles, refresh_candles, load_history, refresh_history
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -39,6 +40,8 @@ engine = CMSEngine()
 bot = HFTBot()
 production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
+MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
+SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
 
 class ExchangeConfig(BaseModel):
     exchange_name: str
@@ -62,6 +65,39 @@ class TradingTestPayload(BaseModel):
 
 class ChatPayload(BaseModel):
     message: str
+
+
+def _public_exchange(name: str):
+    exchange_name = (name or "binance").strip().lower()
+    if exchange_name not in SUPPORTED_MARKET_EXCHANGES:
+        raise ValueError("Неподдерживаемая публичная биржа.")
+    exchange_class = getattr(ccxt, exchange_name, None)
+    if exchange_class is None:
+        raise ValueError("Биржа недоступна в установленной версии CCXT.")
+    return exchange_class({"enableRateLimit": True, "timeout": 15000})
+
+
+def _market_signal(pair: str, exchange_name: str):
+    exchange = _public_exchange(exchange_name)
+    candles = refresh_candles(MARKET_DATABASE, exchange, exchange_name, pair)
+    daily = refresh_history(MARKET_DATABASE, exchange, exchange_name, pair)
+    if len(candles) < 3 or len(daily) < 2:
+        raise ValueError("Недостаточно исторических свечей для сигнала.")
+    latest = candles[-1]
+    previous = candles[-2]
+    change = ((latest["close"] - previous["close"]) / previous["close"] * 100
+              if previous["close"] else 0.0)
+    result = strategy_manager.execute(1.0 if change > 0 else -1.0, change, 100.0)
+    return {
+        "pair": pair, "exchange": exchange_name, "timeframe": "1h",
+        "signal": result["signal"], "strategy": result["strategy"],
+        "last_price": latest["close"], "hour_change": round(change, 4),
+        "hourly_candles": len(candles), "daily_candles": len(daily),
+        "horizon": "ближайшие часы и следующий день",
+        "confidence": min(0.95, round(0.5 + abs(change) / 10, 2)),
+        "source": "сохранённые публичные OHLCV-свечи",
+        "disclaimer": "Сигнал информационный и не является гарантией доходности.",
+    }
 
 class PluginActionPayload(BaseModel):
     plugin_name: str
@@ -304,6 +340,40 @@ def activate_strategy(payload: PluginActionPayload, request: Request):
     strategy_manager.config["strategy"] = plugin.name
     return {"status": "active", "strategy": plugin.name}
 
+
+@app.get("/api/market/history")
+def market_history(request: Request, pair: str = "BTC/USDT", exchange: str = "binance",
+                   timeframe: str = "1h"):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
+        raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    if timeframe not in {"1h", "1d"}:
+        raise HTTPException(status_code=400, detail="Поддерживаются таймфреймы 1h и 1d.")
+    try:
+        client = _public_exchange(exchange)
+        if timeframe == "1d":
+            history = refresh_history(MARKET_DATABASE, client, exchange, pair)
+        else:
+            history = refresh_candles(MARKET_DATABASE, client, exchange, pair)
+        return {"exchange": exchange, "pair": pair, "timeframe": timeframe,
+                "candles": history, "count": len(history),
+                "retention_days": 365 if timeframe == "1d" else 30,
+                "analysis_policy": "Сигналы используют только закрытые текущие и предыдущие свечи."}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось обновить историю: {exc}") from exc
+
+
+@app.get("/api/market/signal")
+def market_signal(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    try:
+        return _market_signal(pair, exchange)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось рассчитать сигнал: {exc}") from exc
+
+
 @app.post("/api/chat")
 def chat(payload: ChatPayload, request: Request):
     email = request.session.get("user_email")
@@ -314,7 +384,22 @@ def chat(payload: ChatPayload, request: Request):
         raise HTTPException(status_code=400, detail="Сообщение не может быть пустым.")
     memories = engine.recent_memories(email, 10)
     profitable = [item for item in memories if item["result"] > 0]
-    if "стратег" in message.lower() or "рекоменд" in message.lower():
+    lower_message = message.lower()
+    if any(word in lower_message for word in ("сигнал", "прогноз", "рынок", "btc", "eth", "час")):
+        pair = "ETH/USDT" if "eth" in lower_message else "BTC/USDT"
+        try:
+            signal = _market_signal(pair, "binance")
+            direction = {1: "ПОКУПКА", -1: "ПРОДАЖА", 0: "ОЖИДАНИЕ"}.get(signal["signal"], "ОЖИДАНИЕ")
+            answer = (
+                f"{pair}: сигнал {direction} на {signal['horizon']}. "
+                f"Последняя цена {signal['last_price']:.4f}, изменение за час "
+                f"{signal['hour_change']:.2f}%, уверенность {signal['confidence']:.0%}. "
+                f"Проанализировано {signal['hourly_candles']} часовых и "
+                f"{signal['daily_candles']} дневных свечей. {signal['disclaimer']}"
+            )
+        except (TypeError, ValueError, ccxt.BaseError) as exc:
+            answer = f"Не удалось получить свежий сигнал по {pair}: {exc}"
+    elif "стратег" in lower_message or "рекоменд" in lower_message:
         answer = (
             f"Текущая стратегия: {strategy_manager.current_strategy()}. "
             f"В памяти {len(memories)} наблюдений, прибыльных: {len(profitable)}. "

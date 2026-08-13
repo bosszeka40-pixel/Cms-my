@@ -3,6 +3,7 @@ import sqlite3
 
 
 HISTORY_DAYS = 365
+INTRADAY_HOURS = 30 * 24
 
 
 def ensure_table(database):
@@ -25,6 +26,26 @@ def ensure_table(database):
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_market_history_lookup "
             "ON market_history(exchange, pair, day)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS market_candles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                exchange TEXT NOT NULL,
+                pair TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                volume REAL,
+                fetched_at TEXT NOT NULL,
+                UNIQUE(exchange, pair, timeframe, timestamp)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_market_candles_lookup "
+            "ON market_candles(exchange, pair, timeframe, timestamp)"
         )
 
 
@@ -85,6 +106,67 @@ def load_history(database, exchange_name, pair):
          "close": row[4], "volume": row[5]}
         for row in rows
     ]
+
+
+def store_intraday_candles(database, exchange_name, pair, candles, timeframe="1h"):
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(database) as conn:
+        conn.executemany(
+            """INSERT INTO market_candles
+               (exchange, pair, timeframe, timestamp, open, high, low, close, volume, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(exchange, pair, timeframe, timestamp) DO UPDATE SET
+                 open=excluded.open, high=excluded.high, low=excluded.low,
+                 close=excluded.close, volume=excluded.volume, fetched_at=excluded.fetched_at""",
+            [
+                (exchange_name, pair, timeframe, int(candle[0]), float(candle[1]),
+                 float(candle[2]), float(candle[3]), float(candle[4]),
+                 float(candle[5] or 0), fetched_at)
+                for candle in candles
+                if len(candle) >= 6 and candle[4] is not None
+            ],
+        )
+        cutoff = int((datetime.now(timezone.utc) - timedelta(hours=INTRADAY_HOURS)).timestamp() * 1000)
+        conn.execute(
+            "DELETE FROM market_candles WHERE exchange = ? AND pair = ? "
+            "AND timeframe = ? AND timestamp < ?",
+            (exchange_name, pair, timeframe, cutoff),
+        )
+
+
+def load_candles(database, exchange_name, pair, timeframe="1h", limit=720):
+    ensure_table(database)
+    with sqlite3.connect(database) as conn:
+        rows = conn.execute(
+            """SELECT timestamp, open, high, low, close, volume
+               FROM market_candles
+               WHERE exchange = ? AND pair = ? AND timeframe = ?
+               ORDER BY timestamp DESC LIMIT ?""",
+            (exchange_name, pair, timeframe, limit),
+        ).fetchall()
+    return [
+        {"timestamp": row[0], "open": row[1], "high": row[2], "low": row[3],
+         "close": row[4], "volume": row[5]}
+        for row in reversed(rows)
+    ]
+
+
+def refresh_candles(database, exchange, exchange_name, pair, timeframe="1h", limit=720):
+    ensure_table(database)
+    since = int((datetime.now(timezone.utc) - timedelta(hours=INTRADAY_HOURS)).timestamp() * 1000)
+    candles = []
+    cursor = since
+    while cursor < int(datetime.now(timezone.utc).timestamp() * 1000):
+        batch = exchange.fetch_ohlcv(pair, timeframe=timeframe, since=cursor, limit=1000)
+        if not batch:
+            break
+        candles.extend(batch)
+        next_cursor = batch[-1][0] + 3600000
+        if next_cursor <= cursor or len(batch) < 1000:
+            break
+        cursor = next_cursor
+    store_intraday_candles(database, exchange_name, pair, candles, timeframe)
+    return load_candles(database, exchange_name, pair, timeframe, limit)
 
 
 def refresh_history(database, exchange, exchange_name, pair):
