@@ -4,7 +4,12 @@ from .daily_harvester import DailyCompoundHarvesterModule, HarvesterStrategy
 
 class StrategyManager:
     def __init__(self, config_path: str = "backend/config.yaml"):
-        self.config_path = Path(config_path)
+        configured_path = Path(config_path)
+        self.config_path = (
+            configured_path
+            if configured_path.is_absolute()
+            else Path(__file__).resolve().parents[2] / configured_path
+        )
         self.config = self.load_config()
         self.module = DailyCompoundHarvesterModule()
 

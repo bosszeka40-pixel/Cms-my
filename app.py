@@ -1,4 +1,6 @@
 from datetime import datetime
+import os
+from pathlib import Path
 
 from flask import Flask, render_template, request, session, redirect, url_for
 import sqlite3
@@ -11,9 +13,10 @@ from backend.cms_core import CMSEngine
 from backend.modules.strategy_manager import StrategyManager
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_v12'
+app.secret_key = os.getenv('SECRET_KEY', 'development-only-change-me')
 
-DATABASE = 'cms_v12.db'
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE = str(BASE_DIR / 'cms_v12.db')
 cmse = CMSEngine()
 bot = HFTBot()
 strategy_manager = StrategyManager(config_path='backend/config.yaml')
@@ -304,7 +307,7 @@ def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float):
         'leverage': leverage,
         'risk_tolerance': risk_tolerance,
     }
-    with open('backend/config.yaml', 'w', encoding='utf-8') as handle:
+    with (BASE_DIR / 'backend' / 'config.yaml').open('w', encoding='utf-8') as handle:
         yaml.safe_dump(cfg, handle)
     strategy_manager.config = cfg
 
@@ -484,4 +487,8 @@ def logout():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(
+        host='0.0.0.0',
+        port=int(os.getenv('PORT', '5000')),
+        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
+    )

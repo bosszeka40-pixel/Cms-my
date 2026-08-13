@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
@@ -17,8 +18,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 app = FastAPI(title="Daily Compound Harvester CMS", version="1.0.0")
-app.add_middleware(SessionMiddleware, secret_key="super_secret_key_v12")
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "development-only-change-me"),
+    max_age=3600,
+    https_only=os.getenv("SESSION_HTTPS_ONLY", "false").lower() == "true",
+)
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend")), name="static")
 app.include_router(admin_router)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -97,14 +103,40 @@ async def marketplace(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse("marketplace.html", {"request": request, "user_id": user_email})
+    return templates.TemplateResponse(
+        "marketplace.html",
+        {
+            "request": request,
+            "user_id": user_email,
+            "wallet": {"balance": 0.0},
+            "exchanges": [],
+            "wallets": [],
+            "plugins": engine.list_plugins(),
+            "purchases": [],
+            "message": None,
+            "exchange_info": None,
+            "plugin_message": None,
+        },
+    )
 
 @app.get("/bot-management", name="bot_management")
 async def bot_management(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse("bot_management.html", {"request": request, "user_id": user_email})
+    return templates.TemplateResponse(
+        "bot_management.html",
+        {
+            "request": request,
+            "user_id": user_email,
+            "bot_status": bot.status(),
+            "current_strategy": strategy_manager.current_strategy(),
+            "config": strategy_manager.config,
+            "message": None,
+            "manual_trade_result": None,
+            "balance_history": [{"time": "start", "value": 100}],
+        },
+    )
 
 @app.get("/logout", name="logout")
 async def logout(request: Request):
@@ -159,7 +191,7 @@ def brain_status():
 @app.get("/api/report")
 def get_report():
     try:
-        with open("ADVANCED_TEST_REPORT.md", "r", encoding="utf-8") as report_file:
+        with (BASE_DIR / "ADVANCED_TEST_REPORT.md").open("r", encoding="utf-8") as report_file:
             return {"report": report_file.read()}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Отчет не найден")
