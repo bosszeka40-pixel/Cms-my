@@ -176,8 +176,13 @@ async def wallet_page(request: Request):
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse(
         "wallet.html",
-        {"request": request, "user_id": user_email,         "wallet": {"balance": 0.0, "credits": 0.0}, "message": None},
-        "internal_currency": "CMS Credits (CMSC)", "message": None},
+        {
+            "request": request,
+            "user_id": user_email,
+            "wallet": {"balance": 0.0, "credits": 0.0},
+            "internal_currency": "CMS Credits (CMSC)",
+            "message": None,
+        },
     )
 
 @app.get("/admin", name="admin_panel")

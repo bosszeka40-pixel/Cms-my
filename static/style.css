@@ -24,6 +24,7 @@ nav a:hover, a:hover { text-decoration: underline; }
 .muted, .small-note { color: var(--muted); }
 .btn { display: inline-block; background: var(--primary); color: #fff; padding: .7rem 1rem; border: 0; border-radius: 8px; text-decoration: none; cursor: pointer; text-align: center; font: inherit; font-weight: 600; }
 .btn:hover { background: var(--primary-hover); text-decoration: none; }
+.btn:disabled { opacity: .65; cursor: wait; }
 input, textarea, select { width: 100%; padding: .7rem .8rem; margin: .4rem 0 1rem; border: 1px solid #cbd5e1; border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
 input:focus, textarea:focus, select:focus, .btn:focus-visible, a:focus-visible { outline: 3px solid rgba(37, 99, 235, .25); outline-offset: 2px; }
 .social-btns { display: flex; gap: .75rem; margin-top: 1rem; }
