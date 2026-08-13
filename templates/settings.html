@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="page-title">Настройки аккаунта</h1>
+    <p class="lead">Настройте внешний вид личного кабинета и быстро переходите к функциям CMS.</p>
+    {% if message %}
+        <div class="message success">{{ message }}</div>
+    {% endif %}
+    <div class="grid">
+        <div class="card">
+            <h2>Профиль</h2>
+            <p><strong>Имя пользователя:</strong> {{ username }}</p>
+            <p><strong>Email:</strong> {{ email }}</p>
+            <p class="muted">Для изменения персональных данных обратитесь к администратору.</p>
+        </div>
+        <div class="card">
+            <h2>Оформление</h2>
+            <form method="post">
+                <div class="field-group">
+                    <label for="theme">Тема интерфейса</label>
+                    <select id="theme" name="theme">
+                        <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Светлая</option>
+                        <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Тёмная</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Сохранить настройки</button>
+            </form>
+        </div>
+        <div class="card">
+            <h2>Разделы CMS</h2>
+            <div class="button-row">
+                <a class="btn" href="{{ url_for('dashboard') }}">Дашборд</a>
+                <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
+                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
+                <a class="btn" href="{{ url_for('wallet_page') }}">Кошелёк</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}

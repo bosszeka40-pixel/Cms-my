@@ -10,9 +10,34 @@
         <div class="card">
             <h2>Добавить плагин</h2>
             <form method="post">
+                <input type="hidden" name="action" value="create_plugin">
                 <div class="field-group">
                     <label for="plugin_name">Название</label>
                     <input type="text" id="plugin_name" name="plugin_name" required>
+                </div>
+                <div class="card">
+                    <h2>Настройки торговой платформы</h2>
+                    <p class="muted">Эти параметры применяются к стратегиям и тестам пользователей.</p>
+                    <form method="post">
+                        <input type="hidden" name="action" value="save_admin_settings">
+                        <div class="field-group">
+                            <label for="admin_strategy">Стратегия по умолчанию</label>
+                            <select id="admin_strategy" name="strategy">
+                                <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                                <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
+                                <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label for="admin_leverage">Леверидж</label>
+                            <input type="number" id="admin_leverage" name="leverage" min="0.1" max="10" step="0.1" value="{{ config.leverage }}">
+                        </div>
+                        <div class="field-group">
+                            <label for="admin_risk">Допустимый риск</label>
+                            <input type="number" id="admin_risk" name="risk_tolerance" min="0" max="1" step="0.01" value="{{ config.risk_tolerance }}">
+                        </div>
+                        <button type="submit" class="btn">Сохранить настройки</button>
+                    </form>
                 </div>
                 <div class="field-group">
                     <label for="plugin_price">Цена</label>

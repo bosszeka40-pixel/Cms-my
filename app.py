@@ -394,6 +394,31 @@ def dashboard():
     )
 
 
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    message = None
+    if request.method == 'POST':
+        theme = request.form.get('theme', 'light')
+        if theme in {'light', 'dark'}:
+            update_user_theme(session['user_id'], theme)
+            session['theme'] = theme
+            message = 'Настройки аккаунта сохранены.'
+        else:
+            message = 'Выберите доступную тему оформления.'
+
+    user = get_user(session['user_id'])
+    return render_template(
+        'settings.html',
+        username=user[1],
+        email=user[2],
+        selected_theme=user[4] or 'light',
+        message=message,
+    )
+
+
 def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float):
     cfg = {
         'strategy': strategy,
@@ -829,18 +854,43 @@ def admin_panel():
 
     message = None
     if request.method == 'POST':
-        name = request.form.get('plugin_name')
-        price = float(request.form.get('plugin_price', 0.0))
-        description = request.form.get('plugin_description', '')
-        if name and price > 0:
-            cmse.create_plugin(name, price, description)
-            message = f'Плагин {name} добавлен.'
+        action = request.form.get('action')
+        if action == 'create_plugin':
+            name = request.form.get('plugin_name')
+            try:
+                price = float(request.form.get('plugin_price', 0.0))
+            except (TypeError, ValueError):
+                price = 0.0
+            description = request.form.get('plugin_description', '')
+            if name and price > 0:
+                cmse.create_plugin(name, price, description)
+                message = f'Плагин {name} добавлен.'
+            else:
+                message = 'Укажите название и положительную цену плагина.'
+        elif action == 'save_admin_settings':
+            strategy = request.form.get('strategy', strategy_manager.current_strategy())
+            try:
+                leverage = max(0.1, min(float(request.form.get('leverage', 1.5)), 10))
+                risk_tolerance = max(0.0, min(float(request.form.get('risk_tolerance', 0.03)), 1))
+                save_strategy_config(strategy, leverage, risk_tolerance)
+                message = 'Настройки торговой платформы сохранены.'
+            except (TypeError, ValueError):
+                message = 'Проверьте значения левериджа и риска.'
 
     users = get_all_users()
     plugins = cmse.list_plugins()
     wallets = get_all_wallets()
     purchases = get_all_purchases()
-    return render_template('admin.html', users=users, plugins=plugins, purchases=purchases, wallets=wallets, message=message)
+    return render_template(
+        'admin.html',
+        users=users,
+        plugins=plugins,
+        purchases=purchases,
+        wallets=wallets,
+        message=message,
+        current_strategy=strategy_manager.current_strategy(),
+        config=strategy_manager.config,
+    )
 
 
 @app.route('/wallet', methods=['GET', 'POST'])
