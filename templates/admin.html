@@ -4,11 +4,22 @@
     <h1 class="page-title">Админ-панель</h1>
     <p class="lead">Управление пользователями, плагинами, настройками платформы и выплатами.</p>
     {% if message %}
-        <div class="message">{{ message }}</div>
+        <div class="message success">{{ message }}</div>
     {% endif %}
+    <nav class="admin-nav">
+        <a href="#site-settings">Настройки сайта</a>
+        <a href="#social-login">Соцвход</a>
+        <a href="#payout-settings">Выплаты</a>
+        <a href="#trading-settings">Торговля</a>
+        <a href="#risk">Безопасность</a>
+        <a href="#plugins">Плагины</a>
+        <a href="#users">Пользователи и роли</a>
+        <a href="#wallets">Кошельки</a>
+        <a href="#purchases">Покупки</a>
+    </nav>
     <div class="grid admin-grid">
-        <details class="card" open>
-            <summary>Настройки сайта</summary>
+        <section class="card" id="site-settings">
+            <h2>Настройки сайта</h2>
             <p class="muted">Название, доступные биржи/кошельки и режим обслуживания — применяются ко всему сайту.</p>
             <form method="post">
                 <input type="hidden" name="action" value="save_site_settings">
@@ -26,7 +37,7 @@
                 <div class="field-group">
                     <label>Доступные биржи в маркетплейсе</label>
                     {% for ex in supported_exchanges %}
-                        <label style="display:inline-block; margin-right:10px;">
+                        <label class="inline-check">
                             <input type="checkbox" name="allowed_exchanges" value="{{ ex }}" {% if ex in allowed_exchanges %}checked{% endif %}> {{ ex }}
                         </label>
                     {% endfor %}
@@ -34,25 +45,25 @@
                 <div class="field-group">
                     <label>Доступные кошельки в маркетплейсе</label>
                     {% for w in wallet_providers %}
-                        <label style="display:inline-block; margin-right:10px;">
+                        <label class="inline-check">
                             <input type="checkbox" name="allowed_wallets" value="{{ w }}" {% if w in allowed_wallets %}checked{% endif %}> {{ w }}
                         </label>
                     {% endfor %}
                 </div>
                 <button type="submit" class="btn">Сохранить настройки сайта</button>
             </form>
-        </details>
-        <details class="card">
-            <summary>Вход через соцсети</summary>
+        </section>
+        <section class="card" id="social-login">
+            <h2>Вход через соцсети</h2>
             <p class="muted">Статус OAuth-провайдеров (настраивается через переменные окружения на сервере).</p>
             <ul>
                 <li>Google: <strong>{{ 'настроен' if google_configured else 'не настроен' }}</strong></li>
                 <li>GitHub: <strong>{{ 'настроен' if github_configured else 'не настроен' }}</strong></li>
                 <li>Telegram: <strong>{{ 'настроен' if telegram_configured else 'не настроен' }}</strong></li>
             </ul>
-        </details>
-        <details class="card" open>
-            <summary>Получение средств от продаж</summary>
+        </section>
+        <section class="card" id="payout-settings">
+            <h2>Получение средств от продаж</h2>
             <p class="muted">Укажите реквизиты для зачисления выручки. Платёжные операции выполняются только после подключения соответствующего сервиса.</p>
             <form method="post">
                 <input type="hidden" name="action" value="save_payout_settings">
@@ -89,9 +100,9 @@
                 <p class="small-note">Выплаты на банковскую карту доступны только в EUR. Номер карты в CMS не сохраняется.</p>
                 <button type="submit" class="btn">Сохранить реквизиты выплат</button>
             </form>
-        </details>
-        <details class="card" open>
-            <summary>Настройки торговой платформы</summary>
+        </section>
+        <section class="card" id="trading-settings">
+            <h2>Настройки торговой платформы</h2>
             <p class="muted">Эти параметры применяются к стратегиям и тестам пользователей.</p>
             <form method="post">
                 <input type="hidden" name="action" value="save_admin_settings">
@@ -111,20 +122,25 @@
                     <label for="admin_risk">Допустимый риск</label>
                     <input type="number" id="admin_risk" name="risk_tolerance" min="0" max="1" step="0.01" value="{{ config.risk_tolerance }}">
                 </div>
+                <div class="field-group">
+                    <label for="admin_fee_rate">Комиссия за сделку (доля)</label>
+                    <input type="number" id="admin_fee_rate" name="fee_rate" min="0" max="0.05" step="0.0001" value="{{ config.fee_rate }}">
+                </div>
                 <button type="submit" class="btn">Сохранить настройки</button>
             </form>
-        </details>
-        <section class="card admin-risk-card">
+        </section>
+        <section class="card admin-risk-card" id="risk">
             <h2>Безопасность торговли</h2>
             <p class="muted">Контроль kill switch и лимитов применяется ко всем пользователям.</p>
             <p><strong>Kill switch:</strong> {{ risk.kill_switch|default(false) }}</p>
             <p><strong>Дневной P/L:</strong> {{ risk.daily_pnl|default(0) }}</p>
             <form method="post" action="{{ url_for('admin_risk_action') }}">
                 <button class="btn" type="submit" name="enabled" value="true">Остановить торговлю</button>
+                <button class="btn" type="submit" name="enabled" value="false">Возобновить торговлю</button>
             </form>
         </section>
-        <details class="card" open>
-            <summary>Добавить плагин</summary>
+        <section class="card" id="plugins">
+            <h2>Плагины</h2>
             <form method="post">
                 <input type="hidden" name="action" value="create_plugin">
                 <div class="field-group"><label for="plugin_name">Название</label><input type="text" id="plugin_name" name="plugin_name" required></div>
@@ -132,22 +148,65 @@
                 <div class="field-group"><label for="plugin_description">Описание</label><textarea id="plugin_description" name="plugin_description" rows="4"></textarea></div>
                 <button type="submit" class="btn">Создать плагин</button>
             </form>
-        </details>
-        <details class="card">
-            <summary>Пользователи</summary>
-            {% if users %}<ul>{% for user in users %}<li>{{ user[1] }} ({{ user[2] }}) — роль: {{ user[3] }}</li>{% endfor %}</ul>{% else %}<p>Нет пользователей.</p>{% endif %}
-        </details>
-        <details class="card">
-            <summary>Плагины</summary>
-            {% if plugins %}<ul>{% for plugin in plugins %}<li>{{ plugin.name }} — €{{ '%.2f'|format(plugin.price) }}<br>{{ plugin.description }}</li>{% endfor %}</ul>{% else %}<p>Нет плагинов.</p>{% endif %}
-        </details>
-        <details class="card">
-            <summary>Кошельки пользователей</summary>
-            {% if wallets %}<ul>{% for wallet in wallets %}<li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>{% endfor %}</ul>{% else %}<p>Нет данных кошельков.</p>{% endif %}
-        </details>
-        <details class="card">
-            <summary>Покупки</summary>
-            {% if purchases %}<ul>{% for item in purchases %}<li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>{% endfor %}</ul>{% else %}<p>Нет покупок.</p>{% endif %}
-        </details>
+            {% if plugins %}
+                <h3>Существующие плагины</h3>
+                {% for plugin in plugins %}
+                    <form method="post" class="plugin-edit-form">
+                        <input type="hidden" name="plugin_id" value="{{ plugin.id }}">
+                        <div class="field-group"><label>Название</label><input type="text" name="plugin_name" value="{{ plugin.name }}" required></div>
+                        <div class="field-group"><label>Цена CMSC</label><input type="number" name="plugin_price" min="0" step="0.01" value="{{ plugin.price }}"></div>
+                        <div class="field-group"><label>Описание</label><textarea name="plugin_description" rows="2">{{ plugin.description }}</textarea></div>
+                        <div class="button-row">
+                            <button type="submit" class="btn" name="action" value="update_plugin">Сохранить</button>
+                            <button type="submit" class="btn" name="action" value="delete_plugin" onclick="return confirm('Удалить плагин?');">Удалить</button>
+                        </div>
+                    </form>
+                {% endfor %}
+            {% else %}
+                <p class="muted">Нет плагинов.</p>
+            {% endif %}
+        </section>
+        <section class="card" id="users">
+            <h2>Пользователи и роли</h2>
+            <p class="muted">Изменение роли вступает в силу сразу — но пункт меню "Админ" появится у пользователя после его следующего входа.</p>
+            {% if users %}
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>ID</th><th>Email</th><th>KYC</th><th>Роль</th><th></th></tr></thead>
+                        <tbody>
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ user[0] }}</td>
+                                <td>{{ user[1] }}</td>
+                                <td>{{ 'да' if user[2] else 'нет' }}</td>
+                                <td>{{ user[3] }}</td>
+                                <td>
+                                    <form method="post" class="role-form">
+                                        <input type="hidden" name="action" value="update_user_role">
+                                        <input type="hidden" name="user_id" value="{{ user[0] }}">
+                                        <select name="role">
+                                            <option value="user" {% if user[3] == 'user' %}selected{% endif %}>user</option>
+                                            <option value="admin" {% if user[3] == 'admin' %}selected{% endif %}>admin</option>
+                                        </select>
+                                        <button type="submit" class="btn">Сохранить</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="muted">Нет пользователей.</p>
+            {% endif %}
+        </section>
+        <section class="card" id="wallets">
+            <h2>Кошельки пользователей</h2>
+            {% if wallets %}<ul>{% for wallet in wallets %}<li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>{% endfor %}</ul>{% else %}<p class="muted">Нет данных кошельков.</p>{% endif %}
+        </section>
+        <section class="card" id="purchases">
+            <h2>Покупки</h2>
+            {% if purchases %}<ul>{% for item in purchases %}<li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>{% endfor %}</ul>{% else %}<p class="muted">Нет покупок.</p>{% endif %}
+        </section>
     </div>
 {% endblock %}

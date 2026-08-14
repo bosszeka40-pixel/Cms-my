@@ -114,10 +114,12 @@ _payout_settings = {
 }
 
 
-def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float):
+def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float, fee_rate: float | None = None):
     strategy_manager.config["strategy"] = strategy
     strategy_manager.config["leverage"] = leverage
     strategy_manager.config["risk_tolerance"] = risk_tolerance
+    if fee_rate is not None:
+        strategy_manager.config["fee_rate"] = fee_rate
     with strategy_manager.config_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(strategy_manager.config, handle)
 
@@ -645,10 +647,11 @@ async def bot_management(request: Request):
                 strategy = form.get("strategy", strategy_manager.current_strategy())
                 leverage = max(0.1, min(float(form.get("leverage", 1.5)), 10))
                 risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
-                save_strategy_config(strategy, leverage, risk_tolerance)
+                fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
+                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
                 message = "Настройки стратегии сохранены."
             except (TypeError, ValueError):
-                message = "Проверьте значения левериджа и риска."
+                message = "Проверьте значения левериджа, риска и комиссии."
     return templates.TemplateResponse(
         "bot_management.html",
         {
@@ -723,15 +726,39 @@ async def admin_panel(request: Request):
                 message = f"Плагин {name} добавлен."
             else:
                 message = "Укажите название и положительную цену плагина."
+        elif action == "update_plugin":
+            try:
+                plugin_id = int(form.get("plugin_id", 0))
+                price = float(form.get("plugin_price", 0.0))
+            except (TypeError, ValueError):
+                plugin_id, price = 0, 0.0
+            name = str(form.get("plugin_name", "")).strip()
+            description = form.get("plugin_description", "")
+            if not plugin_id or not name or price < 0:
+                message = "Укажите корректные название и цену плагина."
+            elif engine.update_plugin(plugin_id, name, price, description):
+                message = f"Плагин {name} обновлён."
+            else:
+                message = "Плагин не найден."
+        elif action == "delete_plugin":
+            try:
+                plugin_id = int(form.get("plugin_id", 0))
+            except (TypeError, ValueError):
+                plugin_id = 0
+            if plugin_id and engine.delete_plugin(plugin_id):
+                message = "Плагин удалён."
+            else:
+                message = "Плагин не найден."
         elif action == "save_admin_settings":
             strategy = form.get("strategy", strategy_manager.current_strategy())
             try:
                 leverage = max(0.1, min(float(form.get("leverage", 1.5)), 10))
                 risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
-                save_strategy_config(strategy, leverage, risk_tolerance)
+                fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
+                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
                 message = "Настройки торговой платформы сохранены."
             except (TypeError, ValueError):
-                message = "Проверьте значения левериджа и риска."
+                message = "Проверьте значения левериджа, риска и комиссии."
         elif action == "save_payout_settings":
             crypto_asset = form.get("crypto_asset", "")
             card_provider = form.get("card_provider", "")
@@ -752,6 +779,25 @@ async def admin_panel(request: Request):
                     "card_recipient": card_recipient,
                 })
                 message = "Настройки выплат сохранены."
+        elif action == "update_user_role":
+            try:
+                target_user_id = int(form.get("user_id", 0))
+            except (TypeError, ValueError):
+                target_user_id = 0
+            new_role = form.get("role", "user")
+            if new_role not in {"user", "admin"}:
+                message = "Недопустимая роль."
+            elif not target_user_id:
+                message = "Пользователь не найден."
+            else:
+                target_user = next((u for u in engine.list_users() if u[0] == target_user_id), None)
+                if target_user and target_user[1] == user_email and new_role != "admin":
+                    message = "Нельзя снять права администратора с собственной учетной записи."
+                elif engine.update_user_role(target_user_id, new_role):
+                    engine.record_audit("role_changed", f"user={target_user_id} role={new_role}", user_email)
+                    message = "Роль пользователя обновлена."
+                else:
+                    message = "Пользователь не найден."
         elif action == "save_site_settings":
             site_name = str(form.get("site_name", "")).strip()
             support_contact = str(form.get("support_contact", "")).strip()

@@ -153,6 +153,33 @@ class CMSEngine:
         finally:
             session.close()
 
+    def update_plugin(self, plugin_id: int, name: str, price: float, description: str = "") -> bool:
+        session = self.SessionLocal()
+        try:
+            plugin = session.query(Plugin).filter(Plugin.id == plugin_id).first()
+            if not plugin:
+                return False
+            plugin.name = name
+            plugin.price = price
+            plugin.description = description
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def delete_plugin(self, plugin_id: int) -> bool:
+        session = self.SessionLocal()
+        try:
+            plugin = session.query(Plugin).filter(Plugin.id == plugin_id).first()
+            if not plugin:
+                return False
+            session.query(UserPlugin).filter(UserPlugin.plugin_id == plugin_id).delete()
+            session.delete(plugin)
+            session.commit()
+            return True
+        finally:
+            session.close()
+
     def ensure_strategy_plugins(self):
         defaults = [
             ("pure_harvester", 0.0, "Базовая стратегия сбора прибыли."),
@@ -444,6 +471,18 @@ class CMSEngine:
                 (user.id, user.email, user.kyc_status, user.role)
                 for user in session.query(User).order_by(User.id).all()
             ]
+        finally:
+            session.close()
+
+    def update_user_role(self, user_id: int, role: str) -> bool:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user:
+                return False
+            user.role = role
+            session.commit()
+            return True
         finally:
             session.close()
 

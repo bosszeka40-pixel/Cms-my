@@ -74,6 +74,18 @@ input:focus, textarea:focus, select:focus, .btn:focus-visible, a:focus-visible {
 }
 .card h2, .card h3 { color: #215d89; }
 .grid, .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: .85rem; }
+.admin-nav { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.admin-nav a {
+    padding: .35rem .7rem; color: var(--primary); font-size: .85rem; font-weight: 600;
+    background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; text-decoration: none;
+}
+.admin-nav a:hover, .admin-nav a:focus-visible { background: var(--highlight); }
+.admin-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.inline-check { display: inline-block; margin: 0 .6rem .4rem 0; font-weight: 400; }
+.role-form { display: flex; align-items: center; gap: .4rem; margin: 0; }
+.role-form select { width: auto; margin: 0; }
+.role-form .btn { padding: .35rem .6rem; }
+.plugin-edit-form { padding: .75rem; margin-bottom: .6rem; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; }
 .feature-grid { margin-bottom: 1.25rem; }
 .feature-grid h2 { margin-top: 0; font-size: 1.05rem; }
 .terminal-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: .85rem; margin-bottom: .85rem; }
