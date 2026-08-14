@@ -102,19 +102,37 @@
                 <p>Результат за 30 дней: <strong>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</strong>,
                     баланс €100 → €{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</p>
                 <p>Цена: <strong>{% if plugin.price_eur %}€{{ '%.2f'|format(plugin.price_eur) }} / 15 дней{% else %}Бесплатно{% endif %}</strong></p>
-                <form method="post" style="margin-top: 10px;">
-                    <input type="hidden" name="action" value="buy_plugin">
-                    <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
-                    {% if plugin.license_options %}
-                        <label for="duration-{{ plugin.name }}">Срок доступа</label>
-                        <select id="duration-{{ plugin.name }}" name="duration_days">
-                            {% for option in plugin.license_options %}
-                                <option value="{{ option.days }}">{{ option.days }} дн. — €{{ '%.2f'|format(option.price_eur) }}</option>
-                            {% endfor %}
-                        </select>
+                <p>Статус:
+                    {% if plugin.active %}
+                        <strong class="status-pill">✔ активна{% if plugin.access_until %} до {{ plugin.access_until[:16]|replace('T', ' ') }}{% endif %}</strong>
+                    {% elif plugin.owned %}
+                        <strong class="status-pill">куплена, не активирована{% if plugin.access_until %} (доступ до {{ plugin.access_until[:16]|replace('T', ' ') }}){% endif %}</strong>
+                    {% elif plugin.available %}
+                        <strong class="status-pill">бесплатно доступна</strong>
+                    {% else %}
+                        <strong class="status-pill">требуется покупка</strong>
                     {% endif %}
-                    <button class="btn" type="submit">Купить</button>
-                </form>
+                </p>
+                {% if plugin.price_eur %}
+                    <form method="post" style="margin-top: 10px;">
+                        <input type="hidden" name="action" value="buy_plugin">
+                        <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
+                        {% if plugin.license_options %}
+                            <label for="duration-{{ plugin.name }}">Срок доступа</label>
+                            <select id="duration-{{ plugin.name }}" name="duration_days">
+                                {% for option in plugin.license_options %}
+                                    <option value="{{ option.days }}">{{ option.days }} дн. — €{{ '%.2f'|format(option.price_eur) }}</option>
+                                {% endfor %}
+                            </select>
+                        {% endif %}
+                        <button class="btn" type="submit">{{ 'Продлить доступ' if plugin.owned else 'Купить' }}</button>
+                    </form>
+                {% endif %}
+                {% if plugin.available %}
+                    <button class="btn activate-btn" type="button" data-plugin="{{ plugin.name }}" {% if plugin.active %}disabled{% endif %} style="margin-top: 8px;">
+                        {{ 'Уже активна' if plugin.active else 'Активировать в боте' }}
+                    </button>
+                {% endif %}
             </div>
         {% endfor %}
     </div>
@@ -130,4 +148,27 @@
             <p>Пока нет покупок.</p>
         {% endif %}
     </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('.activate-btn').forEach(button => {
+    button.addEventListener('click', async () => {
+        button.disabled = true;
+        const pluginName = button.dataset.plugin;
+        try {
+            const response = await fetch('/api/strategies/activate', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({plugin_name: pluginName})
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Ошибка активации стратегии');
+            button.textContent = 'Уже активна';
+            location.reload();
+        } catch (error) {
+            button.disabled = false;
+            alert(error.message);
+        }
+    });
+});
+</script>
 {% endblock %}

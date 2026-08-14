@@ -49,6 +49,23 @@
                 <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
             </div>
         </div>
+        <div class="card">
+            <h2>Статистика активности</h2>
+            <p class="muted">Последние тесты стратегий и результаты из памяти бота.</p>
+            <canvas id="memory-chart" height="120" aria-label="График последних результатов"></canvas>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Дата</th><th>Действие</th><th>Результат</th></tr></thead>
+                    <tbody>
+                        {% for item in memories %}
+                            <tr><td>{{ item.created_at }}</td><td>{{ item.action }}</td><td>{{ '%.4f'|format(item.result) }}</td></tr>
+                        {% else %}
+                            <tr><td colspan="3">Пока нет сохранённых результатов. Запустите тест стратегии в разделе «Управление ботом».</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 {% endblock %}
 {% block scripts %}
@@ -75,5 +92,26 @@ document.getElementById('chat-form').addEventListener('submit', async (event) =>
     const data = await response.json();
     addMessage('Бот', response.ok ? data.answer : (data.detail || 'Ошибка чата'));
 });
+(function drawMemoryChart() {
+    const canvas = document.getElementById('memory-chart');
+    const context = canvas.getContext('2d');
+    const width = canvas.clientWidth || 400;
+    canvas.width = width * 2;
+    canvas.height = 120;
+    const points = {{ memories|reverse|list|tojson }};
+    if (!points.length) { context.clearRect(0, 0, canvas.width, canvas.height); return; }
+    const values = points.map(item => Number(item.result));
+    const maxAbs = Math.max(...values.map(Math.abs), 1e-9);
+    const slot = canvas.width / points.length;
+    const barWidth = Math.max(2, slot * 0.6);
+    const mid = canvas.height / 2;
+    values.forEach((value, index) => {
+        const x = index * slot + slot / 2;
+        const barHeight = (Math.abs(value) / maxAbs) * (canvas.height / 2 - 8);
+        context.fillStyle = value >= 0 ? '#16a34a' : '#dc2626';
+        if (value >= 0) context.fillRect(x - barWidth / 2, mid - barHeight, barWidth, barHeight);
+        else context.fillRect(x - barWidth / 2, mid, barWidth, barHeight);
+    });
+})();
 </script>
 {% endblock %}

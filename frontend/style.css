@@ -24,18 +24,21 @@ header {
     box-shadow: 0 2px 5px var(--shadow);
 }
 header h2 { margin: 0; font-size: 1.15rem; text-shadow: 1px 1px #164c78; }
-nav { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
+.brand { display: flex; align-items: center; gap: .55rem; }
+.win-logo { display: grid; place-items: center; width: 2rem; height: 2rem; color: #16588c; font-size: 1.35rem; background: linear-gradient(135deg, #fff, #a9d8f5); border: 1px solid #164c78; border-radius: 3px; box-shadow: inset 0 1px #fff; }
+.menu-toggle { display: none; color: #123c5c; font: inherit; font-weight: 600; padding: .45rem .75rem; background: linear-gradient(#fff, #c6e1f4); border: 1px solid #6d9abd; border-radius: 3px; box-shadow: inset 0 1px #fff, 0 1px 2px var(--shadow); cursor: pointer; }
+#main-menu { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
 .theme-switcher { display: inline-flex; align-items: center; }
 .theme-button {
     padding: .4rem .65rem; color: #fff; font: inherit; border: 1px solid rgba(255,255,255,.45);
     border-radius: 3px; background: rgba(0,0,0,.12); cursor: pointer;
 }
 .theme-button:hover, .theme-button:focus-visible { background: rgba(255,255,255,.2); }
-nav a {
+#main-menu a {
     color: #fff; text-decoration: none; padding: .4rem .65rem; border-radius: 3px;
     text-shadow: 1px 1px #164c78;
 }
-nav a:hover, nav a:focus-visible { background: rgba(255,255,255,.2); text-decoration: none; }
+#main-menu a:hover, #main-menu a:focus-visible { background: rgba(255,255,255,.2); text-decoration: none; }
 a { color: #155d91; }
 .container {
     width: min(1160px, calc(100% - 1.5rem)); margin: 1.25rem auto; padding: clamp(1rem, 3vw, 1.75rem);
@@ -124,7 +127,10 @@ body.dark .card { background: linear-gradient(#294b62, #1d3b50); }
 @media (max-width: 950px) { .terminal-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); } }
 @media (max-width: 700px) {
     header { align-items: flex-start; flex-direction: column; }
-    nav { justify-content: flex-start; }
+    .menu-toggle { display: block; align-self: flex-start; }
+    #main-menu { display: none; width: 100%; flex-direction: column; justify-content: flex-start; }
+    #main-menu.is-open { display: flex; }
+    #main-menu a { padding: .55rem .7rem; }
     .container { width: calc(100% - .75rem); margin: .5rem auto; }
     .hero { align-items: flex-start; flex-direction: column; }
     .hero-badge { width: 100%; }

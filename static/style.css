@@ -26,13 +26,26 @@ header {
 .brand { display: flex; align-items: center; gap: .55rem; }
 .win-logo { display: grid; place-items: center; width: 2rem; height: 2rem; color: #16588c; font-size: 1.35rem; background: linear-gradient(135deg, #fff, #a9d8f5); border: 1px solid #164c78; border-radius: 3px; box-shadow: inset 0 1px #fff; }
 header h2 { margin: 0; font-size: 1.15rem; text-shadow: 1px 1px #164c78; }
-nav { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
-nav a {
+#main-menu { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
+#main-menu a {
     display: inline-flex; align-items: center; gap: .3rem; color: #fff; text-decoration: none; padding: .4rem .65rem; border: 1px solid transparent; border-radius: 3px;
     text-shadow: 1px 1px #164c78;
 }
-nav a:hover, nav a:focus-visible { background: linear-gradient(#8dd1f4, #327fb8); border-color: #c4e9ff; text-decoration: none; }
+#main-menu a:hover, #main-menu a:focus-visible { background: linear-gradient(#8dd1f4, #327fb8); border-color: #c4e9ff; text-decoration: none; }
 .nav-icon { min-width: 1.1rem; color: #fff; font-size: 1rem; text-align: center; }
+.admin-nav {
+    display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.1rem;
+    padding: .6rem .7rem; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 5px;
+}
+.admin-nav a {
+    color: var(--primary); text-decoration: none; padding: .3rem .6rem; border: 1px solid transparent; border-radius: 3px; font-weight: 600;
+}
+.admin-nav a:hover, .admin-nav a:focus-visible { background: var(--highlight); border-color: var(--border); text-decoration: none; }
+.admin-risk-card p { margin: .3rem 0; }
+.inline-check { display: inline-flex; align-items: center; gap: .3rem; margin: .2rem .8rem .2rem 0; font-weight: 400; }
+.plugin-edit-form, .role-form { margin-top: .75rem; padding-top: .75rem; border-top: 1px dashed var(--border); }
+.role-form { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.role-form select { width: auto; margin: 0; }
 .menu-toggle { display: none; color: #123c5c; font: inherit; font-weight: 600; padding: .45rem .75rem; background: linear-gradient(#fff, #c6e1f4); border: 1px solid #6d9abd; border-radius: 3px; box-shadow: inset 0 1px #fff, 0 1px 2px var(--shadow); cursor: pointer; }
 a { color: #155d91; }
 .container {
@@ -124,9 +137,9 @@ body.dark .card { background: linear-gradient(#294b62, #1d3b50); }
 @media (max-width: 700px) {
     header { align-items: stretch; flex-wrap: wrap; }
     .menu-toggle { display: block; align-self: flex-start; }
-    nav { display: none; width: 100%; flex-direction: column; justify-content: flex-start; }
-    nav.is-open { display: flex; }
-    nav a { padding: .55rem .7rem; }
+    #main-menu { display: none; width: 100%; flex-direction: column; justify-content: flex-start; }
+    #main-menu.is-open { display: flex; }
+    #main-menu a { padding: .55rem .7rem; }
     .container { width: calc(100% - .75rem); margin: .5rem auto; }
     .hero { align-items: flex-start; flex-direction: column; }
     .hero-badge { width: 100%; }

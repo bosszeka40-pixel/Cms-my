@@ -6,6 +6,7 @@ import secrets
 import time
 import yaml
 import requests
+from collections import Counter
 from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
@@ -382,6 +383,7 @@ def _strategy_catalog(email: str, performance: dict):
             "win_rate_pct": result.get("win_rate_pct"),
             "available": price == 0 or bool(owned and owned["active"]),
             "active": bool(owned and owned["active"]),
+            "owned": bool(owned),
             "access_until": owned["access_until"] if owned else None,
         })
     return catalog
@@ -446,18 +448,32 @@ async def login_submit(request: Request, username: str = Form(...), password: st
 
 @app.get("/register", name="register")
 async def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request, "message": None, "user_id": request.session.get("user_email")})
+    return templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "message": None,
+            "user_id": request.session.get("user_email"),
+            **social_login_context(),
+        },
+    )
 
 @app.post("/register")
 async def register_submit(request: Request, username: str = Form(...), email: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
     if password != confirm_password:
-        return templates.TemplateResponse("register.html", {"request": request, "message": "Пароли не совпадают.", "user_id": None})
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": "Пароли не совпадают.", "user_id": None, **social_login_context()},
+        )
     try:
         user = engine.create_user(email, password)
         request.session["user_email"] = user.email
         return RedirectResponse(url="/dashboard", status_code=302)
     except Exception as e:
-        return templates.TemplateResponse("register.html", {"request": request, "message": f"Ошибка регистрации: {e}", "user_id": None})
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": f"Ошибка регистрации: {e}", "user_id": None, **social_login_context()},
+        )
 
 @app.get("/forgot-password", name="forgot_password")
 async def forgot_password_page(request: Request):
@@ -820,6 +836,9 @@ async def admin_panel(request: Request):
                 )
                 message = "Настройки сайта сохранены."
     site_settings = engine.get_site_settings()
+    all_purchases = engine.list_all_purchases()
+    all_wallets = engine.list_all_wallets()
+    purchase_counts = Counter(item[1] for item in all_purchases)
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -827,8 +846,8 @@ async def admin_panel(request: Request):
             "user_id": user_email,
             "users": engine.list_users(),
             "plugins": engine.list_plugins(),
-            "purchases": engine.list_all_purchases(),
-            "wallets": engine.list_all_wallets(),
+            "purchases": all_purchases,
+            "wallets": all_wallets,
             "message": message,
             "risk": risk_manager.status(),
             "current_strategy": strategy_manager.current_strategy(),
@@ -841,6 +860,8 @@ async def admin_panel(request: Request):
             "wallet_providers": WALLET_PROVIDERS,
             "allowed_exchanges": {name.strip() for name in site_settings["allowed_exchanges"].split(",")},
             "allowed_wallets": {name.strip() for name in site_settings["allowed_wallets"].split(",")},
+            "plugin_purchase_counts": sorted(purchase_counts.items(), key=lambda item: item[1], reverse=True),
+            "connected_wallets_count": sum(1 for w in all_wallets if w[2] or w[4]),
             **social_login_context(),
         },
     )
@@ -890,6 +911,10 @@ def trading_test(payload: TradingTestPayload, request: Request):
         "strategy_test", result["trade"]["pl"],
         f"{payload.pair}; signal={result['signal']}; strategy={result['strategy']}",
         email,
+    )
+    engine.record_trade(
+        email, payload.pair, "test", result["strategy"],
+        result["trade"]["pl"], result["trade"]["next_balance"],
     )
     risk_manager.record(result["trade"]["pl"], result["trade"]["next_balance"])
     return result
@@ -1147,7 +1172,8 @@ def stop_bot(request: Request):
     return result
 
 @app.get("/api/bot/status")
-def bot_status():
+def bot_status(request: Request):
+    _require_user(request)
     return bot.status()
 
 @app.post("/api/bot/backtest")
@@ -1190,11 +1216,13 @@ def simulate_trade(payload: HFTSimulatePayload):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/bot/brain")
-def brain_status():
+def brain_status(request: Request):
+    _require_admin(request)
     return production_bot.brain.summarize()
 
 @app.get("/api/report")
-def get_report():
+def get_report(request: Request):
+    _require_admin(request)
     try:
         with (BASE_DIR / "ADVANCED_TEST_REPORT.md").open("r", encoding="utf-8") as report_file:
             return {"report": report_file.read()}
@@ -1202,7 +1230,8 @@ def get_report():
         raise HTTPException(status_code=404, detail="Отчет не найден")
 
 @app.get("/api/metrics")
-def get_metrics():
+def get_metrics(request: Request):
+    _require_admin(request)
     return {
         "bot_status": bot.status(),
         "brain": production_bot.brain.summarize(),

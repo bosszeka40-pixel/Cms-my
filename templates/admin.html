@@ -16,6 +16,8 @@
         <a href="#users">Пользователи и роли</a>
         <a href="#wallets">Кошельки</a>
         <a href="#purchases">Покупки</a>
+        <a href="#stats">Статистика</a>
+        <a href="#diagnostics">Диагностика</a>
     </nav>
     <div class="grid admin-grid">
         <section class="card" id="site-settings">
@@ -208,5 +210,71 @@
             <h2>Покупки</h2>
             {% if purchases %}<ul>{% for item in purchases %}<li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>{% endfor %}</ul>{% else %}<p class="muted">Нет покупок.</p>{% endif %}
         </section>
+        <section class="card" id="stats">
+            <h2>Статистика платформы</h2>
+            <div class="grid">
+                <div class="card"><h3>Пользователи</h3><p style="font-size: 22px; font-weight: bold;">{{ users|length }}</p></div>
+                <div class="card"><h3>Покупки</h3><p style="font-size: 22px; font-weight: bold;">{{ purchases|length }}</p></div>
+                <div class="card"><h3>Подключенные кошельки/биржи</h3><p style="font-size: 22px; font-weight: bold;">{{ connected_wallets_count }}</p></div>
+                <div class="card"><h3>Плагины</h3><p style="font-size: 22px; font-weight: bold;">{{ plugins|length }}</p></div>
+            </div>
+            <h3 style="margin-top: 15px;">Покупки по стратегиям</h3>
+            {% if plugin_purchase_counts %}
+                {% set max_count = plugin_purchase_counts[0][1] %}
+                {% for name, count in plugin_purchase_counts %}
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>{{ name }}</span><span>{{ count }}</span></div>
+                    <div style="height: 12px; background: var(--surface-muted); border-radius: 4px; margin-bottom: 8px;">
+                        <div style="width: {{ (count / max_count) * 100 }}%; background: var(--primary); height: 100%; border-radius: 4px;"></div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="muted">Покупок пока нет.</p>
+            {% endif %}
+        </section>
+        <section class="card" id="diagnostics">
+            <h2>Диагностика системы</h2>
+            <p class="muted">Сводные метрики бота, состояние ИИ-памяти и отчёт о тестировании стратегий.</p>
+            <div class="button-row">
+                <button class="btn" id="load-metrics" type="button">Обновить метрики</button>
+                <button class="btn" id="load-report" type="button">Показать отчёт тестирования</button>
+            </div>
+            <div id="metrics-result" class="small-note">Нажмите «Обновить метрики».</div>
+            <details class="card" style="margin-top: 10px;">
+                <summary>Отчёт о тестировании (ADVANCED_TEST_REPORT.md)</summary>
+                <pre id="report-content" style="white-space: pre-wrap; max-height: 420px; overflow-y: auto;">Отчёт ещё не загружен.</pre>
+            </details>
+        </section>
     </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('load-metrics').addEventListener('click', async () => {
+    const box = document.getElementById('metrics-result');
+    box.textContent = 'Загружаем метрики...';
+    try {
+        const [metricsResponse, brainResponse] = await Promise.all([fetch('/api/metrics'), fetch('/api/bot/brain')]);
+        const metrics = await metricsResponse.json();
+        const brain = await brainResponse.json();
+        if (!metricsResponse.ok) throw new Error(metrics.detail || 'Ошибка загрузки метрик');
+        box.innerHTML = `Бот: <strong>${metrics.bot_status.active ? 'активен' : 'остановлен'}</strong>, событий: ${metrics.bot_status.runs}. `
+            + `Стратегия: <strong>${metrics.strategy}</strong>. `
+            + `Kill switch: <strong>${metrics.risk.kill_switch}</strong>, дневной P/L: ${Number(metrics.risk.daily_pnl).toFixed(4)}. `
+            + (brainResponse.ok ? `ИИ-память: ${brain.actions} действий.` : '');
+    } catch (error) {
+        box.textContent = error.message;
+    }
+});
+document.getElementById('load-report').addEventListener('click', async () => {
+    const box = document.getElementById('report-content');
+    box.textContent = 'Загружаем отчёт...';
+    try {
+        const response = await fetch('/api/report');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Отчёт не найден');
+        box.textContent = data.report;
+    } catch (error) {
+        box.textContent = error.message;
+    }
+});
+</script>
 {% endblock %}
