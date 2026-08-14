@@ -28,7 +28,7 @@ def create_user(payload: UserCreate, request: Request):
     return {"id": user.id, "email": user.email, "kyc_status": user.kyc_status}
 
 @router.post("/login")
-def login(payload: UserLogin):
+def admin_login(payload: UserLogin):
     user = engine.secure_login(payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Неверный email или пароль")

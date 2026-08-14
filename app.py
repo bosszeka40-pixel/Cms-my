@@ -2,7 +2,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 
-from flask import Flask, render_template, request, session, redirect, url_for
+from flask import Flask, render_template, request, session, redirect, url_for, abort
 import sqlite3
 import hashlib
 import yaml
@@ -384,6 +384,11 @@ def home():
     return render_template('index.html')
 
 
+# TODO: временный обход входа для админа без пароля. Убрать перед выпуском в продакшн.
+DEV_ADMIN_BYPASS_ENABLED = os.getenv('APP_ENV', 'development').lower() != 'production'
+DEV_ADMIN_EMAIL = 'dev-admin@local'
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if session.get('user_id'):
@@ -410,7 +415,35 @@ def login():
             return redirect(url_for('dashboard'))
         message = 'Неверный логин или пароль.'
 
-    return render_template('login.html', message=message)
+    return render_template('login.html', message=message, dev_admin_bypass_enabled=DEV_ADMIN_BYPASS_ENABLED)
+
+
+@app.route('/login/dev-admin-bypass', methods=['POST'])
+def dev_admin_bypass():
+    if not DEV_ADMIN_BYPASS_ENABLED:
+        abort(404)
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, username FROM users WHERE email = ?', (DEV_ADMIN_EMAIL,))
+    row = cursor.fetchone()
+    if row:
+        user_id, username = row
+    else:
+        hashed_pw = hash_password(os.urandom(16).hex())
+        cursor.execute('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
+                       ('dev-admin', DEV_ADMIN_EMAIL, hashed_pw, 'admin'))
+        conn.commit()
+        user_id = cursor.lastrowid
+        username = 'dev-admin'
+    conn.close()
+
+    session['user_id'] = user_id
+    session['user_name'] = username
+    session['user_email'] = DEV_ADMIN_EMAIL
+    session['is_admin'] = True
+    session['theme'] = 'light'
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/register', methods=['GET', 'POST'])

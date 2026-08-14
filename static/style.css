@@ -60,8 +60,11 @@ input:focus, textarea:focus, select:focus, .btn:focus-visible, a:focus-visible {
     outline: 2px solid #f2b233; outline-offset: 2px;
 }
 .social-btns, .button-row { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
-.social-btn { flex: 1; padding: .6rem; color: #fff; text-align: center; border-radius: 3px; text-decoration: none; }
+.social-btn { flex: 1; padding: .6rem; color: #fff; text-align: center; border-radius: 3px; text-decoration: none; cursor: pointer; display: inline-block; }
 .google { background: #c94939; } .github { background: #40566b; } .telegram { background: #1689bd; }
+.social-btn.disabled { opacity: .5; cursor: not-allowed; }
+.exchange-links { list-style: none; padding: 0; margin: .4rem 0 1rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+.exchange-links li a { display: inline-block; padding: .3rem .7rem; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 3px; text-decoration: none; }
 .message { padding: .7rem .9rem; margin-bottom: 1rem; color: #7c2525; background: #fff0e8; border: 1px solid #d98a6c; border-radius: 4px; }
 .message.success { color: #205d35; background: #ecf8e9; border-color: #86bd89; }
 .field-group { margin-bottom: .45rem; }

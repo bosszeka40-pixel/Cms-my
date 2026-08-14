@@ -21,3 +21,15 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+### Python ###
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+instance/
+*.db
+*.sqlite3
+.env

@@ -57,6 +57,35 @@ class AuditLog(Base):
     context = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class Wallet(Base):
+    __tablename__ = "wallets"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    credits = Column(Float, default=0.0)
+    wallet_provider = Column(String, nullable=True)
+    wallet_address = Column(String, nullable=True)
+    exchange_provider = Column(String, nullable=True)
+    exchange_key_masked = Column(String, nullable=True)
+    exchange_sandbox = Column(Boolean, default=True)
+    telegram_username = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Trade(Base):
+    __tablename__ = "trades"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    pair = Column(String, nullable=False)
+    mode = Column(String, nullable=False)
+    strategy = Column(String, default="")
+    pnl = Column(Float, default=0.0)
+    balance = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class SiteSetting(Base):
+    __tablename__ = "site_settings"
+    key = Column(String, primary_key=True)
+    value = Column(Text, default="")
+
 class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
         self.db_name = db_name
@@ -287,3 +316,201 @@ class CMSEngine:
 
     def secure_login(self, email: str, password: str):
         return self.authenticate_user(email, password)
+
+    @staticmethod
+    def mask_secret(value: str) -> str:
+        value = (value or "").strip()
+        if len(value) <= 4:
+            return "*" * len(value)
+        return f"{'*' * (len(value) - 4)}{value[-4:]}"
+
+    def get_or_create_wallet(self, email: str) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return self._wallet_to_dict(None)
+            wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
+            if not wallet:
+                wallet = Wallet(user_id=user.id)
+                session.add(wallet)
+                session.commit()
+                session.refresh(wallet)
+            return self._wallet_to_dict(wallet)
+        finally:
+            session.close()
+
+    @staticmethod
+    def _wallet_to_dict(wallet) -> dict:
+        if not wallet:
+            return {
+                "credits": 0.0, "balance": 0.0, "provider": None, "address": None,
+                "exchange_provider": None, "exchange_address": None,
+                "telegram": None,
+            }
+        return {
+            "credits": wallet.credits or 0.0,
+            "balance": wallet.credits or 0.0,
+            "provider": wallet.wallet_provider,
+            "address": wallet.wallet_address,
+            "exchange_provider": wallet.exchange_provider,
+            "exchange_address": wallet.exchange_key_masked,
+            "telegram": wallet.telegram_username,
+        }
+
+    def update_wallet(self, email: str, **fields) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return self._wallet_to_dict(None)
+            wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
+            if not wallet:
+                wallet = Wallet(user_id=user.id)
+                session.add(wallet)
+            for key, value in fields.items():
+                setattr(wallet, key, value)
+            session.commit()
+            session.refresh(wallet)
+            return self._wallet_to_dict(wallet)
+        finally:
+            session.close()
+
+    def add_wallet_credits(self, email: str, amount: float) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return self._wallet_to_dict(None)
+            wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
+            if not wallet:
+                wallet = Wallet(user_id=user.id)
+                session.add(wallet)
+            wallet.credits = max(0.0, (wallet.credits or 0.0) + amount)
+            session.commit()
+            session.refresh(wallet)
+            return self._wallet_to_dict(wallet)
+        finally:
+            session.close()
+
+    def record_trade(self, email: str, pair: str, mode: str, strategy: str, pnl: float, balance: float):
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return None
+            trade = Trade(
+                user_id=user.id, pair=pair, mode=mode, strategy=strategy,
+                pnl=float(pnl), balance=float(balance),
+            )
+            session.add(trade)
+            session.commit()
+            session.refresh(trade)
+            return trade
+        finally:
+            session.close()
+
+    def list_trades(self, email: str, limit: int = 50):
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return []
+            trades = (
+                session.query(Trade)
+                .filter(Trade.user_id == user.id)
+                .order_by(Trade.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "created_at": trade.created_at.isoformat(),
+                    "mode": trade.mode,
+                    "pair": trade.pair,
+                    "strategy": trade.strategy,
+                    "pnl": trade.pnl,
+                    "balance": trade.balance,
+                }
+                for trade in trades
+            ]
+        finally:
+            session.close()
+
+    def list_users(self):
+        session = self.SessionLocal()
+        try:
+            return [
+                (user.id, user.email, user.kyc_status, user.role)
+                for user in session.query(User).order_by(User.id).all()
+            ]
+        finally:
+            session.close()
+
+    def list_all_wallets(self):
+        session = self.SessionLocal()
+        try:
+            rows = (
+                session.query(User, Wallet)
+                .join(Wallet, Wallet.user_id == User.id)
+                .order_by(User.id)
+                .all()
+            )
+            return [
+                (
+                    user.id, wallet.credits or 0.0, wallet.wallet_provider,
+                    wallet.wallet_address, wallet.exchange_provider,
+                    wallet.exchange_key_masked, wallet.telegram_username,
+                )
+                for user, wallet in rows
+            ]
+        finally:
+            session.close()
+
+    def list_all_purchases(self):
+        session = self.SessionLocal()
+        try:
+            rows = (
+                session.query(User, Plugin, UserPlugin)
+                .join(UserPlugin, UserPlugin.user_id == User.id)
+                .join(Plugin, Plugin.id == UserPlugin.plugin_id)
+                .order_by(UserPlugin.purchased_at.desc())
+                .all()
+            )
+            return [
+                (
+                    user.id, plugin.name,
+                    purchase.purchased_at.isoformat() if purchase.purchased_at else "",
+                )
+                for user, plugin, purchase in rows
+            ]
+        finally:
+            session.close()
+
+    def get_site_settings(self) -> dict:
+        defaults = {
+            "site_name": "Super CMS V12",
+            "maintenance_mode": "false",
+            "allowed_exchanges": "binance,bybit,kraken,okx,bitfinex",
+            "allowed_wallets": "MetaMask,Trust Wallet,Binance Wallet,WalletConnect,Ledger,Trezor",
+            "support_contact": "",
+        }
+        session = self.SessionLocal()
+        try:
+            stored = {row.key: row.value for row in session.query(SiteSetting).all()}
+            return {**defaults, **stored}
+        finally:
+            session.close()
+
+    def save_site_settings(self, **fields):
+        session = self.SessionLocal()
+        try:
+            for key, value in fields.items():
+                row = session.query(SiteSetting).filter(SiteSetting.key == key).first()
+                if row:
+                    row.value = str(value)
+                else:
+                    session.add(SiteSetting(key=key, value=str(value)))
+            session.commit()
+        finally:
+            session.close()

@@ -22,10 +22,34 @@
         <button type="submit" class="btn">Войти</button>
     </form>
     <p style="margin-top: 20px;">Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a></p>
+    {% if dev_admin_bypass_enabled %}
+    <form method="post" action="{{ url_for('dev_admin_bypass') }}" style="margin-top: 10px;">
+        <button type="submit" class="btn" style="background:#c0392b;">⚠ Временно: войти как админ (без пароля)</button>
+    </form>
+    <p class="small-note">Временная кнопка для разработки. Удалить перед продакшн-релизом.</p>
+    {% endif %}
     <div class="small-note">или войти через</div>
     <div class="social-btns">
-        <a class="social-btn google" href="{{ url_for('social_login', provider='google') }}">Google</a>
-        <a class="social-btn github" href="{{ url_for('social_login', provider='github') }}">GitHub</a>
-        <a class="social-btn telegram" href="{{ url_for('social_login', provider='telegram') }}">Telegram</a>
+        {% if google_configured %}
+            <a class="social-btn google" href="{{ url_for('social_login', provider='google') }}">Google</a>
+        {% else %}
+            <span class="social-btn google disabled" title="Google login не настроен на сервере (GOOGLE_CLIENT_ID/SECRET)">Google</span>
+        {% endif %}
+        {% if github_configured %}
+            <a class="social-btn github" href="{{ url_for('social_login', provider='github') }}">GitHub</a>
+        {% else %}
+            <span class="social-btn github disabled" title="GitHub login не настроен на сервере (GITHUB_CLIENT_ID/SECRET)">GitHub</span>
+        {% endif %}
+        {% if telegram_configured %}
+            <span id="telegram-login-widget"></span>
+            <script async src="https://telegram.org/js/telegram-widget.js?22"
+                data-telegram-login="{{ telegram_bot_username }}"
+                data-size="large"
+                data-auth-url="{{ url_for('telegram_callback') }}"
+                data-request-access="write"></script>
+        {% else %}
+            <span class="social-btn telegram disabled" title="Telegram login не настроен на сервере (TELEGRAM_BOT_TOKEN/TELEGRAM_BOT_USERNAME)">Telegram</span>
+        {% endif %}
     </div>
 {% endblock %}
+

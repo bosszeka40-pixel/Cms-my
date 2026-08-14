@@ -24,6 +24,12 @@
                     <p>{{ exchange_info }}</p>
                 </div>
             {% endif %}
+            <p class="muted">Поддерживаемые биржи (ссылки на официальные сайты для регистрации):</p>
+            <ul class="exchange-links">
+                {% for ex in exchange_directory %}
+                    <li><a href="{{ ex.website }}" target="_blank" rel="noopener noreferrer">{{ ex.name }}</a></li>
+                {% endfor %}
+            </ul>
             <form method="post">
                 <input type="hidden" name="action" value="connect_exchange">
                 <div class="field-group">

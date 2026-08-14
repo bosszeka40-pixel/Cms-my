@@ -7,7 +7,7 @@
     {% endif %}
     <div class="card">
         <h2>Баланс</h2>
-        <p style="font-size: 24px; font-weight: bold;">{{ wallet.balance }} USDT</p>
+        <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.balance) }} CMSC</p>
         <p>Подключённый провайдер: {{ wallet.provider or '—' }}</p>
         <p>Подключённая биржа: {{ wallet.exchange_provider or '—' }}</p>
         <p>Telegram: {{ wallet.telegram or '—' }}</p>

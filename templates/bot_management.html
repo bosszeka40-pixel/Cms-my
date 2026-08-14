@@ -10,9 +10,17 @@
                 <label for="market-pair">Пара</label>
                 <select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select>
             </div>
+            <div class="field-group">
+                <label for="market-exchange">Биржа</label>
+                <select id="market-exchange">{% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}</select>
+            </div>
+            <div class="field-group">
+                <label for="market-timeframe">Таймфрейм свечей</label>
+                <select id="market-timeframe">{% for tf in chart_timeframes %}<option {% if tf == '1h' %}selected{% endif %}>{{ tf }}</option>{% endfor %}</select>
+            </div>
             <button class="btn" id="refresh-market" type="button">Загрузить котировки</button>
             <div id="ticker" class="market-stats muted">Нажмите для получения данных с публичного API биржи.</div>
-            <canvas id="price-chart" height="150" aria-label="График цены"></canvas>
+            <canvas id="price-chart" height="260" aria-label="График свечей"></canvas>
         </div>
         <div class="card">
             <h2>Стакан</h2>
@@ -146,7 +154,7 @@ testForm.addEventListener('submit', async (event) => {
             method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Ошибка теста');
+        if (!response.ok) throw new Error(data.detail || 'Ошибка теста');
         resultBox.innerHTML = `<h3>Результат теста</h3><p>Пара: <strong>${data.pair}</strong></p><p>Сигнал: <strong>${data.signal}</strong></p><p>Баланс: <strong>${Number(data.next_balance).toFixed(2)}</strong></p><p>P/L: <strong>${Number(data.trade.pl).toFixed(2)}</strong></p>`;
         document.getElementById('bot-runs').textContent = Number(document.getElementById('bot-runs').textContent) + 1;
     } catch (error) { resultBox.textContent = error.message; }
@@ -154,42 +162,69 @@ testForm.addEventListener('submit', async (event) => {
 });
 
 const pairSelect = document.getElementById('market-pair');
+const exchangeSelect = document.getElementById('market-exchange');
+const timeframeSelect = document.getElementById('market-timeframe');
 const renderLevels = (target, levels) => {
     document.getElementById(target).innerHTML = (levels || []).map(level =>
         `<div class="book-row"><span>${Number(level[0]).toFixed(2)}</span><span>${Number(level[1]).toFixed(5)}</span></div>`
     ).join('') || 'Нет данных';
 };
-function drawChart(candles) {
+function drawCandles(candles) {
     const canvas = document.getElementById('price-chart');
     const context = canvas.getContext('2d');
-    const values = candles.map(item => Number(item[4])).filter(Number.isFinite);
-    if (!values.length) return;
-    const width = canvas.clientWidth || 500;
+    const rows = (candles || []).filter(item => item && item.length >= 5);
+    const width = canvas.clientWidth || 600;
     canvas.width = width * 2;
-    canvas.height = 300;
+    canvas.height = 520;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    const min = Math.min(...values), max = Math.max(...values);
-    context.strokeStyle = '#2563eb';
-    context.lineWidth = 4;
-    context.beginPath();
-    values.forEach((value, index) => {
-        const x = index * canvas.width / Math.max(values.length - 1, 1);
-        const y = canvas.height - ((value - min) / Math.max(max - min, 1)) * (canvas.height - 20) - 10;
-        index ? context.lineTo(x, y) : context.moveTo(x, y);
+    if (!rows.length) return;
+    const highs = rows.map(r => Number(r[2]));
+    const lows = rows.map(r => Number(r[3]));
+    const min = Math.min(...lows), max = Math.max(...highs);
+    const range = Math.max(max - min, 1e-9);
+    const slot = canvas.width / rows.length;
+    const bodyWidth = Math.max(2, slot * 0.6);
+    const toY = value => canvas.height - 10 - ((value - min) / range) * (canvas.height - 20);
+    rows.forEach((candle, index) => {
+        const [, open, high, low, close] = candle.map(Number);
+        const x = index * slot + slot / 2;
+        const up = close >= open;
+        context.strokeStyle = up ? '#16a34a' : '#dc2626';
+        context.fillStyle = up ? '#16a34a' : '#dc2626';
+        context.lineWidth = 2;
+        context.beginPath();
+        context.moveTo(x, toY(high));
+        context.lineTo(x, toY(low));
+        context.stroke();
+        const openY = toY(open), closeY = toY(close);
+        const top = Math.min(openY, closeY);
+        const height = Math.max(1, Math.abs(closeY - openY));
+        context.fillRect(x - bodyWidth / 2, top, bodyWidth, height);
     });
-    context.stroke();
 }
-document.getElementById('refresh-market').addEventListener('click', async () => {
-    const response = await fetch(`/api/market/data?pair=${encodeURIComponent(pairSelect.value)}`);
-    const data = await response.json();
-    if (!response.ok) { document.getElementById('ticker').textContent = data.error; return; }
-    document.getElementById('market-source').textContent = `${data.exchange} · live`;
-    document.getElementById('ticker').innerHTML = `Цена: <strong>${Number(data.ticker.last).toFixed(2)}</strong> · Изменение: ${Number(data.ticker.change || 0).toFixed(2)}%`;
-    document.getElementById('manual-price').value = data.ticker.last || '';
-    renderLevels('bids', data.order_book.bids);
-    renderLevels('asks', data.order_book.asks);
-    drawChart(data.candles);
-});
+async function loadMarketData() {
+    const pair = pairSelect.value, exchange = exchangeSelect.value, timeframe = timeframeSelect.value;
+    document.getElementById('ticker').textContent = 'Загружаем данные...';
+    try {
+        const [tickerResponse, historyResponse] = await Promise.all([
+            fetch(`/api/market/data?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}`),
+            fetch(`/api/market/history?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}&timeframe=${encodeURIComponent(timeframe)}`),
+        ]);
+        const tickerData = await tickerResponse.json();
+        if (!tickerResponse.ok) throw new Error(tickerData.detail || 'Ошибка загрузки котировок');
+        const historyData = await historyResponse.json();
+        if (!historyResponse.ok) throw new Error(historyData.detail || 'Ошибка загрузки свечей');
+        document.getElementById('market-source').textContent = `${tickerData.exchange} · live`;
+        document.getElementById('ticker').innerHTML = `Цена: <strong>${Number(tickerData.ticker.last).toFixed(2)}</strong> · Изменение: ${Number(tickerData.ticker.change || 0).toFixed(2)}%`;
+        document.getElementById('manual-price').value = tickerData.ticker.last || '';
+        renderLevels('bids', tickerData.order_book.bids);
+        renderLevels('asks', tickerData.order_book.asks);
+        drawCandles(historyData.candles);
+    } catch (error) {
+        document.getElementById('ticker').textContent = error.message;
+    }
+}
+document.getElementById('refresh-market').addEventListener('click', loadMarketData);
 document.getElementById('manual-trade-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const payload = {pair: pairSelect.value, side: document.getElementById('manual-side').value,
@@ -197,7 +232,7 @@ document.getElementById('manual-trade-form').addEventListener('submit', async (e
         balance: Number(document.getElementById('manual-balance').value)};
     const response = await fetch('/api/trading/manual', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
     const data = await response.json();
-    document.getElementById('manual-result').textContent = response.ok ? `Исполнено. Комиссия: ${Number(data.fee).toFixed(4)}. Баланс: ${Number(data.balance).toFixed(2)}` : data.error;
+    document.getElementById('manual-result').textContent = response.ok ? `Исполнено. Комиссия: ${Number(data.fee).toFixed(4)}. Баланс: ${Number(data.balance).toFixed(2)}` : (data.detail || 'Ошибка исполнения');
     if (response.ok) loadHistory();
 });
 async function loadHistory() {
@@ -210,12 +245,12 @@ async function loadHistory() {
 }
 document.getElementById('run-backtest').addEventListener('click', async () => {
     const response = await fetch('/api/bot/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({pair: pairSelect.value, exchange: 'binance', initial_balance: 10})});
+        body: JSON.stringify({pair: pairSelect.value, exchange: exchangeSelect.value, initial_balance: 10})});
     const data = await response.json();
     document.getElementById('backtest-result').innerHTML = response.ok
         ? `<table><thead><tr><th>Стратегия</th><th>Баланс</th><th>P/L</th><th>ROI</th><th>Победы</th></tr></thead><tbody>${data.results.map(item =>
             `<tr><td>${item.strategy}</td><td>${item.final_balance.toFixed(2)}</td><td>${item.pnl.toFixed(2)}</td><td>${item.roi.toFixed(2)}%</td><td>${item.wins}/${item.trades}</td></tr>`).join('')}</tbody></table>`
-        : `<p class="message">${data.error}</p>`;
+        : `<p class="message">${data.detail || 'Ошибка backtest'}</p>`;
 });
 </script>
 {% endblock %}

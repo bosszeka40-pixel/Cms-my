@@ -8,6 +8,50 @@
     {% endif %}
     <div class="grid admin-grid">
         <details class="card" open>
+            <summary>Настройки сайта</summary>
+            <p class="muted">Название, доступные биржи/кошельки и режим обслуживания — применяются ко всему сайту.</p>
+            <form method="post">
+                <input type="hidden" name="action" value="save_site_settings">
+                <div class="field-group">
+                    <label for="site_name">Название сайта</label>
+                    <input type="text" id="site_name" name="site_name" value="{{ site_settings.site_name }}" required>
+                </div>
+                <div class="field-group">
+                    <label for="support_contact">Контакт поддержки</label>
+                    <input type="text" id="support_contact" name="support_contact" value="{{ site_settings.support_contact }}" placeholder="support@example.com">
+                </div>
+                <div class="field-group">
+                    <label><input type="checkbox" name="maintenance_mode" {% if site_settings.maintenance_mode == 'true' %}checked{% endif %}> Режим обслуживания (сайт закрыт для пользователей)</label>
+                </div>
+                <div class="field-group">
+                    <label>Доступные биржи в маркетплейсе</label>
+                    {% for ex in supported_exchanges %}
+                        <label style="display:inline-block; margin-right:10px;">
+                            <input type="checkbox" name="allowed_exchanges" value="{{ ex }}" {% if ex in allowed_exchanges %}checked{% endif %}> {{ ex }}
+                        </label>
+                    {% endfor %}
+                </div>
+                <div class="field-group">
+                    <label>Доступные кошельки в маркетплейсе</label>
+                    {% for w in wallet_providers %}
+                        <label style="display:inline-block; margin-right:10px;">
+                            <input type="checkbox" name="allowed_wallets" value="{{ w }}" {% if w in allowed_wallets %}checked{% endif %}> {{ w }}
+                        </label>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn">Сохранить настройки сайта</button>
+            </form>
+        </details>
+        <details class="card">
+            <summary>Вход через соцсети</summary>
+            <p class="muted">Статус OAuth-провайдеров (настраивается через переменные окружения на сервере).</p>
+            <ul>
+                <li>Google: <strong>{{ 'настроен' if google_configured else 'не настроен' }}</strong></li>
+                <li>GitHub: <strong>{{ 'настроен' if github_configured else 'не настроен' }}</strong></li>
+                <li>Telegram: <strong>{{ 'настроен' if telegram_configured else 'не настроен' }}</strong></li>
+            </ul>
+        </details>
+        <details class="card" open>
             <summary>Получение средств от продаж</summary>
             <p class="muted">Укажите реквизиты для зачисления выручки. Платёжные операции выполняются только после подключения соответствующего сервиса.</p>
             <form method="post">
