@@ -12,6 +12,9 @@
             <p><strong>Имя пользователя:</strong> {{ username }}</p>
             <p><strong>Email:</strong> {{ email }}</p>
             <p class="muted">Для изменения персональных данных обратитесь к администратору.</p>
+            {% if is_admin %}
+                <a class="btn" href="{{ url_for('admin_panel') }}">Админ панель</a>
+            {% endif %}
         </div>
         <div class="card">
             <h2>Оформление</h2>

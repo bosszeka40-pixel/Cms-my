@@ -513,6 +513,7 @@ async def settings_page(request: Request):
             message = "Выберите доступную тему оформления."
     user = engine.get_user(user_email)
     username = user.email if user else user_email
+    is_admin = bool(user and user.role == "admin")
     return templates.TemplateResponse(
         "settings.html",
         {
@@ -522,6 +523,7 @@ async def settings_page(request: Request):
             "email": user_email,
             "selected_theme": request.session.get("theme", "light"),
             "message": message,
+            "is_admin": is_admin,
         },
     )
 
