@@ -395,9 +395,8 @@ class PluginActionPayload(BaseModel):
 @app.get("/", name="index")
 async def serve_root(request: Request):
     return templates.TemplateResponse(
-        name="index.html",
-        request=request,
-        context={"user_id": request.session.get("user_email") if request.session else None}
+        "index.html",
+        {"request": request, "user_id": request.session.get("user_email") if request.session else None}
     )
 
 @app.get("/home", name="home")
@@ -413,9 +412,9 @@ DEV_ADMIN_EMAIL = "dev-admin@local"
 @app.get("/login", name="login")
 async def login_page(request: Request):
     return templates.TemplateResponse(
-        name="login.html",
-        request=request,
-        context={
+        "login.html",
+        {
+            "request": request,
             "message": None,
             "user_id": request.session.get("user_email"),
             "dev_admin_bypass_enabled": DEV_ADMIN_BYPASS_ENABLED,
@@ -440,9 +439,9 @@ async def login_submit(request: Request, username: str = Form(...), password: st
     if user:
         return _login_user(request, user)
     return templates.TemplateResponse(
-        name="login.html",
-        request=request,
-        context={
+        "login.html",
+        {
+            "request": request,
             "message": "Неверный логин или пароль.",
             "user_id": None,
             "dev_admin_bypass_enabled": DEV_ADMIN_BYPASS_ENABLED,
@@ -453,9 +452,9 @@ async def login_submit(request: Request, username: str = Form(...), password: st
 @app.get("/register", name="register")
 async def register_page(request: Request):
     return templates.TemplateResponse(
-        name="register.html",
-        request=request,
-        context={
+        "register.html",
+        {
+            "request": request,
             "message": None,
             "user_id": request.session.get("user_email"),
             **social_login_context(),
@@ -466,9 +465,8 @@ async def register_page(request: Request):
 async def register_submit(request: Request, username: str = Form(...), email: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
     if password != confirm_password:
         return templates.TemplateResponse(
-            name="register.html",
-            request=request,
-            context={"message": "Пароли не совпадают.", "user_id": None, **social_login_context()},
+            "register.html",
+            {"request": request, "message": "Пароли не совпадают.", "user_id": None, **social_login_context()},
         )
     try:
         user = engine.create_user(email, password)
@@ -476,25 +474,22 @@ async def register_submit(request: Request, username: str = Form(...), email: st
         return RedirectResponse(url="/dashboard", status_code=302)
     except Exception as e:
         return templates.TemplateResponse(
-            name="register.html",
-            request=request,
-            context={"message": f"Ошибка регистрации: {e}", "user_id": None, **social_login_context()},
+            "register.html",
+            {"request": request, "message": f"Ошибка регистрации: {e}", "user_id": None, **social_login_context()},
         )
 
 @app.get("/forgot-password", name="forgot_password")
 async def forgot_password_page(request: Request):
     return templates.TemplateResponse(
-        name="forgot_password.html",
-        request=request,
-        context={"message": None, "user_id": request.session.get("user_email")}
+        "forgot_password.html",
+        {"request": request, "message": None, "user_id": request.session.get("user_email")}
     )
 
 @app.post("/forgot-password")
 async def forgot_password_submit(request: Request, email: str = Form(...)):
     return templates.TemplateResponse(
-        name="forgot_password.html",
-        request=request,
-        context={"message": "Инструкции по восстановлению пароля отправлены на указанный email.", "user_id": request.session.get("user_email")}
+        "forgot_password.html",
+        {"request": request, "message": "Инструкции по восстановлению пароля отправлены на указанный email.", "user_id": request.session.get("user_email")}
     )
 
 @app.api_route("/dashboard", methods=["GET", "POST"], name="dashboard")
@@ -512,9 +507,9 @@ async def dashboard(request: Request):
     username = user.email if user else user_email
     balance = "—"
     return templates.TemplateResponse(
-        name="dashboard.html",
-        request=request,
-        context={
+        "dashboard.html",
+        {
+            "request": request,
             "username": username,
             "email": user_email,
             "balance": balance,
@@ -545,9 +540,9 @@ async def settings_page(request: Request):
     username = user.email if user else user_email
     is_admin = bool(user and user.role == "admin")
     return templates.TemplateResponse(
-        name="settings.html",
-        request=request,
-        context={
+        "settings.html",
+        {
+            "request": request,
             "user_id": user_email,
             "username": username,
             "email": user_email,
@@ -642,9 +637,9 @@ async def marketplace(request: Request):
     allowed_exchanges = {name.strip().lower() for name in site_settings["allowed_exchanges"].split(",") if name.strip()}
     allowed_wallets = [name.strip() for name in site_settings["allowed_wallets"].split(",") if name.strip()]
     return templates.TemplateResponse(
-        name="marketplace.html",
-        request=request,
-        context={
+        "marketplace.html",
+        {
+            "request": request,
             "user_id": user_email,
             "wallet": engine.get_or_create_wallet(user_email),
             "internal_currency": "CMS Credits (CMSC)",
@@ -685,9 +680,9 @@ async def bot_management(request: Request):
             except (TypeError, ValueError):
                 message = "Проверьте значения левериджа, риска и комиссии."
     return templates.TemplateResponse(
-        name="bot_management.html",
-        request=request,
-        context={
+        "bot_management.html",
+        {
+            "request": request,
             "user_id": user_email,
             "bot_status": bot.status(),
             "current_strategy": strategy_manager.current_strategy(),
@@ -724,9 +719,9 @@ async def wallet_page(request: Request):
                     "Обратитесь в поддержку для оплаты вручную."
                 )
     return templates.TemplateResponse(
-        name="wallet.html",
-        request=request,
-        context={
+        "wallet.html",
+        {
+            "request": request,
             "user_id": user_email,
             "user_email": user_email,
             "wallet": engine.get_or_create_wallet(user_email),
@@ -854,9 +849,9 @@ async def admin_panel(request: Request):
     all_wallets = engine.list_all_wallets()
     purchase_counts = Counter(item[1] for item in all_purchases)
     return templates.TemplateResponse(
-        name="admin.html",
-        request=request,
-        context={
+        "admin.html",
+        {
+            "request": request,
             "user_id": user_email,
             "users": engine.list_users(),
             "plugins": engine.list_plugins(),
