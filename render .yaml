@@ -1,0 +1,14 @@
+# Exported from Render on 2026-08-15T16:36:44Z
+version: "1"
+projects:
+- name: My project
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: Cms-my
+      runtime: static
+      repo: https://github.com/bosszeka40-pixel/Cms-my
+      buildCommand: pip install -r requirements.txt
+      staticPublishPath: pip install -r requirements.txt python run.py
+      autoDeployTrigger: commit
