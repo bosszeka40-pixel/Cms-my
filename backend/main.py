@@ -394,7 +394,11 @@ class PluginActionPayload(BaseModel):
 
 @app.get("/", name="index")
 async def serve_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "user_id": request.session.get("user_email")})
+    return templates.TemplateResponse(
+        name="index.html",
+        request=request,
+        context={"user_id": request.session.get("user_email") if request.session else None}
+    )
 
 @app.get("/home", name="home")
 async def home(request: Request):
