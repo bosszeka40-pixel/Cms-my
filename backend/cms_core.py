@@ -1,4 +1,5 @@
 import hashlib
+from pathlib import Path
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
@@ -89,8 +90,16 @@ class SiteSetting(Base):
 class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
         self.db_name = db_name
-        self.engine = engine
-        self.SessionLocal = SessionLocal
+        database_url = db_name if db_name.startswith("sqlite://") else f"sqlite:///./{Path(db_name)}"
+        self.engine = create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+        self.SessionLocal = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=self.engine,
+        )
         self.init_db()
 
     def init_db(self):
@@ -196,10 +205,7 @@ class CMSEngine:
         finally:
             session.close()
 
-    def purchase_plugin(
-        self, email: str, plugin_name: str, price: float | None = None,
-        duration_days: int = 15,
-    ):
+    def purchase_plugin(self, email: str, plugin_name: str, price: float | None = None, duration_days: int = 15):
         if duration_days not in {1, 3, 7, 14, 15, 30}:
             raise ValueError("Недопустимый срок доступа.")
         session = self.SessionLocal()
@@ -208,27 +214,14 @@ class CMSEngine:
             plugin = session.query(Plugin).filter(Plugin.name == plugin_name).first()
             if not user or not plugin:
                 return None
-            purchase = session.query(UserPlugin).filter_by(
-                user_id=user.id, plugin_id=plugin.id
-            ).first()
+            purchase = session.query(UserPlugin).filter_by(user_id=user.id, plugin_id=plugin.id).first()
             if not purchase:
-                purchase = UserPlugin(
-                    user_id=user.id,
-                    plugin_id=plugin.id,
-                    active=False,
-                    access_until=datetime.utcnow() + timedelta(days=duration_days),
-                )
+                purchase = UserPlugin(user_id=user.id, plugin_id=plugin.id, active=False, access_until=datetime.utcnow() + timedelta(days=duration_days))
                 session.add(purchase)
             else:
                 purchase.access_until = datetime.utcnow() + timedelta(days=duration_days)
             session.commit()
-            return {
-                "name": plugin.name,
-                "price_eur": float(plugin.price if price is None else price),
-                "active": purchase.active,
-                "access_until": purchase.access_until.isoformat(),
-                "access_days": duration_days,
-            }
+            return {"name": plugin.name, "price_eur": float(plugin.price if price is None else price), "active": purchase.active, "access_until": purchase.access_until.isoformat(), "access_days": duration_days}
         finally:
             session.close()
 
@@ -239,9 +232,7 @@ class CMSEngine:
             plugin = session.query(Plugin).filter(Plugin.name == plugin_name).first()
             if not user or not plugin:
                 return False
-            purchase = session.query(UserPlugin).filter_by(
-                user_id=user.id, plugin_id=plugin.id
-            ).first()
+            purchase = session.query(UserPlugin).filter_by(user_id=user.id, plugin_id=plugin.id).first()
             if not purchase:
                 return False
             if purchase.access_until and purchase.access_until <= datetime.utcnow():
@@ -261,46 +252,20 @@ class CMSEngine:
             if not user:
                 return []
             now = datetime.utcnow()
-            return [
-                {
-                    "name": item[0].name,
-                    "price_eur": item[0].price,
-                    "active": item[1].active and (
-                        item[1].access_until is None or item[1].access_until > now
-                    ),
-                    "access_until": item[1].access_until.isoformat()
-                    if item[1].access_until else None,
-                    "when": item[1].purchased_at.isoformat()
-                    if item[1].purchased_at else None,
-                }
-                for item in session.query(Plugin, UserPlugin)
-                .join(UserPlugin, UserPlugin.plugin_id == Plugin.id)
-                .filter(UserPlugin.user_id == user.id)
-                .all()
-            ]
+            return [{"name": item[0].name, "price_eur": item[0].price, "active": item[1].active and (item[1].access_until is None or item[1].access_until > now), "access_until": item[1].access_until.isoformat() if item[1].access_until else None, "when": item[1].purchased_at.isoformat() if item[1].purchased_at else None} for item in session.query(Plugin, UserPlugin).join(UserPlugin, UserPlugin.plugin_id == Plugin.id).filter(UserPlugin.user_id == user.id).all()]
         finally:
             session.close()
 
     def record_memory(self, action: str, result: float, context: str = "", user_id: str | None = None):
         session = self.SessionLocal()
         try:
-            memory = LearningMemory(
-                user_id=user_id, action=action, result=float(result), context=context
-            )
+            memory = LearningMemory(user_id=user_id, action=action, result=float(result), context=context)
             session.add(memory)
             session.commit()
             if action == "strategy_test" and result > 0:
-                profitable_tests = session.query(LearningMemory).filter(
-                    LearningMemory.action == "strategy_test", LearningMemory.result > 0
-                ).count()
-                if profitable_tests >= 3 and not session.query(Plugin).filter(
-                    Plugin.name == "learned_adaptive_momentum"
-                ).first():
-                    session.add(Plugin(
-                        name="learned_adaptive_momentum",
-                        price=25.0,
-                        description="Стратегия, добавленная после анализа успешных тестов памяти бота.",
-                    ))
+                profitable_tests = session.query(LearningMemory).filter(LearningMemory.action == "strategy_test", LearningMemory.result > 0).count()
+                if profitable_tests >= 3 and not session.query(Plugin).filter(Plugin.name == "learned_adaptive_momentum").first():
+                    session.add(Plugin(name="learned_adaptive_momentum", price=25.0, description="Стратегия, добавленная после анализа успешных тестов памяти бота."))
                     session.commit()
         finally:
             session.close()
@@ -310,14 +275,8 @@ class CMSEngine:
         try:
             query = session.query(LearningMemory).order_by(LearningMemory.created_at.desc())
             if user_id:
-                query = query.filter(
-                    (LearningMemory.user_id == user_id) | (LearningMemory.user_id.is_(None))
-                )
-            return [
-                {"action": item.action, "result": item.result, "context": item.context,
-                 "created_at": item.created_at.isoformat()}
-                for item in query.limit(limit).all()
-            ]
+                query = query.filter((LearningMemory.user_id == user_id) | (LearningMemory.user_id.is_(None)))
+            return [{"action": item.action, "result": item.result, "context": item.context, "created_at": item.created_at.isoformat()} for item in query.limit(limit).all()]
         finally:
             session.close()
 
@@ -370,20 +329,8 @@ class CMSEngine:
     @staticmethod
     def _wallet_to_dict(wallet) -> dict:
         if not wallet:
-            return {
-                "credits": 0.0, "balance": 0.0, "provider": None, "address": None,
-                "exchange_provider": None, "exchange_address": None,
-                "telegram": None,
-            }
-        return {
-            "credits": wallet.credits or 0.0,
-            "balance": wallet.credits or 0.0,
-            "provider": wallet.wallet_provider,
-            "address": wallet.wallet_address,
-            "exchange_provider": wallet.exchange_provider,
-            "exchange_address": wallet.exchange_key_masked,
-            "telegram": wallet.telegram_username,
-        }
+            return {"credits": 0.0, "balance": 0.0, "provider": None, "address": None, "exchange_provider": None, "exchange_address": None, "telegram": None}
+        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "telegram": wallet.telegram_username}
 
     def update_wallet(self, email: str, **fields) -> dict:
         session = self.SessionLocal()
@@ -426,10 +373,7 @@ class CMSEngine:
             user = session.query(User).filter(User.email == email).first()
             if not user:
                 return None
-            trade = Trade(
-                user_id=user.id, pair=pair, mode=mode, strategy=strategy,
-                pnl=float(pnl), balance=float(balance),
-            )
+            trade = Trade(user_id=user.id, pair=pair, mode=mode, strategy=strategy, pnl=float(pnl), balance=float(balance))
             session.add(trade)
             session.commit()
             session.refresh(trade)
@@ -443,34 +387,15 @@ class CMSEngine:
             user = session.query(User).filter(User.email == email).first()
             if not user:
                 return []
-            trades = (
-                session.query(Trade)
-                .filter(Trade.user_id == user.id)
-                .order_by(Trade.created_at.desc())
-                .limit(limit)
-                .all()
-            )
-            return [
-                {
-                    "created_at": trade.created_at.isoformat(),
-                    "mode": trade.mode,
-                    "pair": trade.pair,
-                    "strategy": trade.strategy,
-                    "pnl": trade.pnl,
-                    "balance": trade.balance,
-                }
-                for trade in trades
-            ]
+            trades = session.query(Trade).filter(Trade.user_id == user.id).order_by(Trade.created_at.desc()).limit(limit).all()
+            return [{"created_at": trade.created_at.isoformat(), "mode": trade.mode, "pair": trade.pair, "strategy": trade.strategy, "pnl": trade.pnl, "balance": trade.balance} for trade in trades]
         finally:
             session.close()
 
     def list_users(self):
         session = self.SessionLocal()
         try:
-            return [
-                (user.id, user.email, user.kyc_status, user.role)
-                for user in session.query(User).order_by(User.id).all()
-            ]
+            return [(user.id, user.email, user.kyc_status, user.role) for user in session.query(User).order_by(User.id).all()]
         finally:
             session.close()
 
@@ -489,51 +414,21 @@ class CMSEngine:
     def list_all_wallets(self):
         session = self.SessionLocal()
         try:
-            rows = (
-                session.query(User, Wallet)
-                .join(Wallet, Wallet.user_id == User.id)
-                .order_by(User.id)
-                .all()
-            )
-            return [
-                (
-                    user.id, wallet.credits or 0.0, wallet.wallet_provider,
-                    wallet.wallet_address, wallet.exchange_provider,
-                    wallet.exchange_key_masked, wallet.telegram_username,
-                )
-                for user, wallet in rows
-            ]
+            rows = session.query(User, Wallet).join(Wallet, Wallet.user_id == User.id).order_by(User.id).all()
+            return [(user.id, wallet.credits or 0.0, wallet.wallet_provider, wallet.wallet_address, wallet.exchange_provider, wallet.exchange_key_masked, wallet.telegram_username) for user, wallet in rows]
         finally:
             session.close()
 
     def list_all_purchases(self):
         session = self.SessionLocal()
         try:
-            rows = (
-                session.query(User, Plugin, UserPlugin)
-                .join(UserPlugin, UserPlugin.user_id == User.id)
-                .join(Plugin, Plugin.id == UserPlugin.plugin_id)
-                .order_by(UserPlugin.purchased_at.desc())
-                .all()
-            )
-            return [
-                (
-                    user.id, plugin.name,
-                    purchase.purchased_at.isoformat() if purchase.purchased_at else "",
-                )
-                for user, plugin, purchase in rows
-            ]
+            rows = session.query(User, Plugin, UserPlugin).join(UserPlugin, UserPlugin.user_id == User.id).join(Plugin, Plugin.id == UserPlugin.plugin_id).order_by(UserPlugin.purchased_at.desc()).all()
+            return [(user.id, plugin.name, purchase.purchased_at.isoformat() if purchase.purchased_at else "") for user, plugin, purchase in rows]
         finally:
             session.close()
 
     def get_site_settings(self) -> dict:
-        defaults = {
-            "site_name": "Super CMS V12",
-            "maintenance_mode": "false",
-            "allowed_exchanges": "binance,bybit,kraken,okx,bitfinex",
-            "allowed_wallets": "MetaMask,Trust Wallet,Binance Wallet,WalletConnect,Ledger,Trezor",
-            "support_contact": "",
-        }
+        defaults = {"site_name": "Super CMS V12", "maintenance_mode": "false", "allowed_exchanges": "binance,bybit,kraken,okx,bitfinex", "allowed_wallets": "MetaMask,Trust Wallet,Binance Wallet,WalletConnect,Ledger,Trezor", "support_contact": ""}
         session = self.SessionLocal()
         try:
             stored = {row.key: row.value for row in session.query(SiteSetting).all()}
