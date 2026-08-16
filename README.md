@@ -116,3 +116,5 @@ http://127.0.0.1:8000
 - Win Rate: 93.9%
 - Leverage: 4.0x
 - Active Trading Knowledge: VSA, Order Flow, Liquidity Sweeps, Compound
+
+<!-- GitHub edit-access test: 2026-08-17 -->
