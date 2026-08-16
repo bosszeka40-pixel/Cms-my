@@ -28,10 +28,12 @@ def create_user(payload: UserCreate, request: Request):
     return {"id": user.id, "email": user.email, "kyc_status": user.kyc_status}
 
 @router.post("/login")
-def admin_login(payload: UserLogin):
+def admin_login(payload: UserLogin, request: Request):
     user = engine.secure_login(payload.email, payload.password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=401, detail="Неверный email или пароль администратора")
+    request.session["user_email"] = user.email
+    request.session["is_admin"] = True
     return {"status": "success", "email": user.email, "role": user.role}
 
 @router.post("/plugins")
