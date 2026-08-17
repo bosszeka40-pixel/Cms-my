@@ -10,7 +10,7 @@ def test_install_creates_first_admin_and_blocks_second(tmp_path, monkeypatch):
     marker = tmp_path / "instance" / ".installed"
     monkeypatch.setattr(installer, "INSTALL_MARKER", Path(marker))
 
-    engine = CMSEngine(str(db_path))
+    engine = CMSEngine(f"sqlite:///{db_path}")
     user = install_first_admin(engine, "admin@example.com", "A" * 12, "A" * 12)
 
     assert user.role == "admin"
