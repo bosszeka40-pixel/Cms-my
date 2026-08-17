@@ -4,6 +4,8 @@ from threading import Lock
 
 import ccxt
 
+from backend.security.execution_policy import assert_real_order_allowed
+
 
 SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
 
@@ -43,7 +45,6 @@ class ExchangeService:
         if sandbox:
             client.set_sandbox_mode(True)
         client.load_markets()
-        # Fetching the balance verifies authentication without exposing credentials.
         client.fetch_balance()
         with self._lock:
             self._clients[user_id] = {
@@ -115,6 +116,7 @@ class ExchangeService:
         return float(connection["client"].amount_to_precision(symbol, amount_min))
 
     def create_order(self, user_id, symbol, order_type, side, amount, price=None, params=None):
+        assert_real_order_allowed()
         connection = self.get(user_id)
         client = connection["client"]
         order_type = (order_type or "").lower()
@@ -138,5 +140,6 @@ class ExchangeService:
         return client.create_order(symbol, order_type, side, amount, price, params or {})
 
     def cancel_order(self, user_id, order_id, symbol, params=None):
+        assert_real_order_allowed()
         connection = self.get(user_id)
         return connection["client"].cancel_order(order_id, symbol, params or {})
