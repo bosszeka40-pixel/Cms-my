@@ -1,6 +1,13 @@
-import yaml
+import math
 from pathlib import Path
+
+import yaml
+
 from .daily_harvester import DailyCompoundHarvesterModule, HarvesterStrategy
+
+
+MAX_LEVERAGE = 2.0
+
 
 class StrategyManager:
     def __init__(self, config_path: str = "backend/config.yaml"):
@@ -22,22 +29,47 @@ class StrategyManager:
     def current_strategy(self) -> str:
         return self.config.get("strategy", HarvesterStrategy.PURE.value)
 
-    def execute(self, news_sentiment: float, price_change: float, current_balance: float,
-                fee_rate: float | None = None) -> dict:
+    def execute(
+        self,
+        news_sentiment: float,
+        price_change: float,
+        current_balance: float,
+        fee_rate: float | None = None,
+    ) -> dict:
+        values = (news_sentiment, price_change, current_balance)
+        if not all(math.isfinite(float(value)) for value in values):
+            raise ValueError("Входные значения стратегии должны быть конечными числами.")
+        if current_balance <= 0:
+            raise ValueError("Текущий баланс должен быть положительным.")
+
         strategy = self.current_strategy()
         leverage = float(self.config.get("leverage", 1.5))
+        if not math.isfinite(leverage) or leverage <= 0 or leverage > MAX_LEVERAGE:
+            raise ValueError("Плечо должно быть конечным, положительным и не превышать 2x.")
+
         fee_rate = float(self.config.get("fee_rate", 0.001) if fee_rate is None else fee_rate)
-        if fee_rate < 0:
-            raise ValueError("Комиссия не может быть отрицательной.")
+        if not math.isfinite(fee_rate) or fee_rate < 0 or fee_rate > 0.05:
+            raise ValueError("Комиссия должна быть конечной и находиться в диапазоне 0..5%.")
 
         if strategy == HarvesterStrategy.PURE.value:
-            next_balance, signal = self.module.process_tick(news_sentiment, price_change, current_balance, leverage)
+            next_balance, signal = self.module.process_tick(
+                news_sentiment, price_change, current_balance, leverage
+            )
         elif strategy == HarvesterStrategy.HFT_MOMENTUM.value:
-            next_balance, signal = self.module.process_high_frequency(news_sentiment, price_change, current_balance, leverage)
+            next_balance, signal = self.module.process_high_frequency(
+                news_sentiment, price_change, current_balance, leverage
+            )
         elif strategy == HarvesterStrategy.COMPOUND_DEFENDER.value:
-            next_balance, signal = self.module.process_defender(news_sentiment, price_change, current_balance, leverage)
+            next_balance, signal = self.module.process_defender(
+                news_sentiment, price_change, current_balance, leverage
+            )
         else:
-            next_balance, signal = self.module.process_tick(news_sentiment, price_change, current_balance, leverage)
+            next_balance, signal = self.module.process_tick(
+                news_sentiment, price_change, current_balance, leverage
+            )
+
+        if not math.isfinite(next_balance):
+            raise ValueError("Стратегия вернула некорректный баланс.")
 
         fee = current_balance * leverage * fee_rate * 2
         net_balance = max(0.0, next_balance - fee)
@@ -50,5 +82,5 @@ class StrategyManager:
             "fee": fee,
             "pnl": net_balance - current_balance,
             "signal": signal,
-            "leverage": leverage
+            "leverage": leverage,
         }
