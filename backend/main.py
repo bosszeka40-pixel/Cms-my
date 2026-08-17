@@ -405,7 +405,10 @@ async def home(request: Request):
 
 
 # TODO: временный обход входа для админа без пароля. Убрать перед выпуском в продакшн.
-DEV_ADMIN_BYPASS_ENABLED = os.getenv("APP_ENV", "development").lower() != "production"
+DEV_ADMIN_BYPASS_ENABLED = (
+    os.getenv("APP_ENV", "development").lower() != "production"
+    and os.getenv("DEV_ADMIN_BYPASS", "false").lower() == "true"
+)
 DEV_ADMIN_EMAIL = "dev-admin@local"
 
 
