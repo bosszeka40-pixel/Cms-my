@@ -2,6 +2,7 @@ import ccxt
 import pytest
 
 from backend.security.execution_gateway import submit_real_order
+from backend.security.live_controls import LiveControlState
 
 
 def test_ccxt_client_blocks_create_order_by_default(monkeypatch):
@@ -32,7 +33,18 @@ def test_gateway_allows_executor_only_when_live_gate_is_explicit(monkeypatch):
         calls.append((args, kwargs))
         return {"id": "test-order"}
 
-    result = submit_real_order(fake_executor, "BTC/USDT", "market", "buy", 0.001)
+    state = LiveControlState()
+    state.set_global_kill_switch(enabled=False, actor="admin")
+    state.set_bot_live("bot-1", enabled=True, actor="admin")
+    result = submit_real_order(
+        fake_executor,
+        "BTC/USDT",
+        "market",
+        "buy",
+        0.001,
+        live_state=state,
+        bot_id="bot-1",
+    )
 
     assert result == {"id": "test-order"}
     assert calls
