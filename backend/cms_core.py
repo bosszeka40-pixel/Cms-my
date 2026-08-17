@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from pathlib import Path
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, DateTime, Text, ForeignKey
@@ -465,4 +466,4 @@ class CMSEngine:
 
 
 def hmac_compare(left: str, right: str) -> bool:
-    return hashlib.sha256(left.encode("utf-8")).digest() == hashlib.sha256(right.encode("utf-8")).digest() if left and right else False
+    return hmac.compare_digest(left or "", right or "")
