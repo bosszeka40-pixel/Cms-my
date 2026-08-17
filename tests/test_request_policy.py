@@ -2,7 +2,12 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from backend.security.request_policy import client_safe_error, require_user, require_virtual_execution
+from backend.security.request_policy import (
+    client_safe_error,
+    enforce_rate_limit,
+    require_user,
+    require_virtual_execution,
+)
 
 
 def _request(session=None, headers=None):
@@ -36,6 +41,15 @@ def test_virtual_policy_rejects_explicit_live_header():
 
 def test_virtual_policy_accepts_default_virtual_mode():
     assert require_virtual_execution(_request({"user_email": "user@example.test"})) == "user@example.test"
+
+
+def test_rate_limit_rejects_after_limit():
+    key = "test-rate-limit"
+    enforce_rate_limit(key, limit=2, window_seconds=60)
+    enforce_rate_limit(key, limit=2, window_seconds=60)
+    with pytest.raises(HTTPException) as exc:
+        enforce_rate_limit(key, limit=2, window_seconds=60)
+    assert exc.value.status_code == 429
 
 
 def test_client_safe_error_does_not_require_provider_details():
