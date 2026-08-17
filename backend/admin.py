@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr
 from .cms_core import CMSEngine
 from .password_compat import install_password_migration
 from .ai_shadow import AIShadowTrader
+from .ai_shadow_feed import AIShadowMarketFeed
 from .bot import HFTBot
 from .modules.strategy_manager import StrategyManager
 from .risk_management import RiskManager
@@ -12,6 +13,7 @@ install_password_migration(CMSEngine)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 engine = CMSEngine()
+shadow_feed = AIShadowMarketFeed(engine)
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -43,6 +45,11 @@ class AIShadowSettlePayload(BaseModel):
 class AIShadowMonitorPayload(BaseModel):
     pair: str = "BTC/USDT"
     market_price: float
+
+class AIShadowFeedStartPayload(BaseModel):
+    exchange: str = "binance"
+    pair: str = "BTC/USDT"
+    interval_seconds: float = 1.0
 
 
 def _normalize_email(email: str) -> str:
@@ -131,3 +138,29 @@ def ai_shadow_monitor(payload: AIShadowMonitorPayload, request: Request):
                 "settled": trader.monitor(user_email=user.email, pair=payload.pair, market_price=payload.market_price)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/ai-shadow/feed/start")
+async def ai_shadow_feed_start(payload: AIShadowFeedStartPayload, request: Request):
+    user = _require_admin(request)
+    try:
+        return await shadow_feed.start(
+            user_email=user.email,
+            exchange=payload.exchange,
+            pair=payload.pair,
+            interval_seconds=payload.interval_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/ai-shadow/feed/stop")
+async def ai_shadow_feed_stop(request: Request):
+    _require_admin(request)
+    return await shadow_feed.stop()
+
+
+@router.get("/ai-shadow/feed/status")
+def ai_shadow_feed_status(request: Request):
+    _require_admin(request)
+    return shadow_feed.status()
