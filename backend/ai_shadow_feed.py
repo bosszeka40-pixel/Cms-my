@@ -14,6 +14,7 @@ import ccxt
 
 from .ai_shadow import AIShadowTrader
 from .cms_core import CMSEngine
+from .execution_guard import assert_shadow_only, ExecutionPolicyError
 from .bot import HFTBot
 from .modules.strategy_manager import StrategyManager
 from .risk_management import RiskManager
@@ -55,6 +56,10 @@ class AIShadowMarketFeed:
         return exchange_class({"enableRateLimit": True})
 
     async def start(self, *, user_email: str, exchange: str, pair: str, interval_seconds: float = 1.0):
+        try:
+            assert_shadow_only()
+        except ExecutionPolicyError as exc:
+            raise ValueError(str(exc)) from exc
         if self._task and not self._task.done():
             raise ValueError("AI Shadow market feed уже запущен.")
         if not pair or "/" not in pair:
@@ -122,7 +127,12 @@ class AIShadowMarketFeed:
                 self.state.last_error = str(exc)
 
             elapsed = time.monotonic() - started
-            await asyncio.wait_for(self._stop.wait(), timeout=max(0.05, self.state.interval_seconds - elapsed)) if not self._stop.is_set() else None
+            if self._stop.is_set():
+                break
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=max(0.05, self.state.interval_seconds - elapsed))
+            except asyncio.TimeoutError:
+                pass
 
     def status(self) -> dict[str, Any]:
         return {
