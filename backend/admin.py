@@ -4,6 +4,7 @@ from .cms_core import CMSEngine
 from .password_compat import install_password_migration
 from .ai_shadow import AIShadowTrader
 from .ai_shadow_feed import AIShadowMarketFeed
+from .execution_guard import require_shadow_mode, ExecutionPolicyError
 from .bot import HFTBot
 from .modules.strategy_manager import StrategyManager
 from .risk_management import RiskManager
@@ -64,6 +65,14 @@ def _require_admin(request: Request):
     return user
 
 
+def _require_shadow(request: Request):
+    _require_admin(request)
+    try:
+        return require_shadow_mode()
+    except ExecutionPolicyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/users")
 def create_user(payload: UserCreate, request: Request):
     _require_admin(request)
@@ -106,7 +115,7 @@ def list_plugins(request: Request):
 
 @router.post("/ai-shadow/evaluate")
 def ai_shadow_evaluate(payload: AIShadowPayload, request: Request):
-    user = _require_admin(request)
+    user = _require_shadow(request)
     trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
     try:
         return trader.evaluate(
@@ -121,7 +130,7 @@ def ai_shadow_evaluate(payload: AIShadowPayload, request: Request):
 
 @router.post("/ai-shadow/settle")
 def ai_shadow_settle(payload: AIShadowSettlePayload, request: Request):
-    user = _require_admin(request)
+    user = _require_shadow(request)
     trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
     try:
         return trader.settle(user_email=user.email, trade_id=payload.trade_id, exit_price=payload.exit_price)
@@ -131,7 +140,7 @@ def ai_shadow_settle(payload: AIShadowSettlePayload, request: Request):
 
 @router.post("/ai-shadow/monitor")
 def ai_shadow_monitor(payload: AIShadowMonitorPayload, request: Request):
-    user = _require_admin(request)
+    user = _require_shadow(request)
     trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
     try:
         return {"pair": payload.pair, "market_price": payload.market_price,
@@ -142,7 +151,7 @@ def ai_shadow_monitor(payload: AIShadowMonitorPayload, request: Request):
 
 @router.post("/ai-shadow/feed/start")
 async def ai_shadow_feed_start(payload: AIShadowFeedStartPayload, request: Request):
-    user = _require_admin(request)
+    user = _require_shadow(request)
     try:
         return await shadow_feed.start(
             user_email=user.email,
@@ -156,11 +165,11 @@ async def ai_shadow_feed_start(payload: AIShadowFeedStartPayload, request: Reque
 
 @router.post("/ai-shadow/feed/stop")
 async def ai_shadow_feed_stop(request: Request):
-    _require_admin(request)
+    _require_shadow(request)
     return await shadow_feed.stop()
 
 
 @router.get("/ai-shadow/feed/status")
 def ai_shadow_feed_status(request: Request):
-    _require_admin(request)
+    _require_shadow(request)
     return shadow_feed.status()
