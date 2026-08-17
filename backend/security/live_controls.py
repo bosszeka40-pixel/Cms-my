@@ -60,6 +60,21 @@ class LiveControlState:
             return False
         return True
 
+    def snapshot(self) -> dict[str, object]:
+        """Return a JSON-safe administrative view without exposing internals."""
+        return {
+            "global_kill_switch": self.global_kill_switch,
+            "bot_live": dict(self.bot_live),
+            "ai_bot_live": dict(self.ai_bot_live),
+            "audit_log": list(self.audit_log),
+        }
+
+
+# Process-local control state is intentionally fail-closed on startup. A restart
+# therefore cannot silently re-enable LIVE trading. Persistent storage can be
+# added later, but the execution gateway must continue to require explicit state.
+LIVE_CONTROL_STATE = LiveControlState()
+
 
 def assert_live_controlled(
     state: LiveControlState, *, bot_id: str, ai_bot_id: str | None = None
