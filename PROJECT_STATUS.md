@@ -17,11 +17,11 @@
 - `main` не изменять напрямую во время этого этапа.
 
 ## Installation / Admin
-- [ ] `IN PROGRESS` — подключить `/install` к реальной модели `User` и существующей БД.
-- [ ] `TODO` — создать первого администратора через installer.
-- [ ] `TODO` — безопасное хэширование пароля и совместимость с существующими пользователями.
-- [ ] `TODO` — после установки создать installation marker.
-- [ ] `TODO` — заблокировать `/install` после завершения установки.
+- [ ] `IN PROGRESS` — подключить HTTP `/install` к реальной модели `User` и существующей БД.
+- [x] `VERIFY` — сервис создания первого admin использует существующую модель `User`/`CMSEngine`.
+- [x] `VERIFY` — повторная установка блокируется installation marker.
+- [x] `VERIFY` — добавлен интеграционный regression test installer.
+- [ ] `TODO` — создать UI/HTTP маршрут `/install`.
 - [ ] `TODO` — нормальный admin login без DEV bypass в production.
 - [ ] `TODO` — DEV bypass оставить только для development и сделать explicit opt-in.
 
@@ -29,6 +29,7 @@
 - [x] `DONE` — production требует `SECRET_KEY`.
 - [x] `DONE` — production session cookies могут быть `https_only`.
 - [x] `DONE` — OAuth state проверяется.
+- [x] `VERIFY` — добавлен password migration layer: scrypt для новых паролей + автоматическая миграция старого SHA-256 после успешного входа.
 - [ ] `TODO` — CSRF-защита браузерных POST.
 - [ ] `TODO` — rate limiting login.
 - [ ] `TODO` — проверить авторизацию всех `/api/*` endpoints.
@@ -66,11 +67,13 @@
 - [ ] `TODO` — после аудита удалить только подтверждённый legacy.
 
 ## Existing changes — verify
-- [ ] `VERIFY` — добавлен `backend/installer.py`.
-- [ ] `VERIFY` — добавлен `templates/install.html`.
-- [ ] `VERIFY` — добавлен `tests/test_installer.py`.
-- [ ] `VERIFY` — выполнена первая уборка legacy/pycache.
-- [ ] `VERIFY` — обновлены Render/dependency/security настройки в текущей ветке.
+- [x] `VERIFY` — добавлен `backend/installer.py`.
+- [x] `VERIFY` — добавлен `backend/install_service.py`.
+- [x] `VERIFY` — добавлен `backend/password_compat.py`.
+- [x] `VERIFY` — добавлен `templates/install.html`.
+- [x] `VERIFY` — добавлены installer tests.
+- [ ] `VERIFY` — первая уборка legacy/pycache требует полного regression run.
+- [ ] `VERIFY` — Render/dependency/security изменения требуют полного CI.
 
 ## Before merge
 - [ ] Полный unit test suite.
@@ -85,3 +88,4 @@
 ## Notes
 - DEV-вход без пароля был временным и нужен для разработки. Не ломать его без замены installer/admin flow.
 - Приоритет: сохранить существующий функционал → исправить безопасность → восстановить отсутствующий UI → удалить подтверждённый legacy.
+- Не считать `VERIFY` завершённым, пока код не прошёл тесты и интеграционную проверку.
