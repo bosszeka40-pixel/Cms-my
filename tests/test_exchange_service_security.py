@@ -38,7 +38,7 @@ def test_exchange_service_does_not_persist_credentials(monkeypatch):
 
     assert "SECRET_API_KEY" not in repr(stored)
     assert "SECRET_API_SECRET" not in repr(stored)
-    assert stored["api_key_hint"] == "SECR...CRET"
+    assert stored["api_key_hint"] == "SECR..._KEY"
 
 
 def test_exchange_service_blocks_order_in_shadow(monkeypatch):
