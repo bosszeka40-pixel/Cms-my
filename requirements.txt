@@ -2,6 +2,7 @@ fastapi==0.109.2
 uvicorn==0.27.0
 ccxt==4.2.25
 pydantic==2.6.4
+email-validator==2.2.0
 requests==2.34.2
 sqlalchemy==2.0.28
 numpy==1.26.4
