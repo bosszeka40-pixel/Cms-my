@@ -5,7 +5,7 @@ Updated: 2026-08-17
 ## Control points
 
 - Current working branch: `cleanup/security-hardening-2026-08`
-- Latest checkpoint: `a682ee370b8adfc59f922d11cdd233f1c99cae18`
+- Latest checkpoint: `4966c9accef00ce20864c1dd40f94b65cd4d9567`
 - Git commits remain the rollback mechanism; this file is the navigation/checklist.
 
 ## Done / verified
@@ -18,10 +18,12 @@ Updated: 2026-08-17
 - [x] Added automated unit coverage for the execution policy: DEMO default, unknown-mode fail-closed, independent LIVE gate, and virtual/live separation.
 - [x] CI compile step passes on checkpoint `ca8310b`.
 - [x] CI dependency audit found missing declared dependencies (`Werkzeug`, `PyYAML`); both are now declared in `requirements.txt`.
+- [x] Added static CMS request/path mapper: `tools/cms_request_mapper.py`.
 
 ## Done but requires verification
 
 - [ ] Re-run CI after dependency fix.
+- [ ] Run `python tools/cms_request_mapper.py` and inspect generated `docs/REQUEST_MAP.md`/`.json`.
 - [ ] Wire execution policy directly into every private exchange execution path.
 - [ ] Verify all `create_order`, `cancel_order`, and private CCXT calls.
 - [ ] Verify `/api/user/connect-exchange` requires an authenticated user and does not persist raw secrets.
@@ -51,6 +53,8 @@ Updated: 2026-08-17
 
 ## Request / execution audit
 
+- [x] Static request/path mapper added.
+- [ ] Generate and inspect the full request map.
 - [ ] Trace all application calls that can reach an exchange.
 - [ ] Separate public market-data calls from private authenticated calls.
 - [ ] Prove DEMO/SHADOW cannot reach private order methods.
