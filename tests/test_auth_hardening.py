@@ -5,6 +5,8 @@ import pytest
 
 def _load_main(monkeypatch, app_env):
     monkeypatch.setenv("APP_ENV", app_env)
+    if app_env == "production":
+        monkeypatch.setenv("SECRET_KEY", "test-secret-key")
     import backend.main as main
     return importlib.reload(main)
 
