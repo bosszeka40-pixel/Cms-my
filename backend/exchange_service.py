@@ -5,6 +5,7 @@ from threading import Lock
 import ccxt
 
 from .security.execution_gateway import cancel_real_order, submit_real_order
+from .security.execution_policy import current_mode, real_execution_allowed
 
 
 SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
@@ -65,12 +66,14 @@ class ExchangeService:
 
     def status(self, user_id):
         connection = self.get(user_id) if user_id in self._clients else None
+        mode = current_mode().value
         return {
             "connected": bool(connection),
             "exchange": connection["name"] if connection else None,
             "sandbox": connection["sandbox"] if connection else None,
             "api_key": connection["api_key_hint"] if connection else None,
-            "live_trading_enabled": os.getenv("LIVE_TRADING_ENABLED", "false").lower() == "true",
+            "trading_mode": mode,
+            "live_trading_enabled": real_execution_allowed(),
         }
 
     def disconnect(self, user_id):
