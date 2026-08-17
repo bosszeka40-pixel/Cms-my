@@ -8,6 +8,7 @@ from .execution_guard import require_shadow_mode, ExecutionPolicyError
 from .bot import HFTBot
 from .modules.strategy_manager import StrategyManager
 from .risk_management import RiskManager
+from .security.live_controls import LIVE_CONTROL_STATE
 
 # Install the password migration before any CMSEngine instance is created.
 install_password_migration(CMSEngine)
@@ -52,6 +53,9 @@ class AIShadowFeedStartPayload(BaseModel):
     pair: str = "BTC/USDT"
     interval_seconds: float = 1.0
 
+class LiveTogglePayload(BaseModel):
+    enabled: bool
+
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
@@ -71,6 +75,45 @@ def _require_shadow(request: Request):
         return require_shadow_mode()
     except ExecutionPolicyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/live-controls")
+def live_controls(request: Request):
+    _require_admin(request)
+    return LIVE_CONTROL_STATE.snapshot()
+
+
+@router.post("/live-controls/global")
+def set_global_live_control(payload: LiveTogglePayload, request: Request):
+    admin = _require_admin(request)
+    LIVE_CONTROL_STATE.set_global_kill_switch(enabled=payload.enabled, actor=admin.email)
+    return LIVE_CONTROL_STATE.snapshot()
+
+
+@router.post("/live-controls/bots/{bot_id}")
+def set_bot_live_control(bot_id: str, payload: LiveTogglePayload, request: Request):
+    admin = _require_admin(request)
+    try:
+        LIVE_CONTROL_STATE.set_bot_live(bot_id, enabled=payload.enabled, actor=admin.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return LIVE_CONTROL_STATE.snapshot()
+
+
+@router.post("/live-controls/ai-bots/{ai_bot_id}")
+def set_ai_bot_live_control(ai_bot_id: str, payload: LiveTogglePayload, request: Request):
+    admin = _require_admin(request)
+    try:
+        LIVE_CONTROL_STATE.set_ai_bot_live(ai_bot_id, enabled=payload.enabled, actor=admin.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return LIVE_CONTROL_STATE.snapshot()
+
+
+@router.get("/live-controls/audit")
+def live_control_audit(request: Request):
+    _require_admin(request)
+    return {"entries": list(LIVE_CONTROL_STATE.audit_log)}
 
 
 @router.post("/users")
