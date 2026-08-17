@@ -40,6 +40,10 @@ class AIShadowSettlePayload(BaseModel):
     trade_id: int
     exit_price: float
 
+class AIShadowMonitorPayload(BaseModel):
+    pair: str = "BTC/USDT"
+    market_price: float
+
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
@@ -99,15 +103,10 @@ def ai_shadow_evaluate(payload: AIShadowPayload, request: Request):
     trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
     try:
         return trader.evaluate(
-            user_email=user.email,
-            pair=payload.pair,
-            price=payload.price,
-            ai_confidence=payload.ai_confidence,
-            news_sentiment=payload.news_sentiment,
-            price_change=payload.price_change,
-            balance=payload.balance,
-            stop_loss_pct=payload.stop_loss_pct,
-            take_profit_pct=payload.take_profit_pct,
+            user_email=user.email, pair=payload.pair, price=payload.price,
+            ai_confidence=payload.ai_confidence, news_sentiment=payload.news_sentiment,
+            price_change=payload.price_change, balance=payload.balance,
+            stop_loss_pct=payload.stop_loss_pct, take_profit_pct=payload.take_profit_pct,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -118,10 +117,17 @@ def ai_shadow_settle(payload: AIShadowSettlePayload, request: Request):
     user = _require_admin(request)
     trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
     try:
-        return trader.settle(
-            user_email=user.email,
-            trade_id=payload.trade_id,
-            exit_price=payload.exit_price,
-        )
+        return trader.settle(user_email=user.email, trade_id=payload.trade_id, exit_price=payload.exit_price)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/ai-shadow/monitor")
+def ai_shadow_monitor(payload: AIShadowMonitorPayload, request: Request):
+    user = _require_admin(request)
+    trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
+    try:
+        return {"pair": payload.pair, "market_price": payload.market_price,
+                "settled": trader.monitor(user_email=user.email, pair=payload.pair, market_price=payload.market_price)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
