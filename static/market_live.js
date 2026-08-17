@@ -1,0 +1,200 @@
+(() => {
+  const original = document.getElementById('price-chart');
+  const pair = document.getElementById('market-pair');
+  const exchange = document.getElementById('market-exchange');
+  const timeframe = document.getElementById('market-timeframe');
+  if (!original || !pair || !exchange || !timeframe) return;
+
+  const liveOption = document.createElement('option');
+  liveOption.value = 'live';
+  liveOption.textContent = 'LIVE · 1 сек';
+  timeframe.appendChild(liveOption);
+
+  const wrapper = original.closest('.market-chart-wrap') || original.parentElement;
+  let liveCanvas = null;
+  let liveCtx = null;
+  let socket = null;
+  let timer = null;
+  let candles = [];
+  let current = null;
+  let active = false;
+  let lastPrice = null;
+
+  const css = name => getComputedStyle(document.body).getPropertyValue(name).trim();
+  const colors = () => ({
+    grid: css('--chart-grid') || '#d7e0e8',
+    text: css('--muted') || '#526b80',
+    up: css('--chart-up') || '#16a34a',
+    down: css('--chart-down') || '#dc2626',
+    cross: css('--chart-cross') || '#718096'
+  });
+
+  function symbol() {
+    return pair.value.replace('/', '').toLowerCase();
+  }
+
+  function stop() {
+    active = false;
+    if (socket) { try { socket.close(); } catch (_) {} socket = null; }
+    if (timer) { clearInterval(timer); timer = null; }
+    if (liveCanvas) liveCanvas.remove();
+    liveCanvas = null;
+    liveCtx = null;
+    original.style.visibility = '';
+    const badge = document.getElementById('live-status');
+    if (badge) badge.remove();
+  }
+
+  function setupCanvas() {
+    if (liveCanvas) return;
+    original.style.visibility = 'hidden';
+    liveCanvas = document.createElement('canvas');
+    liveCanvas.className = 'market-chart live-market-chart';
+    liveCanvas.setAttribute('aria-label', 'Live график одноминутных и односекундных свечей');
+    wrapper.appendChild(liveCanvas);
+    liveCtx = liveCanvas.getContext('2d');
+    const badge = document.createElement('span');
+    badge.id = 'live-status';
+    badge.className = 'live-status';
+    badge.textContent = '● LIVE 1s';
+    wrapper.parentNode.insertBefore(badge, wrapper);
+    resize();
+  }
+
+  function resize() {
+    if (!liveCanvas) return;
+    const rect = liveCanvas.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(devicePixelRatio || 1, 2));
+    liveCanvas.width = Math.max(320, Math.floor(rect.width * dpr));
+    liveCanvas.height = Math.max(360, Math.floor(480 * dpr));
+    liveCanvas.style.height = '480px';
+    draw();
+  }
+
+  function addTrade(timestamp, price, quantity) {
+    if (!Number.isFinite(price) || price <= 0) return;
+    const bucket = Math.floor(timestamp / 1000) * 1000;
+    if (!current || current.timestamp !== bucket) {
+      current = {timestamp: bucket, open: price, high: price, low: price, close: price, volume: Math.max(0, quantity || 0)};
+      candles.push(current);
+      if (candles.length > 180) candles.shift();
+    } else {
+      current.high = Math.max(current.high, price);
+      current.low = Math.min(current.low, price);
+      current.close = price;
+      current.volume += Math.max(0, quantity || 0);
+    }
+    lastPrice = price;
+    draw();
+    const ohlc = document.getElementById('chart-ohlc');
+    if (ohlc) ohlc.textContent = `LIVE · O ${current.open} H ${current.high} L ${current.low} C ${current.close}`;
+    const ticker = document.getElementById('ticker');
+    if (ticker) ticker.innerHTML = `LIVE · цена: <strong>${price}</strong> · свеча: 1 сек`;
+  }
+
+  function draw() {
+    if (!liveCtx || !liveCanvas || !candles.length) return;
+    const ctx = liveCtx;
+    const dpr = Math.max(1, Math.min(devicePixelRatio || 1, 2));
+    ctx.clearRect(0, 0, liveCanvas.width, liveCanvas.height);
+    const c = colors();
+    const visible = candles.slice(-120);
+    const left = 10 * dpr, right = 76 * dpr, top = 14 * dpr, bottom = 34 * dpr;
+    const width = liveCanvas.width - left - right, height = liveCanvas.height - top - bottom;
+    const highs = visible.map(x => x.high), lows = visible.map(x => x.low);
+    const max = Math.max(...highs), min = Math.min(...lows);
+    const range = Math.max(max - min, Math.abs(max) * 0.0001, 1e-9);
+    const priceHeight = height * .78, volumeTop = top + priceHeight + 8 * dpr, volumeHeight = height - priceHeight - 8 * dpr;
+    const volumeMax = Math.max(...visible.map(x => x.volume), 1);
+    const slot = width / visible.length, body = Math.max(2 * dpr, slot * .58);
+    const y = value => top + (max - value) / range * priceHeight;
+
+    ctx.font = `${11 * dpr}px system-ui, sans-serif`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.strokeStyle = c.grid; ctx.fillStyle = c.text; ctx.lineWidth = dpr;
+    for (let i = 0; i <= 6; i++) {
+      const yy = top + priceHeight * i / 6;
+      ctx.beginPath(); ctx.moveTo(left, yy); ctx.lineTo(left + width, yy); ctx.stroke();
+      ctx.fillText((max - range * i / 6).toFixed(max >= 100 ? 2 : 4), liveCanvas.width - 8 * dpr, yy);
+    }
+    visible.forEach((item, i) => {
+      const x = left + i * slot + slot / 2;
+      const color = item.close >= item.open ? c.up : c.down;
+      ctx.strokeStyle = color; ctx.fillStyle = color;
+      ctx.beginPath(); ctx.moveTo(x, y(item.high)); ctx.lineTo(x, y(item.low)); ctx.stroke();
+      const bodyTop = y(Math.max(item.open, item.close));
+      const bodyHeight = Math.max(dpr, Math.abs(y(item.open) - y(item.close)));
+      ctx.fillRect(x - body / 2, bodyTop, body, bodyHeight);
+      if (item.volume > 0) {
+        const vh = item.volume / volumeMax * volumeHeight;
+        ctx.globalAlpha = .2; ctx.fillRect(x - body / 2, volumeTop + volumeHeight - vh, body, vh); ctx.globalAlpha = 1;
+      }
+    });
+    ctx.strokeStyle = c.grid;
+    ctx.beginPath(); ctx.moveTo(left, volumeTop); ctx.lineTo(left + width, volumeTop); ctx.stroke();
+    const last = visible[visible.length - 1];
+    ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = c.cross;
+    ctx.beginPath(); ctx.moveTo(left, y(last.close)); ctx.lineTo(left + width, y(last.close)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = c.text;
+    [0, .25, .5, .75, 1].forEach(p => {
+      const index = Math.floor((visible.length - 1) * p), x = left + index * slot + slot / 2;
+      ctx.fillText(new Date(visible[index].timestamp).toLocaleTimeString('ru-RU'), x, liveCanvas.height - 24 * dpr);
+    });
+  }
+
+  async function seed() {
+    try {
+      const response = await fetch(`/api/market/history?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}&timeframe=1m`, {headers: {'Accept': 'application/json'}});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Не удалось загрузить стартовую историю');
+      candles = (data.candles || []).slice(-120).map(c => ({timestamp: Number(c.timestamp), open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close), volume: Number(c.volume || 0)}));
+      current = null;
+      draw();
+    } catch (error) {
+      const ticker = document.getElementById('ticker');
+      if (ticker) ticker.textContent = error.message;
+    }
+  }
+
+  function startBinance() {
+    socket = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol()}@trade`);
+    socket.onmessage = event => {
+      try {
+        const data = JSON.parse(event.data);
+        addTrade(Number(data.T), Number(data.p), Number(data.q));
+      } catch (_) {}
+    };
+    socket.onclose = () => { if (active) setTimeout(startBinance, 1500); };
+    socket.onerror = () => { try { socket.close(); } catch (_) {} };
+  }
+
+  async function fallbackTick() {
+    try {
+      const response = await fetch(`/api/market/data?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}`, {headers: {'Accept': 'application/json'}});
+      const data = await response.json();
+      const price = Number(data?.ticker?.last);
+      if (Number.isFinite(price)) addTrade(Date.now(), price, 0);
+    } catch (_) {}
+  }
+
+  async function start() {
+    stop();
+    if (timeframe.value !== 'live') return;
+    active = true;
+    setupCanvas();
+    await seed();
+    if (!active) return;
+    if (exchange.value.toLowerCase() === 'binance') startBinance();
+    else {
+      fallbackTick();
+      timer = setInterval(fallbackTick, 1000);
+      const badge = document.getElementById('live-status');
+      if (badge) badge.textContent = '● LIVE 1s · ticker fallback';
+    }
+  }
+
+  timeframe.addEventListener('change', start);
+  pair.addEventListener('change', () => { if (timeframe.value === 'live') start(); });
+  exchange.addEventListener('change', () => { if (timeframe.value === 'live') start(); });
+  window.addEventListener('resize', resize, {passive: true});
+  if (timeframe.value === 'live') start();
+})();
