@@ -29,9 +29,12 @@ class PluginCreate(BaseModel):
 class AIShadowPayload(BaseModel):
     pair: str = "BTC/USDT"
     price: float
+    ai_confidence: float
     news_sentiment: float = 0.0
     price_change: float = 0.0
     balance: float = 100.0
+    stop_loss_pct: float = 0.02
+    take_profit_pct: float = 0.04
 
 
 def _normalize_email(email: str) -> str:
@@ -95,9 +98,12 @@ def ai_shadow_evaluate(payload: AIShadowPayload, request: Request):
             user_email=user.email,
             pair=payload.pair,
             price=payload.price,
+            ai_confidence=payload.ai_confidence,
             news_sentiment=payload.news_sentiment,
             price_change=payload.price_change,
             balance=payload.balance,
+            stop_loss_pct=payload.stop_loss_pct,
+            take_profit_pct=payload.take_profit_pct,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
