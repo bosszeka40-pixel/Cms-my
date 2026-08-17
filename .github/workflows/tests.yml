@@ -20,4 +20,6 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Run execution security tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest -q tests/test_execution_security.py
