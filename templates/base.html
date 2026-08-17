@@ -40,6 +40,7 @@
         {% block content %}{% endblock %}
     </div>
     {% block scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='market_terminal.js') }}" defer></script>
     <script>
         const menuToggle = document.querySelector('.menu-toggle');
         const mainMenu = document.getElementById('main-menu');
