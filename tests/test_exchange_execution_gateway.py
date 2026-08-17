@@ -2,6 +2,7 @@ import os
 import unittest
 
 from backend.security.execution_gateway import cancel_real_order, submit_real_order
+from backend.security.live_controls import LiveControlState
 
 
 class ExchangeExecutionGatewayTests(unittest.TestCase):
@@ -31,7 +32,28 @@ class ExchangeExecutionGatewayTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             cancel_real_order(lambda: "cancelled")
 
-    def test_live_requires_explicit_gate(self):
+    def test_live_requires_explicit_admin_state(self):
         os.environ["TRADING_MODE"] = "live"
         os.environ["LIVE_TRADING_GATE"] = "true"
-        self.assertEqual(submit_real_order(lambda value: value, "ok"), "ok")
+        with self.assertRaises(PermissionError):
+            submit_real_order(lambda value: value, "ok")
+
+    def test_live_reaches_executor_with_explicit_admin_state(self):
+        os.environ["TRADING_MODE"] = "live"
+        os.environ["LIVE_TRADING_GATE"] = "true"
+        state = LiveControlState()
+        state.set_global_kill_switch(enabled=False, actor="admin")
+        state.set_bot_live("bot-1", enabled=True, actor="admin")
+        self.assertEqual(
+            submit_real_order(
+                lambda value: value,
+                "ok",
+                live_control_state=state,
+                bot_id="bot-1",
+            ),
+            "ok",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
