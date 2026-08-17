@@ -1,3 +1,6 @@
+import hmac
+import secrets
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from .cms_core import CMSEngine
@@ -69,6 +72,21 @@ def _require_admin(request: Request):
     return user
 
 
+def _csrf_token(request: Request) -> str:
+    token = request.session.get("admin_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        request.session["admin_csrf_token"] = token
+    return token
+
+
+def _require_live_control_csrf(request: Request) -> None:
+    expected = _csrf_token(request)
+    provided = request.headers.get("X-CSRF-Token", "")
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="Недействительный CSRF-токен.")
+
+
 def _require_shadow(request: Request):
     _require_admin(request)
     try:
@@ -80,12 +98,15 @@ def _require_shadow(request: Request):
 @router.get("/live-controls")
 def live_controls(request: Request):
     _require_admin(request)
-    return LIVE_CONTROL_STATE.snapshot()
+    snapshot = LIVE_CONTROL_STATE.snapshot()
+    snapshot["csrf_token"] = _csrf_token(request)
+    return snapshot
 
 
 @router.post("/live-controls/global")
 def set_global_live_control(payload: LiveTogglePayload, request: Request):
     admin = _require_admin(request)
+    _require_live_control_csrf(request)
     LIVE_CONTROL_STATE.set_global_kill_switch(enabled=payload.enabled, actor=admin.email)
     return LIVE_CONTROL_STATE.snapshot()
 
@@ -93,6 +114,7 @@ def set_global_live_control(payload: LiveTogglePayload, request: Request):
 @router.post("/live-controls/bots/{bot_id}")
 def set_bot_live_control(bot_id: str, payload: LiveTogglePayload, request: Request):
     admin = _require_admin(request)
+    _require_live_control_csrf(request)
     try:
         LIVE_CONTROL_STATE.set_bot_live(bot_id, enabled=payload.enabled, actor=admin.email)
     except ValueError as exc:
@@ -103,6 +125,7 @@ def set_bot_live_control(bot_id: str, payload: LiveTogglePayload, request: Reque
 @router.post("/live-controls/ai-bots/{ai_bot_id}")
 def set_ai_bot_live_control(ai_bot_id: str, payload: LiveTogglePayload, request: Request):
     admin = _require_admin(request)
+    _require_live_control_csrf(request)
     try:
         LIVE_CONTROL_STATE.set_ai_bot_live(ai_bot_id, enabled=payload.enabled, actor=admin.email)
     except ValueError as exc:
