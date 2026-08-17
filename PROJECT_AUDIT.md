@@ -5,8 +5,8 @@ Updated: 2026-08-17
 ## Control points
 
 - Current working branch: `cleanup/security-hardening-2026-08`
-- Latest confirmed branch commit before this batch: `9053b29b2b93ce9d38b95aa88a6bdc5dcaa57815`
-- This file is a navigation/checklist; Git commits remain the rollback mechanism.
+- Latest checkpoint: `0cd8f5cfb36b2d72aadae41ddc10da29c2706764`
+- Git commits remain the rollback mechanism; this file is the navigation/checklist.
 
 ## Done / verified
 
@@ -15,6 +15,7 @@ Updated: 2026-08-17
 - [x] Shadow virtual trades have settlement and P/L lifecycle.
 - [x] Shadow feed fails closed when `TRADING_MODE=live`.
 - [x] Centralized fail-closed execution policy added in `backend/security/execution_policy.py`.
+- [x] Added automated unit coverage for the execution policy: DEMO default, unknown-mode fail-closed, independent LIVE gate, and virtual/live separation.
 
 ## Done but requires verification
 
