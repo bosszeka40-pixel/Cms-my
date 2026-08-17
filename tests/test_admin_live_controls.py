@@ -2,7 +2,7 @@
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from fastapi import HTTPException
 
@@ -46,9 +46,14 @@ class AdminLiveControlContractTests(unittest.TestCase):
         self.assertFalse(state.global_kill_switch)
 
     def test_authenticated_admin_endpoints_mutate_global_and_individual_controls(self):
-        request = SimpleNamespace(session={"user_email": "admin@example.com"})
+        request = SimpleNamespace(
+            session={"user_email": "admin@example.com"},
+            headers={"X-CSRF-Token": "csrf-test"},
+        )
         admin = SimpleNamespace(email="admin@example.com", role="admin")
-        with patch("backend.admin.engine.get_user", return_value=admin):
+        with patch("backend.admin.engine.get_user", return_value=admin), patch(
+            "backend.admin._csrf_token", return_value="csrf-test"
+        ):
             before = LIVE_CONTROL_STATE.snapshot()
             try:
                 set_global_live_control(LiveTogglePayload(enabled=False), request)
@@ -58,6 +63,7 @@ class AdminLiveControlContractTests(unittest.TestCase):
                 self.assertFalse(snapshot["global_kill_switch"])
                 self.assertTrue(snapshot["bot_live"]["bot-endpoint"])
                 self.assertTrue(snapshot["ai_bot_live"]["ai-endpoint"])
+                self.assertEqual(snapshot["csrf_token"], "csrf-test")
                 self.assertEqual(len(live_control_audit(request)["entries"]), len(before["audit_log"]) + 3)
             finally:
                 LIVE_CONTROL_STATE.global_kill_switch = before["global_kill_switch"]
@@ -70,6 +76,26 @@ class AdminLiveControlContractTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as exc:
             live_controls(request)
         self.assertEqual(exc.exception.status_code, 403)
+
+    def test_live_control_posts_require_csrf_token(self):
+        admin = SimpleNamespace(email="admin@example.com", role="admin")
+        missing = SimpleNamespace(session={"user_email": admin.email}, headers={})
+        wrong = SimpleNamespace(session={"user_email": admin.email}, headers={"X-CSRF-Token": "wrong"})
+        with patch("backend.admin.engine.get_user", return_value=admin), patch(
+            "backend.admin._csrf_token", return_value="expected"
+        ):
+            for request in (missing, wrong):
+                with self.assertRaises(HTTPException) as exc:
+                    set_global_live_control(LiveTogglePayload(enabled=False), request)
+                self.assertEqual(exc.exception.status_code, 403)
+
+    def test_live_controls_issues_session_csrf_token(self):
+        request = SimpleNamespace(session={"user_email": "admin@example.com"}, headers={})
+        admin = SimpleNamespace(email="admin@example.com", role="admin")
+        with patch("backend.admin.engine.get_user", return_value=admin):
+            snapshot = live_controls(request)
+        self.assertTrue(snapshot["csrf_token"])
+        self.assertEqual(request.session["admin_csrf_token"], snapshot["csrf_token"])
 
 
 if __name__ == "__main__":
