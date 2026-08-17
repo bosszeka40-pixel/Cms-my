@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from .cms_core import CMSEngine
+from .password_compat import install_password_migration
+
+# Install the password migration before any CMSEngine instance is created.
+install_password_migration(CMSEngine)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 engine = CMSEngine()
