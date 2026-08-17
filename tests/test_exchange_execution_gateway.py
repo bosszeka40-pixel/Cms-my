@@ -48,7 +48,7 @@ class ExchangeExecutionGatewayTests(unittest.TestCase):
             submit_real_order(
                 lambda value: value,
                 "ok",
-                live_control_state=state,
+                live_state=state,
                 bot_id="bot-1",
             ),
             "ok",
