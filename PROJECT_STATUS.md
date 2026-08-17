@@ -41,6 +41,9 @@
 - [x] `VERIFY` — обнаружена причина отсутствия свечей: frontend ожидал массивы OHLC, а `/api/market/history` возвращает объекты `{timestamp, open, high, low, close, volume}`.
 - [x] `VERIFY` — добавлен отдельный exchange-style canvas renderer с OHLC, объёмом, сеткой, ценовой шкалой и hover tooltip.
 - [x] `VERIFY` — график адаптируется к DPR/resize и обновляет историю каждые 15 секунд.
+- [x] `VERIFY` — добавлен UI-режим `LIVE · 1 сек`.
+- [x] `VERIFY` — для Binance live-режим собирает реальные trade events в односекундные OHLCV-свечи через WebSocket.
+- [x] `VERIFY` — для других бирж live-режим использует ticker fallback с интервалом 1 сек; это не заменяет полноценный trade stream.
 - [ ] `IN PROGRESS` — составить карту всех страниц, шаблонов и backend routes.
 - [ ] `TODO` — проверить Dashboard.
 - [ ] `TODO` — проверить Wallet.
@@ -76,6 +79,7 @@
 - [x] `VERIFY` — добавлен `templates/install.html`.
 - [x] `VERIFY` — добавлены installer tests.
 - [x] `VERIFY` — добавлены `static/market_terminal.js` и `static/market_terminal.css` для исправления/улучшения биржевого графика.
+- [x] `VERIFY` — добавлены `static/market_live.js` и `static/market_live.css` для live 1s режима.
 - [ ] `VERIFY` — первая уборка legacy/pycache требует полного regression run.
 - [ ] `VERIFY` — Render/dependency/security изменения требуют полного CI.
 
@@ -88,9 +92,12 @@
 - [ ] Production configuration check.
 - [ ] Проверка, что существующие функции CMS не потеряны.
 - [ ] Проверка графика свечей на реальном API и разных таймфреймах.
+- [ ] Проверка live 1s режима на Binance и fallback на других биржах.
+- [ ] Проверка мобильного отображения терминала.
 - [ ] Только после этого — review и merge в `main`.
 
 ## Notes
 - DEV-вход без пароля был временным и нужен для разработки. Не ломать его без замены installer/admin flow.
 - Приоритет: сохранить существующий функционал → исправить безопасность → восстановить отсутствующий UI → удалить подтверждённый legacy.
 - Не считать `VERIFY` завершённым, пока код не прошёл тесты и интеграционную проверку.
+- `LIVE · 1 сек` — это рыночное отображение, а не обещание исполнения ордеров с задержкой ровно 1 сек. Реальная задержка зависит от WebSocket/биржи/сети.
