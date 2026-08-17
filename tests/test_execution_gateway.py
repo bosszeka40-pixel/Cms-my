@@ -12,7 +12,7 @@ class ExecutionGatewayTests(unittest.TestCase):
         state = LiveControlState()
         with patch.dict(os.environ, {"TRADING_MODE": "demo", "LIVE_TRADING_GATE": "false"}, clear=False):
             with self.assertRaises(PermissionError):
-                submit_real_order(executor, "BTC/USDT", 1.0, live_control_state=state, bot_id="bot-1")
+                submit_real_order(executor, "BTC/USDT", 1.0, live_state=state, bot_id="bot-1")
         executor.assert_not_called()
 
     def test_cancel_is_blocked_in_shadow(self):
@@ -20,7 +20,7 @@ class ExecutionGatewayTests(unittest.TestCase):
         state = LiveControlState()
         with patch.dict(os.environ, {"TRADING_MODE": "shadow", "LIVE_TRADING_GATE": "true"}, clear=False):
             with self.assertRaises(PermissionError):
-                cancel_real_order(executor, "order-1", live_control_state=state, bot_id="bot-1")
+                cancel_real_order(executor, "order-1", live_state=state, bot_id="bot-1")
         executor.assert_not_called()
 
     def test_submit_reaches_executor_only_when_explicitly_live(self):
@@ -29,7 +29,14 @@ class ExecutionGatewayTests(unittest.TestCase):
         state.set_global_kill_switch(enabled=False, actor="admin")
         state.set_bot_live("bot-1", enabled=True, actor="admin")
         with patch.dict(os.environ, {"TRADING_MODE": "live", "LIVE_TRADING_GATE": "true"}, clear=False):
-            result = submit_real_order(executor, "BTC/USDT", 1.0, side="buy", live_control_state=state, bot_id="bot-1")
+            result = submit_real_order(
+                executor,
+                "BTC/USDT",
+                1.0,
+                side="buy",
+                live_state=state,
+                bot_id="bot-1",
+            )
         self.assertEqual(result, {"id": "order-1"})
         executor.assert_called_once_with("BTC/USDT", 1.0, side="buy")
 
