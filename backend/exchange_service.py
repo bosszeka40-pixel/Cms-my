@@ -4,6 +4,8 @@ from threading import Lock
 
 import ccxt
 
+from .security.execution_gateway import cancel_real_order, submit_real_order
+
 
 SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
 
@@ -132,11 +134,11 @@ class ExchangeService:
         if amount < minimum_amount:
             raise ValueError(f"Минимальное количество для {symbol}: {minimum_amount}.")
         if order_type == "market":
-            return client.create_order(symbol, order_type, side, amount, None, params or {})
+            return submit_real_order(client.create_order, symbol, order_type, side, amount, None, params or {})
         if price is None or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
             raise ValueError("Для лимитного ордера нужна положительная цена.")
-        return client.create_order(symbol, order_type, side, amount, price, params or {})
+        return submit_real_order(client.create_order, symbol, order_type, side, amount, price, params or {})
 
     def cancel_order(self, user_id, order_id, symbol, params=None):
         connection = self.get(user_id)
-        return connection["client"].cancel_order(order_id, symbol, params or {})
+        return cancel_real_order(connection["client"].cancel_order, order_id, symbol, params or {})
