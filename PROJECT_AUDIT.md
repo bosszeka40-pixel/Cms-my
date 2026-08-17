@@ -5,7 +5,7 @@ Updated: 2026-08-17
 ## Control points
 
 - Current working branch: `cleanup/security-hardening-2026-08`
-- Latest checkpoint: `0cd8f5cfb36b2d72aadae41ddc10da29c2706764`
+- Latest checkpoint: `a682ee370b8adfc59f922d11cdd233f1c99cae18`
 - Git commits remain the rollback mechanism; this file is the navigation/checklist.
 
 ## Done / verified
@@ -16,9 +16,12 @@ Updated: 2026-08-17
 - [x] Shadow feed fails closed when `TRADING_MODE=live`.
 - [x] Centralized fail-closed execution policy added in `backend/security/execution_policy.py`.
 - [x] Added automated unit coverage for the execution policy: DEMO default, unknown-mode fail-closed, independent LIVE gate, and virtual/live separation.
+- [x] CI compile step passes on checkpoint `ca8310b`.
+- [x] CI dependency audit found missing declared dependencies (`Werkzeug`, `PyYAML`); both are now declared in `requirements.txt`.
 
 ## Done but requires verification
 
+- [ ] Re-run CI after dependency fix.
 - [ ] Wire execution policy directly into every private exchange execution path.
 - [ ] Verify all `create_order`, `cancel_order`, and private CCXT calls.
 - [ ] Verify `/api/user/connect-exchange` requires an authenticated user and does not persist raw secrets.
@@ -45,6 +48,14 @@ Updated: 2026-08-17
 - [ ] Connect live ticker/candle stream to new Shadow decisions, not only settlement.
 - [ ] Persist learning results and verify training inputs.
 - [ ] Add Shadow performance metrics and error telemetry.
+
+## Request / execution audit
+
+- [ ] Trace all application calls that can reach an exchange.
+- [ ] Separate public market-data calls from private authenticated calls.
+- [ ] Prove DEMO/SHADOW cannot reach private order methods.
+- [ ] Record request metadata without API keys, secrets, or authorization headers.
+- [ ] Test kill-switch and execution gate immediately before order submission.
 
 ## Legacy cleanup — DO NOT DELETE YET
 
