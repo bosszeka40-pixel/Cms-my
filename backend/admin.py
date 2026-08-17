@@ -2,6 +2,10 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from .cms_core import CMSEngine
 from .password_compat import install_password_migration
+from .ai_shadow import AIShadowTrader
+from .bot import HFTBot
+from .modules.strategy_manager import StrategyManager
+from .risk_management import RiskManager
 
 # Install the password migration before any CMSEngine instance is created.
 install_password_migration(CMSEngine)
@@ -22,9 +26,24 @@ class PluginCreate(BaseModel):
     price: float
     description: str = ""
 
+class AIShadowPayload(BaseModel):
+    pair: str = "BTC/USDT"
+    price: float
+    news_sentiment: float = 0.0
+    price_change: float = 0.0
+    balance: float = 100.0
+
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def _require_admin(request: Request):
+    email = request.session.get("user_email")
+    user = engine.get_user(email) if email else None
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Требуются права администратора.")
+    return user
 
 
 @router.post("/users")
@@ -67,9 +86,18 @@ def list_plugins(request: Request):
     return [{"id": plugin.id, "name": plugin.name, "price": plugin.price, "description": plugin.description} for plugin in engine.list_plugins()]
 
 
-def _require_admin(request: Request):
-    email = request.session.get("user_email")
-    user = engine.get_user(email) if email else None
-    if not user or user.role != "admin":
-        raise HTTPException(status_code=403, detail="Требуются права администратора.")
-    return user
+@router.post("/ai-shadow/evaluate")
+def ai_shadow_evaluate(payload: AIShadowPayload, request: Request):
+    user = _require_admin(request)
+    trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
+    try:
+        return trader.evaluate(
+            user_email=user.email,
+            pair=payload.pair,
+            price=payload.price,
+            news_sentiment=payload.news_sentiment,
+            price_change=payload.price_change,
+            balance=payload.balance,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
