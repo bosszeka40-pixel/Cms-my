@@ -11,8 +11,13 @@ Updated: 2026-08-17
 Latest commit: `3289189d5fd513eba2c5763e9264533428527d8e`
 PR: #2 (do not merge automatically)
 
+## Autopilot mode
+
+Continuous safe execution: after each meaningful checkpoint, continue with the next reversible implementation/validation task. Stop only for an unsafe irreversible action, required human approval, or genuinely missing information.
+
 ## Completed in this autopilot pass
 
+- Oi Operating Brief + Execution Planning + Risk Review loaded for continuous project work.
 - Oi Quality Review remains active for the project checkpoint.
 - Added `pytest==8.3.5` to `requirements.txt`; CI run `32012192724` passed.
 - Added `backend/security/request_policy.py` with reusable authentication, virtual-execution and client-safe-error helpers.
