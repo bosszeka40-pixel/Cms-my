@@ -8,24 +8,24 @@ Updated: 2026-08-17
 
 ## Current checkpoint
 
-Commit: `2a5e46810ada31c750610cd72fb92a6874c59412`
-
+Latest commit: `3289189d5fd513eba2c5763e9264533428527d8e`
 PR: #2 (do not merge automatically)
 
 ## Completed in this autopilot pass
 
-- Oi workflow loaded: Operating Brief + Execution Planning + Risk Review.
-- Oi Quality Review checkpoint loaded after CI recovery.
-- Added `pytest==8.3.5` to `requirements.txt` because the security test suite imports pytest.
-- GitHub Actions CI run `32012192724` completed successfully.
+- Oi Quality Review remains active for the project checkpoint.
+- Added `pytest==8.3.5` to `requirements.txt`; CI run `32012192724` passed.
+- Added `backend/security/request_policy.py` with reusable authentication, virtual-execution and client-safe-error helpers.
+- Added `tests/test_request_policy.py` covering anonymous rejection, authenticated identity, LIVE-header rejection and safe errors.
+- Existing execution policy, execution gateway and CCXT guard remain preserved.
+- Existing bot / AI / memory / strategy functionality remains protected from replacement.
 
 ## Verified / still open
 
-- Central execution policy, execution gateway and CCXT guard remain in place.
-- Existing bot / AI / memory / strategy functionality must be preserved.
-- `/api/user/connect-exchange` still needs request-level authentication and generic client-safe error handling.
+- `/api/user/connect-exchange` still needs to call the request authentication helper and stop returning provider exception text.
 - `/api/bot/simulate` still needs authenticated virtual/sandbox enforcement.
 - Manual and strategy execution paths still require explicit central execution-mode/kill-switch boundaries.
+- The new request-policy helpers are currently covered by tests but not yet wired into the affected routes; route wiring is the next implementation step.
 - Template-to-route/API functional coverage audit remains in progress.
 - `Cms` appears as a gitlink/submodule entry while `.gitmodules` is absent; do not invent a remote URL. Resolve metadata only after the intended submodule source is identified.
 - Netlify deploy-preview remains a separate verification gate.
@@ -40,8 +40,8 @@ PR: #2 (do not merge automatically)
 
 ## Next work order
 
-1. Add/strengthen regression tests for endpoint authentication and execution boundaries.
-2. Apply the smallest safe implementation changes to the affected routes.
+1. Wire `request_policy` into the exchange-connect and HFT simulation routes with the smallest possible changes.
+2. Add route-level regression tests for anonymous and LIVE-mode requests.
 3. Run CI and inspect failures.
 4. Run template designer/request mapper and review suspicious/orphaned API calls.
 5. Continue page-by-page functional audit and update status.
