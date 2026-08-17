@@ -11,5 +11,10 @@
       "src": "/(.*)",
       "dest": "backend/main.py"
     }
-  ]
+  ],
+  "functions": {
+    "backend/main.py": {
+      "runtime": "python3.12"
+    }
+  }
 }
