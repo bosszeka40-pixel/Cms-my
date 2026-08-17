@@ -36,6 +36,10 @@ class AIShadowPayload(BaseModel):
     stop_loss_pct: float = 0.02
     take_profit_pct: float = 0.04
 
+class AIShadowSettlePayload(BaseModel):
+    trade_id: int
+    exit_price: float
+
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
@@ -104,6 +108,20 @@ def ai_shadow_evaluate(payload: AIShadowPayload, request: Request):
             balance=payload.balance,
             stop_loss_pct=payload.stop_loss_pct,
             take_profit_pct=payload.take_profit_pct,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/ai-shadow/settle")
+def ai_shadow_settle(payload: AIShadowSettlePayload, request: Request):
+    user = _require_admin(request)
+    trader = AIShadowTrader(engine, StrategyManager(), RiskManager(), HFTBot())
+    try:
+        return trader.settle(
+            user_email=user.email,
+            trade_id=payload.trade_id,
+            exit_price=payload.exit_price,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
