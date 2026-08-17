@@ -41,6 +41,25 @@ def test_exchange_service_does_not_persist_credentials(monkeypatch):
     assert stored["api_key_hint"] == "SECR..._KEY"
 
 
+def test_exchange_status_reports_central_execution_policy(monkeypatch):
+    service = ExchangeService()
+    fake = FakeClient()
+    monkeypatch.setattr(service, "get", lambda user_id: {"name": "binance", "client": fake, "sandbox": True, "api_key_hint": "SECR..._KEY"})
+
+    monkeypatch.setenv("TRADING_MODE", "shadow")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "true")
+    status = service.status("user-1")
+
+    assert status["trading_mode"] == "shadow"
+    assert status["live_trading_enabled"] is False
+
+    monkeypatch.setenv("TRADING_MODE", "live")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "true")
+    status = service.status("user-1")
+    assert status["trading_mode"] == "live"
+    assert status["live_trading_enabled"] is True
+
+
 def test_exchange_service_blocks_order_in_shadow(monkeypatch):
     service = ExchangeService()
     fake = FakeClient()
