@@ -44,6 +44,7 @@
     {% block scripts %}{% endblock %}
     <script src="{{ url_for('static', filename='market_terminal.js') }}" defer></script>
     <script src="{{ url_for('static', filename='market_live.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='market_terminal_patch.js') }}" defer></script>
     <script>
         const menuToggle = document.querySelector('.menu-toggle');
         const mainMenu = document.getElementById('main-menu');
