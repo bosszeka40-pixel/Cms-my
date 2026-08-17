@@ -38,6 +38,9 @@
 - [ ] `VERIFY` — обновлённые Python dependencies должны пройти полный CI.
 
 ## CMS / UI ↔ Backend
+- [x] `VERIFY` — обнаружена причина отсутствия свечей: frontend ожидал массивы OHLC, а `/api/market/history` возвращает объекты `{timestamp, open, high, low, close, volume}`.
+- [x] `VERIFY` — добавлен отдельный exchange-style canvas renderer с OHLC, объёмом, сеткой, ценовой шкалой и hover tooltip.
+- [x] `VERIFY` — график адаптируется к DPR/resize и обновляет историю каждые 15 секунд.
 - [ ] `IN PROGRESS` — составить карту всех страниц, шаблонов и backend routes.
 - [ ] `TODO` — проверить Dashboard.
 - [ ] `TODO` — проверить Wallet.
@@ -72,6 +75,7 @@
 - [x] `VERIFY` — добавлен `backend/password_compat.py`.
 - [x] `VERIFY` — добавлен `templates/install.html`.
 - [x] `VERIFY` — добавлены installer tests.
+- [x] `VERIFY` — добавлены `static/market_terminal.js` и `static/market_terminal.css` для исправления/улучшения биржевого графика.
 - [ ] `VERIFY` — первая уборка legacy/pycache требует полного regression run.
 - [ ] `VERIFY` — Render/dependency/security изменения требуют полного CI.
 
@@ -83,6 +87,7 @@
 - [ ] API authorization regression test.
 - [ ] Production configuration check.
 - [ ] Проверка, что существующие функции CMS не потеряны.
+- [ ] Проверка графика свечей на реальном API и разных таймфреймах.
 - [ ] Только после этого — review и merge в `main`.
 
 ## Notes
