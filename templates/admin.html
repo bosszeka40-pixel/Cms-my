@@ -12,6 +12,7 @@
         <a href="#payout-settings">Выплаты</a>
         <a href="#trading-settings">Торговля</a>
         <a href="#risk">Безопасность</a>
+        <a href="#live-controls">LIVE-контроли</a>
         <a href="#plugins">Плагины</a>
         <a href="#users">Пользователи и роли</a>
         <a href="#wallets">Кошельки</a>
@@ -140,6 +141,41 @@
                 <button class="btn" type="submit" name="enabled" value="true">Остановить торговлю</button>
                 <button class="btn" type="submit" name="enabled" value="false">Возобновить торговлю</button>
             </form>
+        </section>
+        <section class="card" id="live-controls">
+            <h2>LIVE-контроли</h2>
+            <p class="muted">Это отдельный административный шлюз реальной торговли. Без явного разрешения каждый новый Bot и AI Bot заблокирован.</p>
+            <div id="live-controls-status" class="small-note">Загрузка состояния...</div>
+            <div class="field-group">
+                <strong>Глобальный Kill Switch</strong>
+                <p id="global-live-state" class="small-note">Состояние загружается...</p>
+                <div class="button-row">
+                    <button class="btn" type="button" data-live-global="true">Выключить LIVE</button>
+                    <button class="btn" type="button" data-live-global="false">Разрешить LIVE</button>
+                </div>
+            </div>
+            <div class="field-group">
+                <h3>Bots</h3>
+                <div id="live-bot-controls"><p class="muted">Нет зарегистрированных Bot-контролей.</p></div>
+                <label for="new-bot-id">Известный ID Bot</label>
+                <div class="button-row">
+                    <input id="new-bot-id" type="text" placeholder="например: bot-1" autocomplete="off">
+                    <button class="btn" type="button" id="add-bot-control">Добавить контроль</button>
+                </div>
+            </div>
+            <div class="field-group">
+                <h3>AI Bots</h3>
+                <div id="live-ai-bot-controls"><p class="muted">Нет зарегистрированных AI Bot-контролей.</p></div>
+                <label for="new-ai-bot-id">Известный ID AI Bot</label>
+                <div class="button-row">
+                    <input id="new-ai-bot-id" type="text" placeholder="например: ai-1" autocomplete="off">
+                    <button class="btn" type="button" id="add-ai-bot-control">Добавить контроль</button>
+                </div>
+            </div>
+            <details>
+                <summary>Аудит LIVE-контролей</summary>
+                <pre id="live-control-audit" style="white-space: pre-wrap; max-height: 260px; overflow-y: auto;">Загрузка...</pre>
+            </details>
         </section>
         <section class="card" id="plugins">
             <h2>Плагины</h2>
@@ -276,5 +312,106 @@ document.getElementById('load-report').addEventListener('click', async () => {
         box.textContent = error.message;
     }
 });
+
+let liveControlCsrf = '';
+
+async function liveControlRequest(url, enabled) {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': liveControlCsrf},
+        body: JSON.stringify({enabled})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Не удалось изменить LIVE-контроль');
+    renderLiveControls(data);
+}
+
+function controlRow(container, id, enabled, kind) {
+    const row = document.createElement('div');
+    row.className = 'button-row';
+    const label = document.createElement('strong');
+    label.textContent = id;
+    const state = document.createElement('span');
+    state.className = 'small-note';
+    state.textContent = enabled ? 'LIVE разрешён' : 'LIVE выключен';
+    const off = document.createElement('button');
+    off.className = 'btn';
+    off.type = 'button';
+    off.textContent = 'Выключить';
+    off.addEventListener('click', async () => {
+        try { await liveControlRequest(`/api/admin/live-controls/${kind}/${encodeURIComponent(id)}`, false); }
+        catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
+    });
+    const on = document.createElement('button');
+    on.className = 'btn';
+    on.type = 'button';
+    on.textContent = 'Разрешить';
+    on.addEventListener('click', async () => {
+        try { await liveControlRequest(`/api/admin/live-controls/${kind}/${encodeURIComponent(id)}`, true); }
+        catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
+    });
+    row.append(label, state, off, on);
+    container.appendChild(row);
+}
+
+function renderLiveControls(data) {
+    liveControlCsrf = data.csrf_token || liveControlCsrf;
+    const global = document.getElementById('global-live-state');
+    global.textContent = data.global_kill_switch ? 'LIVE выключен глобальным Kill Switch' : 'Глобальный Kill Switch снят';
+    const bots = document.getElementById('live-bot-controls');
+    const aiBots = document.getElementById('live-ai-bot-controls');
+    bots.replaceChildren();
+    aiBots.replaceChildren();
+    const botEntries = Object.entries(data.bot_live || {});
+    const aiEntries = Object.entries(data.ai_bot_live || {});
+    if (!botEntries.length) bots.innerHTML = '<p class="muted">Нет зарегистрированных Bot-контролей. Укажи известный ID ниже.</p>';
+    if (!aiEntries.length) aiBots.innerHTML = '<p class="muted">Нет зарегистрированных AI Bot-контролей. Укажи известный ID ниже.</p>';
+    botEntries.forEach(([id, enabled]) => controlRow(bots, id, enabled, 'bots'));
+    aiEntries.forEach(([id, enabled]) => controlRow(aiBots, id, enabled, 'ai-bots'));
+    document.getElementById('live-control-audit').textContent = JSON.stringify(data.audit_log || [], null, 2);
+    document.getElementById('live-controls-status').textContent = 'Состояние LIVE-контролей обновлено.';
+}
+
+async function loadLiveControls() {
+    const status = document.getElementById('live-controls-status');
+    status.textContent = 'Загрузка LIVE-контролей...';
+    try {
+        const response = await fetch('/api/admin/live-controls');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Не удалось загрузить LIVE-контроли');
+        renderLiveControls(data);
+    } catch (error) {
+        status.textContent = error.message;
+    }
+}
+
+document.querySelectorAll('[data-live-global]').forEach(button => {
+    button.addEventListener('click', async () => {
+        try { await liveControlRequest('/api/admin/live-controls/global', button.dataset.liveGlobal === 'true'); }
+        catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
+    });
+});
+
+document.getElementById('add-bot-control').addEventListener('click', async () => {
+    const input = document.getElementById('new-bot-id');
+    const id = input.value.trim();
+    if (!id) return;
+    try {
+        await liveControlRequest(`/api/admin/live-controls/bots/${encodeURIComponent(id)}`, false);
+        input.value = '';
+    } catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
+});
+
+document.getElementById('add-ai-bot-control').addEventListener('click', async () => {
+    const input = document.getElementById('new-ai-bot-id');
+    const id = input.value.trim();
+    if (!id) return;
+    try {
+        await liveControlRequest(`/api/admin/live-controls/ai-bots/${encodeURIComponent(id)}`, false);
+        input.value = '';
+    } catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
+});
+
+loadLiveControls();
 </script>
 {% endblock %}
