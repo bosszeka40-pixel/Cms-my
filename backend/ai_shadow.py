@@ -102,11 +102,18 @@ class AIShadowTrader:
                 session.close()
 
         decision = ShadowDecision(
-            decision_id=decision_id, pair=pair, side=side if allowed else "blocked",
-            confidence=ai_confidence, strategy=strategy["strategy"], mode=self.MODE,
-            reason=reason, entry_price=float(price) if allowed,
-            stop_loss=stop_loss, take_profit=take_profit,
-            created_at=datetime.now(timezone.utc).isoformat(), trade_id=trade_id,
+            decision_id=decision_id,
+            pair=pair,
+            side=side if allowed else "blocked",
+            confidence=ai_confidence,
+            strategy=strategy["strategy"],
+            mode=self.MODE,
+            reason=reason,
+            entry_price=float(price) if allowed else None,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            trade_id=trade_id,
         )
         payload = asdict(decision)
         self.engine.record_bot_stat("ai_shadow_decision", str(payload))
@@ -116,15 +123,23 @@ class AIShadowTrader:
             f"pair={pair}; side={decision.side}; confidence={ai_confidence:.4f}; decision={decision_id}; trade_id={trade_id}; status=unsettled",
             user_email,
         )
-        return {"allowed": allowed, "risk_reason": reason,
-                "risk_position_fraction": risk.position_fraction if allowed else 0.0,
-                "settlement_status": "unsettled" if trade_id else "not_opened", **payload}
+        return {
+            "allowed": allowed,
+            "risk_reason": reason,
+            "risk_position_fraction": risk.position_fraction if allowed else 0.0,
+            "settlement_status": "unsettled" if trade_id else "not_opened",
+            **payload,
+        }
 
     @staticmethod
     def _trade_levels(trade: Trade) -> dict[str, float | str]:
         parts = dict(item.split("=", 1) for item in trade.strategy.split("|")[1:] if "=" in item)
-        return {"side": parts["side"], "entry": float(parts["entry"]),
-                "sl": float(parts["sl"]), "tp": float(parts["tp"])}
+        return {
+            "side": parts["side"],
+            "entry": float(parts["entry"]),
+            "sl": float(parts["sl"]),
+            "tp": float(parts["tp"]),
+        }
 
     def monitor(self, *, user_email: str, pair: str, market_price: float) -> list[dict[str, Any]]:
         """Settle all open Shadow positions whose SL/TP has been reached.
@@ -146,10 +161,14 @@ class AIShadowTrader:
             due: list[tuple[int, str]] = []
             for trade in trades:
                 levels = self._trade_levels(trade)
-                hit = ((levels["side"] == "buy" and (market_price <= levels["sl"] or market_price >= levels["tp"])) or
-                       (levels["side"] == "sell" and (market_price >= levels["sl"] or market_price <= levels["tp"])))
+                hit = ((levels["side"] == "buy" and (market_price <= levels["sl"] or market_price >= levels["tp"]))
+                       or (levels["side"] == "sell" and (market_price >= levels["sl"] or market_price <= levels["tp"])))
                 if hit:
-                    due.append((trade.id, "tp" if ((levels["side"] == "buy" and market_price >= levels["tp"]) or (levels["side"] == "sell" and market_price <= levels["tp"])) else "sl"))
+                    due.append((
+                        trade.id,
+                        "tp" if ((levels["side"] == "buy" and market_price >= levels["tp"]) or
+                                  (levels["side"] == "sell" and market_price <= levels["tp"])) else "sl",
+                    ))
         finally:
             session.close()
 
@@ -181,9 +200,16 @@ class AIShadowTrader:
             trade.pnl = pnl
             trade.mode = "ai_shadow_settled"
             session.commit()
-            result = {"trade_id": trade.id, "pair": trade.pair, "side": side,
-                      "entry_price": entry, "exit_price": float(exit_price),
-                      "pnl": pnl, "pnl_pct": pnl_pct, "status": "settled"}
+            result = {
+                "trade_id": trade.id,
+                "pair": trade.pair,
+                "side": side,
+                "entry_price": entry,
+                "exit_price": float(exit_price),
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                "status": "settled",
+            }
         finally:
             session.close()
 
