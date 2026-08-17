@@ -44,6 +44,8 @@
 - [x] `VERIFY` — добавлен UI-режим `LIVE · 1 сек`.
 - [x] `VERIFY` — для Binance live-режим собирает реальные trade events в односекундные OHLCV-свечи через WebSocket.
 - [x] `VERIFY` — для других бирж live-режим использует ticker fallback с интервалом 1 сек; это не заменяет полноценный trade stream.
+- [x] `VERIFY` — market terminal/live assets продублированы в активном `frontend/` static mount, чтобы существующий `app.mount('/static', .../frontend)` действительно отдавал их браузеру.
+- [x] `VERIFY` — добавлен compatibility patch, чтобы legacy-кнопка обновления рынка не перерисовывала новый терминальный график старым renderer.
 - [ ] `IN PROGRESS` — составить карту всех страниц, шаблонов и backend routes.
 - [ ] `TODO` — проверить Dashboard.
 - [ ] `TODO` — проверить Wallet.
@@ -80,6 +82,8 @@
 - [x] `VERIFY` — добавлены installer tests.
 - [x] `VERIFY` — добавлены `static/market_terminal.js` и `static/market_terminal.css` для исправления/улучшения биржевого графика.
 - [x] `VERIFY` — добавлены `static/market_live.js` и `static/market_live.css` для live 1s режима.
+- [x] `VERIFY` — добавлены активные копии market assets в `frontend/`.
+- [x] `VERIFY` — добавлен `frontend/market_terminal_patch.js` для совместимости с legacy market controls.
 - [ ] `VERIFY` — первая уборка legacy/pycache требует полного regression run.
 - [ ] `VERIFY` — Render/dependency/security изменения требуют полного CI.
 
