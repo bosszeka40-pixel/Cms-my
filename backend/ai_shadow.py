@@ -1,14 +1,18 @@
 """Safe AI shadow-trading orchestration.
 
-This module deliberately has no exchange order-placement capability. It accepts
-market observations, asks the existing strategy layer for a decision, records
-an auditable shadow decision, and can feed the existing learning memory.
+Shadow mode never places an exchange order. It records a decision only after
+strategy and risk validation. Trade outcome is deliberately not written as P/L
+until a later settlement step has an observed market outcome.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Any
+import math
+
+
+AI_CONFIDENCE_CUTOFF = 0.38
 
 
 @dataclass
@@ -37,48 +41,86 @@ class AIShadowTrader:
         self.risk_manager = risk_manager
         self.bot = bot
 
-    def evaluate(self, *, user_email: str, pair: str, price: float,
-                 news_sentiment: float = 0.0, price_change: float = 0.0,
-                 balance: float) -> dict[str, Any]:
+    def evaluate(
+        self,
+        *,
+        user_email: str,
+        pair: str,
+        price: float,
+        ai_confidence: float,
+        news_sentiment: float = 0.0,
+        price_change: float = 0.0,
+        balance: float,
+        stop_loss_pct: float = 0.02,
+        take_profit_pct: float = 0.04,
+    ) -> dict[str, Any]:
+        values = (price, ai_confidence, balance, stop_loss_pct, take_profit_pct)
+        if not all(math.isfinite(float(value)) for value in values):
+            raise ValueError("Параметры Shadow должны быть конечными числами.")
         if price <= 0 or balance <= 0:
             raise ValueError("Цена и баланс должны быть положительными.")
+        if not 0.0 <= ai_confidence <= 1.0:
+            raise ValueError("AI confidence должен находиться в диапазоне 0..1.")
+        if stop_loss_pct <= 0 or take_profit_pct <= 0:
+            raise ValueError("Stop-loss и take-profit должны быть положительными.")
 
-        strategy = self.strategy_manager.execute(
-            news_sentiment, price_change, balance
-        )
+        strategy = self.strategy_manager.execute(news_sentiment, price_change, balance)
         signal = str(strategy.get("signal", "WAIT")).upper()
         side = "buy" if "BUY" in signal else "sell" if "SELL" in signal else "wait"
-        confidence = 0.0 if side == "wait" else min(1.0, max(0.0, abs(float(price_change)) * 10.0))
+        leverage = float(strategy.get("leverage", 1.0))
 
-        risk = self.risk_manager.decide(balance, 1.0)
-        allowed = bool(risk.allowed) and side != "wait"
-        reason = str(risk.reason) if not risk.allowed else "Strategy signal passed shadow risk gate."
+        risk = self.risk_manager.decide(balance, leverage, stop_loss_pct)
+        allowed = bool(risk.allowed) and side != "wait" and ai_confidence >= AI_CONFIDENCE_CUTOFF
+
+        if not risk.allowed:
+            reason = str(risk.reason)
+        elif side == "wait":
+            reason = "Стратегия не дала торгового сигнала."
+        elif ai_confidence < AI_CONFIDENCE_CUTOFF:
+            reason = f"AI confidence ниже порога {AI_CONFIDENCE_CUTOFF:.2f}."
+        else:
+            reason = "AI confidence и стратегия прошли Shadow risk gate."
+
+        stop_loss = None
+        take_profit = None
+        if allowed:
+            if side == "buy":
+                stop_loss = price * (1.0 - stop_loss_pct)
+                take_profit = price * (1.0 + take_profit_pct)
+            else:
+                stop_loss = price * (1.0 + stop_loss_pct)
+                take_profit = price * (1.0 - take_profit_pct)
 
         decision_id = datetime.now(timezone.utc).strftime("shadow-%Y%m%d%H%M%S%f")
         decision = ShadowDecision(
             decision_id=decision_id,
             pair=pair,
             side=side if allowed else "blocked",
-            confidence=confidence,
+            confidence=ai_confidence,
             strategy=strategy["strategy"],
             mode=self.MODE,
             reason=reason,
             entry_price=float(price) if allowed else None,
-            stop_loss=None,
-            take_profit=None,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
+        payload = asdict(decision)
 
-        self.engine.record_bot_stat(
-            "ai_shadow_decision", str(asdict(decision))
-        )
-        self.engine.record_audit(
-            "ai_shadow_decision", str(asdict(decision)), user_email
-        )
+        self.engine.record_bot_stat("ai_shadow_decision", str(payload))
+        self.engine.record_audit("ai_shadow_decision", str(payload), user_email)
+        # This is a decision event, not a settled trade. Do not teach the
+        # learner a fabricated P/L value before the market outcome is known.
         self.engine.record_memory(
             "ai_shadow_decision",
-            float(strategy.get("pnl", 0.0)),
-            f"pair={pair}; side={decision.side}; confidence={confidence:.4f}; decision={decision_id}",
+            0.0,
+            f"pair={pair}; side={decision.side}; confidence={ai_confidence:.4f}; decision={decision_id}; status=unsettled",
             user_email,
         )
-        return {"allowed": allowed, "risk_reason": reason, **asdict(decision)}
+        return {
+            "allowed": allowed,
+            "risk_reason": reason,
+            "risk_position_fraction": risk.position_fraction if allowed else 0.0,
+            "settlement_status": "unsettled",
+            **payload,
+        }
