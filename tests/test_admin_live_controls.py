@@ -1,6 +1,7 @@
 """Regression coverage for authenticated administrative LIVE controls."""
 
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -18,7 +19,7 @@ from backend.security.live_controls import LIVE_CONTROL_STATE, LiveControlState
 
 
 class AdminLiveControlContractTests(unittest.TestCase):
-    """Keep the API contract explicit without contacting an exchange."""
+    """Keep the API and admin UI contract explicit without contacting an exchange."""
 
     def test_state_defaults_to_global_kill_switch_enabled(self):
         state = LiveControlState()
@@ -96,6 +97,21 @@ class AdminLiveControlContractTests(unittest.TestCase):
             snapshot = live_controls(request)
         self.assertTrue(snapshot["csrf_token"])
         self.assertEqual(request.session["admin_csrf_token"], snapshot["csrf_token"])
+
+    def test_admin_template_exposes_global_bot_and_ai_bot_controls(self):
+        template = (Path(__file__).resolve().parents[1] / "templates" / "admin.html").read_text(encoding="utf-8")
+        for marker in (
+            'id="live-controls"',
+            'data-live-global="true"',
+            'data-live-global="false"',
+            'live-bot-controls',
+            'live-ai-bot-controls',
+            '/api/admin/live-controls/global',
+            '/api/admin/live-controls/bots/',
+            '/api/admin/live-controls/ai-bots/',
+            "X-CSRF-Token",
+        ):
+            self.assertIn(marker, template)
 
 
 if __name__ == "__main__":
