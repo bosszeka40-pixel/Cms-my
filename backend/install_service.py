@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import secrets
-from pathlib import Path
 
+from . import installer
 from .cms_core import CMSEngine, User
-from .installer import INSTALL_MARKER, is_installed, validate_installation
 
 
 class InstallationError(ValueError):
@@ -23,10 +22,10 @@ def install_first_admin(
     The operation is intentionally refused after the installation marker exists
     or when an admin already exists. This keeps installer access fail-closed.
     """
-    if is_installed():
+    if installer.is_installed():
         raise InstallationError("CMS уже установлена.")
 
-    errors = validate_installation(username, password, password_confirm)
+    errors = installer.validate_installation(username, password, password_confirm)
     if errors:
         raise InstallationError(" ".join(errors))
 
@@ -43,8 +42,6 @@ def install_first_admin(
         if session.query(User).filter(User.role == "admin").first():
             raise InstallationError("Администратор уже существует.")
 
-        # Use the same User model as the rest of the CMS. The current engine
-        # will hash with its configured password migration path.
         user = User(
             email=email,
             password_hash=engine.hash_password(password),
@@ -64,5 +61,5 @@ def install_first_admin(
 
 def finalize_installation() -> None:
     """Write the marker only after all installation steps have succeeded."""
-    INSTALL_MARKER.parent.mkdir(parents=True, exist_ok=True)
-    INSTALL_MARKER.write_text(secrets.token_hex(32), encoding="utf-8")
+    installer.INSTALL_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    installer.INSTALL_MARKER.write_text(secrets.token_hex(32), encoding="utf-8")
