@@ -1,7 +1,6 @@
 # CMS-my — Project Status
 
 > Единый журнал состояния проекта. Обновлять при каждом существенном изменении.
->
 > **Правило:** `DONE` означает только проверенное состояние. Если код написан, но тест/интеграционная проверка не пройдены — статус `VERIFY`.
 
 ## Status legend
@@ -11,10 +10,17 @@
 - `TODO` — запланировано
 - `BLOCKED` — нельзя продолжать без дополнительной информации/решения
 - `LEGACY` — старый код; не удалять, пока не подтверждена зависимость
+- `CANDIDATE` — подозрительно лишний/дублирующий код; сначала проверить ссылки
 
 ## Current branch
 - `cleanup/security-hardening-2026-08`
 - `main` не изменять напрямую во время этого этапа.
+
+## Current work rule
+- Сначала рабочая функциональность и серверный тест.
+- Безопасность — отдельным этапом после функционального прогона.
+- Simulation/paper-код не считать конечным trading flow; использовать только для тестов, пока не подтверждён live flow.
+- Не удалять код по внешнему виду. Кандидаты сначала записываются в `LEGACY_REVIEW.md`, затем проверяются по ссылкам/тестам.
 
 ## Installation / Admin
 - [ ] `IN PROGRESS` — подключить HTTP `/install` к реальной модели `User` и существующей БД.
@@ -44,8 +50,8 @@
 - [x] `VERIFY` — добавлен UI-режим `LIVE · 1 сек`.
 - [x] `VERIFY` — для Binance live-режим собирает реальные trade events в односекундные OHLCV-свечи через WebSocket.
 - [x] `VERIFY` — для других бирж live-режим использует ticker fallback с интервалом 1 сек; это не заменяет полноценный trade stream.
-- [x] `VERIFY` — market terminal/live assets продублированы в активном `frontend/` static mount, чтобы существующий `app.mount('/static', .../frontend)` действительно отдавал их браузеру.
-- [x] `VERIFY` — добавлен compatibility patch, чтобы legacy-кнопка обновления рынка не перерисовывала новый терминальный график старым renderer.
+- [x] `VERIFY` — market terminal/live assets продублированы в активном `frontend/` static mount.
+- [x] `VERIFY` — добавлен compatibility patch для legacy market controls.
 - [ ] `IN PROGRESS` — составить карту всех страниц, шаблонов и backend routes.
 - [ ] `TODO` — проверить Dashboard.
 - [ ] `TODO` — проверить Wallet.
@@ -60,34 +66,28 @@
 
 ## Backend / Trading
 - [ ] `TODO` — полный аудит API endpoints.
-- [ ] `VERIFY` — проверки входных данных HFT/strategy/risk модулей.
-- [ ] `TODO` — проверить exchange connection flow.
-- [ ] `TODO` — проверить simulation/paper/live режимы.
+- [x] `VERIFY` — проверки входных данных HFT/strategy/risk модулей.
+- [ ] `IN PROGRESS` — проверить реальный exchange connection flow и свести дублирующую логику с `exchange_service`.
+- [ ] `VERIFY` — simulation/paper-код помечен как кандидат на удаление/изоляцию после проверки зависимостей.
 - [ ] `TODO` — проверить kill switch.
 - [ ] `TODO` — проверить risk limits.
 - [ ] `TODO` — не заявлять гарантированную прибыль; стратегии должны иметь явные risk/disclaimer boundaries.
+
+## Legacy cleanup
+- [x] `DONE` — создан `LEGACY_REVIEW.md` с кандидатами и правилами удаления.
+- [ ] `VERIFY` — `HFTSimulatePayload` и `/api/bot/simulate`: найти все frontend/test ссылки; затем изолировать или удалить, если не нужны для тестов.
+- [ ] `VERIFY` — inline exchange connection в `/marketplace`: сравнить с `exchange_service`; оставить один источник истины.
+- [ ] `VERIFY` — `DEV_ADMIN_BYPASS`: не удалять до готового installer/admin flow.
+- [ ] `VERIFY` — `forgot_password_submit`: проверить требуемый функционал перед заменой/удалением.
+- [ ] `LEGACY` — `archive/`: не удалять функциональность без проверки ссылок.
+- [ ] `TODO` — после аудита удалить только подтверждённый legacy.
 
 ## Database / Legacy
 - [ ] `IN PROGRESS` — определить единственную актуальную БД и все места её использования.
 - [ ] `LEGACY` — старые базы: не удалять до подтверждения зависимости.
 - [ ] `LEGACY` — второй/старый `main.py`: не удалять до подтверждения entry point.
-- [ ] `LEGACY` — `archive/`: не удалять функциональность без проверки ссылок.
-- [ ] `TODO` — после аудита удалить только подтверждённый legacy.
 
-## Existing changes — verify
-- [x] `VERIFY` — добавлен `backend/installer.py`.
-- [x] `VERIFY` — добавлен `backend/install_service.py`.
-- [x] `VERIFY` — добавлен `backend/password_compat.py`.
-- [x] `VERIFY` — добавлен `templates/install.html`.
-- [x] `VERIFY` — добавлены installer tests.
-- [x] `VERIFY` — добавлены `static/market_terminal.js` и `static/market_terminal.css` для исправления/улучшения биржевого графика.
-- [x] `VERIFY` — добавлены `static/market_live.js` и `static/market_live.css` для live 1s режима.
-- [x] `VERIFY` — добавлены активные копии market assets в `frontend/`.
-- [x] `VERIFY` — добавлен `frontend/market_terminal_patch.js` для совместимости с legacy market controls.
-- [ ] `VERIFY` — первая уборка legacy/pycache требует полного regression run.
-- [ ] `VERIFY` — Render/dependency/security изменения требуют полного CI.
-
-## Before merge
+## Before merge / test gate
 - [ ] Полный unit test suite.
 - [ ] Installer integration test.
 - [ ] Login/admin regression tests.
@@ -101,7 +101,6 @@
 - [ ] Только после этого — review и merge в `main`.
 
 ## Notes
-- DEV-вход без пароля был временным и нужен для разработки. Не ломать его без замены installer/admin flow.
+- DEV-вход без пароля временный и нужен для разработки. Не ломать его без замены installer/admin flow.
 - Приоритет: сохранить существующий функционал → исправить безопасность → восстановить отсутствующий UI → удалить подтверждённый legacy.
 - Не считать `VERIFY` завершённым, пока код не прошёл тесты и интеграционную проверку.
-- `LIVE · 1 сек` — это рыночное отображение, а не обещание исполнения ордеров с задержкой ровно 1 сек. Реальная задержка зависит от WebSocket/биржи/сети.
