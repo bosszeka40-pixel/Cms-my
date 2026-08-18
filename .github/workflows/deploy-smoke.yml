@@ -1,6 +1,7 @@
 name: deploy-smoke
 on:
   push:
+    branches: ['cleanup/security-hardening-2026-08']
   pull_request:
 jobs:
   smoke:
@@ -13,3 +14,4 @@ jobs:
       - run: pip install --no-cache-dir -r requirements.txt
       - run: python -m compileall backend
       - run: python -c "from backend.main import app; print(app.title)"
+      - run: python -c "from backend.health import health, ready; print(health()); print(ready())"
