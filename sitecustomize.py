@@ -11,7 +11,6 @@ import logging
 import os
 from pathlib import Path
 
-
 if os.getenv("CMS_FILE_LOGGING", "true").lower() not in {"0", "false", "no"}:
     try:
         log_dir = Path(os.getenv("CMS_LOG_DIR", "logs"))
@@ -29,5 +28,4 @@ if os.getenv("CMS_FILE_LOGGING", "true").lower() not in {"0", "false", "no"}:
         root.addHandler(handler)
         root.setLevel(min(root.level or logging.WARNING, logging.ERROR))
     except Exception:
-        # Logging must never prevent the application from starting.
         pass

@@ -1,8 +1,7 @@
 """Central execution policy for trading modes.
 
-The policy is deliberately fail-closed: real exchange execution is allowed only
-when the application is explicitly in LIVE mode and the independent live gate is
-enabled. DEMO/SHADOW/BACKTEST never authorize private order execution.
+This module is deliberately dependency-light so every execution path can use the
+same fail-closed rules. LIVE execution requires two independent gates.
 """
 from __future__ import annotations
 
@@ -26,21 +25,22 @@ def current_mode() -> TradingMode:
 
 
 def live_gate_enabled() -> bool:
-    return os.getenv("LIVE_TRADING_GATE", "false").strip().lower() == "true"
+    return os.getenv("LIVE_TRADING_GATE", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def real_execution_allowed() -> bool:
+def live_execution_allowed() -> bool:
     return current_mode() is TradingMode.LIVE and live_gate_enabled()
 
 
-def assert_real_execution_allowed() -> None:
-    if not real_execution_allowed():
-        raise PermissionError(
-            "Real exchange execution is disabled. "
-            "Set TRADING_MODE=live and LIVE_TRADING_GATE=true explicitly."
-        )
+def real_order_allowed() -> bool:
+    """Fail-closed decision for real exchange order submission."""
+    return live_execution_allowed()
 
 
-def assert_virtual_mode() -> None:
-    if current_mode() is TradingMode.LIVE:
-        raise PermissionError("Virtual execution is disabled while TRADING_MODE=live.")
+def virtual_execution_allowed() -> bool:
+    return current_mode() in {TradingMode.DEMO, TradingMode.SHADOW, TradingMode.BACKTEST}
+
+
+def assert_real_order_allowed() -> None:
+    if not real_order_allowed():
+        raise PermissionError("Real exchange execution is disabled by the trading execution policy.")

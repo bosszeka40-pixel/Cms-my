@@ -1,1 +1,1 @@
-"""Security primitives for fail-closed trading execution."""
+"""Security helpers for CMS trading boundaries."""
