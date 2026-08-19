@@ -29,3 +29,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: python scripts/test_cmsc_exchange.py
+      - name: Test CMSC exchange API auth
+        env:
+          PYTHONPATH: .
+        run: python scripts/test_cmsc_exchange_api_auth.py
