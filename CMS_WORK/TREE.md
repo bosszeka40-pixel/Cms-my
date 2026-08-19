@@ -17,17 +17,27 @@
   - [x] Install/activate/deactivate
   - [x] CMSC purchase/renewal debit test
   - [x] Integration test
-  - [ ] UI/design
+  - [ ] UI/design follow-up
   - [x] DONE
-- [ ] 02 Dashboard — IN PROGRESS
+- [x] 02 Dashboard — DONE
   - [x] Dashboard route/auth redirect
   - [x] CMSC balance data path
   - [x] Wallet data reaches template
   - [x] Dashboard CMSC balance smoke test
-  - [ ] Integration/regression test
-  - [ ] UI/design
+  - [x] Settings theme smoke test
+  - [x] DONE
+- [ ] 03 Wallet — IN PROGRESS
+  - [x] CMSC balance display
+  - [x] CMSC Exchange quote service
+  - [x] Fiat current-rate conversion
+  - [x] Crypto current-rate conversion
+  - [x] Admin Exchange fee API
+  - [x] Payment intent without premature CMSC credit
+  - [x] Wallet quote/intent UI
+  - [x] Exchange quote smoke test
+  - [ ] Real payment provider confirmation
+  - [ ] CMSC credit after confirmed payment
   - [ ] DONE
-- [ ] 03 Wallet
 - [ ] 04 Bot management
 - [ ] 05 Settings
 - [ ] 06 Admin
