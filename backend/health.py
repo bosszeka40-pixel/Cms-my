@@ -1,13 +1,14 @@
 """Health, readiness, and small deployment-safe integration probes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from .market_history import ensure_table
 from .marketplace_billing import purchase_strategy_with_cmsc
 from .cmsc_exchange import DEFAULT_FEE_RATE, create_payment_intent, quote_cmsc
 from .cmsc_payment_api import router as cmsc_payment_router
+from .rate_limit import cmsc_intent_rate_limit, cmsc_quote_rate_limit
 
 router = APIRouter(tags=["health"])
 router.include_router(cmsc_payment_router)
@@ -41,7 +42,7 @@ def _cmsc_exchange_fee_rate() -> float:
 
 
 @router.post("/api/strategies/purchase")
-def purchase_strategy(payload: StrategyPurchasePayload, request):
+def purchase_strategy(payload: StrategyPurchasePayload, request: Request):
     from .main import _strategy_performance, engine
 
     email = request.session.get("user_email")
@@ -64,7 +65,7 @@ def purchase_strategy(payload: StrategyPurchasePayload, request):
 
 
 @router.post("/api/exchange/cmsc/quote")
-def cmsc_exchange_quote(payload: CmscExchangePayload, request):
+def cmsc_exchange_quote(payload: CmscExchangePayload, request: Request, _: None = Depends(cmsc_quote_rate_limit)):
     if not request.session.get("user_email"):
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     try:
@@ -76,7 +77,7 @@ def cmsc_exchange_quote(payload: CmscExchangePayload, request):
 
 
 @router.post("/api/exchange/cmsc/intent")
-def cmsc_exchange_intent(payload: CmscExchangePayload, request):
+def cmsc_exchange_intent(payload: CmscExchangePayload, request: Request, _: None = Depends(cmsc_intent_rate_limit)):
     from .main import engine
 
     email = request.session.get("user_email")
