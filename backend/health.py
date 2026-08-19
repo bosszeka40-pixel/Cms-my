@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from .market_history import ensure_table
 from .marketplace_billing import purchase_strategy_with_cmsc
-from .cmsc_exchange import DEFAULT_FEE_RATE, PAYMENT_CURRENCIES, create_payment_intent, quote_cmsc
+from .cmsc_exchange import DEFAULT_FEE_RATE, create_payment_intent, quote_cmsc
 
 router = APIRouter(tags=["health"])
 
@@ -31,6 +31,11 @@ def ready() -> dict[str, str]:
     from .main import MARKET_DATABASE
     ensure_table(MARKET_DATABASE)
     return {"status": "ready"}
+
+
+def _cmsc_exchange_fee_rate() -> float:
+    from .main import strategy_manager
+    return float(strategy_manager.config.get("cmsc_exchange_fee_rate", DEFAULT_FEE_RATE))
 
 
 @router.post("/api/strategies/purchase")
@@ -61,7 +66,7 @@ def cmsc_exchange_quote(payload: CmscExchangePayload, request):
     if not request.session.get("user_email"):
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     try:
-        return quote_cmsc(payload.amount_cmsc, payload.currency, DEFAULT_FEE_RATE)
+        return quote_cmsc(payload.amount_cmsc, payload.currency, _cmsc_exchange_fee_rate())
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -76,7 +81,7 @@ def cmsc_exchange_intent(payload: CmscExchangePayload, request):
     if not email:
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     try:
-        return create_payment_intent(engine, email, payload.amount_cmsc, payload.currency, DEFAULT_FEE_RATE)
+        return create_payment_intent(engine, email, payload.amount_cmsc, payload.currency, _cmsc_exchange_fee_rate())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
