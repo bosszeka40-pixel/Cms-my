@@ -14,12 +14,12 @@
     </div>
     <div class="card">
         <h2>CMS Credits (CMSC)</h2>
-        <p class="muted">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный биржевой курс.</p>
+        <p class="muted">1 CMSC = €1.00. Exchange рассчитывает оплату по актуальному курсу и комиссии, заданной администратором.</p>
         <form method="post">
             <input type="hidden" name="action" value="buy_credits">
             <div class="field-group">
                 <label for="amount">Количество CMSC</label>
-                <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
+                <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100" required>
             </div>
             <div class="field-group">
                 <label for="currency">Валюта оплаты</label>
@@ -29,8 +29,9 @@
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn">Купить CMSC</button>
+            <button type="submit" class="btn">Рассчитать покупку CMSC</button>
         </form>
+        <p class="small-note">Расчёт не начисляет CMSC. Начисление произойдёт только после подтверждения реального платежа подключённым платёжным сервисом.</p>
     </div>
     <div class="card">
         <h2>Реферальная программа</h2>
