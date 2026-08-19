@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
           clean: true
       - name: Setup Python
@@ -47,7 +47,10 @@ jobs:
             if curl -fsS http://127.0.0.1:8000/health; then break; fi
             sleep 2
           done
-          curl -fsS http://127.0.0.1:8000/health
+          if ! curl -fsS http://127.0.0.1:8000/health; then
+            cat /tmp/cms.log
+            exit 1
+          fi
       - name: Check readiness
         run: curl -fsS http://127.0.0.1:8000/ready
       - name: Stop CMS
