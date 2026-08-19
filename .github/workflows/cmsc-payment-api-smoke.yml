@@ -1,0 +1,31 @@
+name: CMSC payment API smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile payment modules
+        run: python -m compileall -q backend/cmsc_exchange.py backend/cmsc_payment.py backend/cmsc_payment_api.py
+      - name: Run payment API smoke
+        env:
+          CMSC_PAYMENT_WEBHOOK_SECRET: smoke-secret
+        run: python scripts/test_cmsc_payment_api.py
