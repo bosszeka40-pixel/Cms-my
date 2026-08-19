@@ -1,11 +1,16 @@
 services:
   - type: web
-    name: cms-my
+    name: Cms-my
     runtime: docker
-    plan: free
+    plan: starter
     healthCheckPath: /health
+    autoDeployTrigger: checksPass
     envVars:
       - key: APP_ENV
         value: production
+      - key: SESSION_HTTPS_ONLY
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
       - key: CMS_FILE_LOGGING
         value: "true"
