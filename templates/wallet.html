@@ -2,9 +2,7 @@
 
 {% block content %}
     <h1 class="page-title">Кошелёк</h1>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
+    {% if message %}<div class="message">{{ message }}</div>{% endif %}
     <div class="card">
         <h2>Баланс</h2>
         <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.balance) }} CMSC</p>
@@ -14,28 +12,56 @@
     </div>
     <div class="card">
         <h2>CMS Credits (CMSC)</h2>
-        <p class="muted">1 CMSC = €1.00. Exchange рассчитывает оплату по актуальному курсу и комиссии, заданной администратором.</p>
-        <form method="post">
-            <input type="hidden" name="action" value="buy_credits">
+        <p class="muted">1 CMSC = €1.00. Exchange использует актуальный курс и комиссию администратора.</p>
+        <form id="cmsc-exchange-form">
             <div class="field-group">
                 <label for="amount">Количество CMSC</label>
-                <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100" required>
+                <input type="number" min="1" step="1" id="amount" name="amount_cmsc" placeholder="100" required>
             </div>
             <div class="field-group">
                 <label for="currency">Валюта оплаты</label>
                 <select id="currency" name="currency">
-                    {% for currency in payment_currencies %}
-                        <option value="{{ currency }}">{{ currency }}</option>
-                    {% endfor %}
+                    {% for currency in payment_currencies %}<option value="{{ currency }}">{{ currency }}</option>{% endfor %}
+                    <option value="USDT">USDT</option><option value="USDC">USDC</option><option value="BTC">BTC</option>
                 </select>
             </div>
-            <button type="submit" class="btn">Рассчитать покупку CMSC</button>
+            <button type="submit" class="btn">Рассчитать</button>
         </form>
-        <p class="small-note">Расчёт не начисляет CMSC. Начисление произойдёт только после подтверждения реального платежа подключённым платёжным сервисом.</p>
+        <div id="cmsc-quote" class="small-note" style="margin-top: 16px;"></div>
+        <button id="cmsc-intent" class="btn" type="button" hidden>Создать платёж</button>
+        <div id="cmsc-intent-result" class="small-note" style="margin-top: 10px;"></div>
+        <p class="small-note">Расчёт и платёжный intent не начисляют CMSC. Начисление произойдёт только после подтверждения реального платежа подключённым сервисом.</p>
     </div>
     <div class="card">
         <h2>Реферальная программа</h2>
         <p>Ваш код: <strong>{{ user_email|replace('@', '-') }}</strong></p>
         <p class="muted">Приглашайте пользователей и получайте CMSC-бонусы.</p>
     </div>
+    <script>
+        (() => {
+            const form = document.getElementById('cmsc-exchange-form');
+            const quoteBox = document.getElementById('cmsc-quote');
+            const intentButton = document.getElementById('cmsc-intent');
+            const intentBox = document.getElementById('cmsc-intent-result');
+            let quote = null;
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                intentButton.hidden = true;
+                intentBox.textContent = '';
+                const payload = { amount_cmsc: Number(form.amount_cmsc.value), currency: form.currency.value };
+                const response = await fetch('/api/exchange/cmsc/quote', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+                const data = await response.json();
+                if (!response.ok) { quoteBox.textContent = data.detail || 'Не удалось рассчитать курс.'; return; }
+                quote = data;
+                quoteBox.textContent = `${data.cmsc_amount} CMSC = ${data.gross_payment} ${data.currency} + комиссия ${data.fee_amount} ${data.currency}; к оплате ${data.payable_amount} ${data.currency}. Курс: 1 ${data.currency} = ${data.eur_per_payment_unit} EUR.`;
+                intentButton.hidden = false;
+            });
+            intentButton.addEventListener('click', async () => {
+                if (!quote) return;
+                const response = await fetch('/api/exchange/cmsc/intent', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({amount_cmsc: quote.cmsc_amount, currency: quote.currency}) });
+                const data = await response.json();
+                intentBox.textContent = response.ok ? `Платёж создан: ${data.intent_id}. Статус: ${data.status}. CMSC пока не начислены.` : (data.detail || 'Не удалось создать платёж.');
+            });
+        })();
+    </script>
 {% endblock %}
