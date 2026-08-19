@@ -9,17 +9,24 @@
 
 ## Branches
 
-- [ ] 01 Marketplace / Plugins — IN PROGRESS
+- [x] 01 Marketplace / Plugins — DONE
   - [x] Backend/plugin model
   - [x] API/routes
   - [x] Frontend/template
   - [x] JS/actions
   - [x] Install/activate/deactivate
-  - [ ] CMSC purchase/renewal debit test
-  - [ ] Integration test
+  - [x] CMSC purchase/renewal debit test
+  - [x] Integration test
+  - [ ] UI/design
+  - [x] DONE
+- [ ] 02 Dashboard — IN PROGRESS
+  - [x] Dashboard route/auth redirect
+  - [x] CMSC balance data path
+  - [x] Wallet data reaches template
+  - [x] Dashboard CMSC balance smoke test
+  - [ ] Integration/regression test
   - [ ] UI/design
   - [ ] DONE
-- [ ] 02 Dashboard
 - [ ] 03 Wallet
 - [ ] 04 Bot management
 - [ ] 05 Settings
