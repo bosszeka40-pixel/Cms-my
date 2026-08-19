@@ -18,6 +18,9 @@ class PluginCreate(BaseModel):
     price: float
     description: str = ""
 
+class CmscExchangeSettings(BaseModel):
+    fee_rate: float
+
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
@@ -61,6 +64,28 @@ def create_plugin(payload: PluginCreate, request: Request):
 def list_plugins(request: Request):
     _require_admin(request)
     return [{"id": plugin.id, "name": plugin.name, "price": plugin.price, "description": plugin.description} for plugin in engine.list_plugins()]
+
+
+@router.get("/cmsc-exchange-settings")
+def get_cmsc_exchange_settings(request: Request):
+    _require_admin(request)
+    from .cmsc_exchange import DEFAULT_FEE_RATE
+    from .main import strategy_manager
+    return {"fee_rate": float(strategy_manager.config.get("cmsc_exchange_fee_rate", DEFAULT_FEE_RATE))}
+
+
+@router.post("/cmsc-exchange-settings")
+def save_cmsc_exchange_settings(payload: CmscExchangeSettings, request: Request):
+    user = _require_admin(request)
+    if payload.fee_rate < 0 or payload.fee_rate > 0.25:
+        raise HTTPException(status_code=400, detail="Комиссия Exchange должна быть от 0% до 25%.")
+    from .main import strategy_manager
+    strategy_manager.config["cmsc_exchange_fee_rate"] = round(payload.fee_rate, 8)
+    with strategy_manager.config_path.open("w", encoding="utf-8") as handle:
+        import yaml
+        yaml.safe_dump(strategy_manager.config, handle)
+    engine.record_audit("cmsc_exchange_fee_changed", f"fee_rate={payload.fee_rate:.8f}", user.email)
+    return {"fee_rate": payload.fee_rate}
 
 
 def _require_admin(request: Request):
