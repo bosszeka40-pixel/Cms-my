@@ -1,10 +1,10 @@
 # Current Work
 
 ## Active branch
-`cleanup/security-hardening-2026-08`
+`main`
 
 ## Current function
-**Marketplace / Plugins — CMSC purchase path**
+**Dashboard — CMSC balance display path**
 
 ## Full route to trace once
 1. UI/template
@@ -22,17 +22,18 @@
 ## Status
 - Overall: `IN PROGRESS`
 - Deployment smoke: `DONE`
-- CMSC marketplace purchase billing: `IMPLEMENTED — TESTING`
+- Marketplace / Plugins — CMSC purchase path: `DONE`
+- Dashboard CMSC balance display: `IMPLEMENTED — TESTING`
 - Do not mark DONE until the complete route is verified.
 - Do not start the next function until this branch is closed.
 
 ## Current implementation
-- Paid plugin purchases are routed from the marketplace UI to `/api/strategies/purchase`.
-- CMSC is the internal settlement unit at a fixed `1 CMSC = 1 EUR`.
-- Paid purchases debit CMSC and create/extend plugin access in one transaction.
-- Insufficient CMSC rejects the purchase.
-- Free strategies do not debit CMSC.
-- Purchase audit entries are written to `audit_logs`.
+- `/dashboard` requires an authenticated session and redirects unauthenticated users to `/login`.
+- The dashboard obtains the authenticated user and calls `engine.get_or_create_wallet(user_email)`.
+- Wallet data is converted to the dashboard dictionary contract, including `credits`, `provider`, `address`, and `telegram`.
+- `dashboard.html` renders the CMSC balance from `wallet.credits`.
+- Added `scripts/test_dashboard.py` to verify login → dashboard → CMSC balance rendering end-to-end.
+- Added `.github/workflows/dashboard-smoke.yml` for repeatable CI verification.
 
 ## Cleanup rule
 If code looks unused: mark candidate → search all references → run relevant tests → move if it belongs elsewhere → otherwise delete.
