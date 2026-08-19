@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: cms-my
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: CMS_FILE_LOGGING
+        value: "true"
