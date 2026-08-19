@@ -37,3 +37,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: python scripts/test_cmsc_exchange_validation.py
+      - name: Test CMSC exchange rate limit
+        env:
+          PYTHONPATH: .
+        run: python scripts/test_cmsc_exchange_rate_limit.py
