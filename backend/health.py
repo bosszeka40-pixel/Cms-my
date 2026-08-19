@@ -7,8 +7,10 @@ from pydantic import BaseModel
 from .market_history import ensure_table
 from .marketplace_billing import purchase_strategy_with_cmsc
 from .cmsc_exchange import DEFAULT_FEE_RATE, create_payment_intent, quote_cmsc
+from .cmsc_payment_api import router as cmsc_payment_router
 
 router = APIRouter(tags=["health"])
+router.include_router(cmsc_payment_router)
 
 
 class StrategyPurchasePayload(BaseModel):
