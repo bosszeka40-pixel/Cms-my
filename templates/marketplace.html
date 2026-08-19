@@ -114,7 +114,7 @@
                     {% endif %}
                 </p>
                 {% if plugin.price_eur %}
-                    <form method="post" style="margin-top: 10px;">
+                    <form method="post" class="plugin-purchase-form" style="margin-top: 10px;">
                         <input type="hidden" name="action" value="buy_plugin">
                         <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
                         {% if plugin.license_options %}
@@ -151,6 +151,28 @@
 {% endblock %}
 {% block scripts %}
 <script>
+document.querySelectorAll('.plugin-purchase-form').forEach(form => {
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        const values = Object.fromEntries(new FormData(form).entries());
+        try {
+            const response = await fetch('/api/strategies/purchase', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({plugin_name: values.plugin_name, duration_days: Number(values.duration_days || 15)})
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Ошибка покупки стратегии');
+            location.reload();
+        } catch (error) {
+            button.disabled = false;
+            alert(error.message);
+        }
+    });
+});
+
 document.querySelectorAll('.activate-btn').forEach(button => {
     button.addEventListener('click', async () => {
         button.disabled = true;
