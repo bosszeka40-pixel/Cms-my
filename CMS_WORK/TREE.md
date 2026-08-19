@@ -10,11 +10,12 @@
 ## Branches
 
 - [ ] 01 Marketplace / Plugins — IN PROGRESS
-  - [ ] Backend/plugin model
-  - [ ] API/routes
-  - [ ] Frontend/template
-  - [ ] JS/actions
-  - [ ] Install/activate/deactivate
+  - [x] Backend/plugin model
+  - [x] API/routes
+  - [x] Frontend/template
+  - [x] JS/actions
+  - [x] Install/activate/deactivate
+  - [ ] CMSC purchase/renewal debit test
   - [ ] Integration test
   - [ ] UI/design
   - [ ] DONE
@@ -28,7 +29,7 @@
 - [ ] 09 Exchange connection / Trading
 - [ ] 10 Database
 - [ ] 11 Installer
-- [ ] 12 Error logging / server diagnostics
+- [x] 12 Error logging / server diagnostics — deployment smoke DONE
 - [ ] 13 Legacy cleanup
 
 ## Working documents
