@@ -17,6 +17,7 @@ import ccxt
 from urllib.parse import urlencode
 
 from .admin import router as admin_router
+from .health import router as health_router
 from .bot import HFTBot
 from .cms_core import CMSEngine
 from .hft_brain import CMSProductionHFTBot
@@ -46,6 +47,7 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend")), name="static")
 app.include_router(admin_router)
+app.include_router(health_router)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
