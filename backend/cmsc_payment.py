@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 
 from .cms_core import AuditLog, Base, User, Wallet
 
@@ -32,7 +32,6 @@ class CMSCPaymentIntent(Base):
 class CMSCPaymentStore:
     def __init__(self, engine):
         self.engine = engine
-        self.SessionLocal = engine.sessionmaker if hasattr(engine, 'sessionmaker') else None
         Base.metadata.create_all(bind=engine.engine)
 
     def _session(self):
@@ -71,14 +70,7 @@ class CMSCPaymentStore:
         finally:
             session.close()
 
-    def confirm(
-        self,
-        intent_id: str,
-        provider: str,
-        provider_reference: str,
-        paid_amount: float,
-        currency: str,
-    ) -> dict[str, Any]:
+    def confirm(self, intent_id: str, provider: str, provider_reference: str, paid_amount: float, currency: str) -> dict[str, Any]:
         if paid_amount <= 0:
             raise ValueError('Сумма подтверждённого платежа должна быть положительной.')
         provider_reference = provider_reference.strip()
@@ -110,11 +102,7 @@ class CMSCPaymentStore:
             row.provider = provider.strip() or None
             row.provider_reference = provider_reference
             row.confirmed_at = datetime.utcnow()
-            session.add(AuditLog(
-                user_id=row.email,
-                action='cmsc_payment_confirmed',
-                context=f'intent={row.intent_id}; provider={row.provider}; reference={provider_reference}; cmsc={row.cmsc_amount:.8f}',
-            ))
+            session.add(AuditLog(user_id=row.email, action='cmsc_payment_confirmed', context=f'intent={row.intent_id}; provider={row.provider}; reference={provider_reference}; cmsc={row.cmsc_amount:.8f}'))
             session.commit()
             session.refresh(row)
             return self._dict(row)
