@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -57,13 +58,8 @@ def _verify_signature(raw_body: bytes, signature: str, secret: str) -> None:
 def create_intent(payload: PaymentIntentPayload, request: Request) -> dict[str, Any]:
     email = _user_email(request)
     fee_rate = DEFAULT_FEE_RATE if payload.fee_rate is None else payload.fee_rate
-    try:
-        quote = quote_cmsc(payload.amount_cmsc, payload.currency, fee_rate)
-        intent_id = _engine.create_payment_intent_id()
-    except AttributeError:
-        import secrets
-        intent_id = f'cmsc_{secrets.token_urlsafe(18)}'
-        quote = quote_cmsc(payload.amount_cmsc, payload.currency, fee_rate)
+    quote = quote_cmsc(payload.amount_cmsc, payload.currency, fee_rate)
+    intent_id = f'cmsc_{secrets.token_urlsafe(18)}'
     return _store.create(email, quote, intent_id)
 
 
