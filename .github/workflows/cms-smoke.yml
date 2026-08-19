@@ -1,32 +1,47 @@
-name: cms-smoke
+name: CMS smoke
 
 on:
   push:
-    branches: ['main']
+    branches: [main]
   pull_request:
-    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install --no-cache-dir -r requirements.txt
-      - run: python -m compileall backend
-      - run: python healthcheck.py
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile backend
+        run: python -m compileall -q backend
+      - name: Import application
+        run: python healthcheck.py
       - name: Start CMS
+        env:
+          SECRET_KEY: ci-smoke-secret
+          APP_ENV: development
+          PORT: '8000'
         run: |
-          uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/cms.log 2>&1 &
+          nohup python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/cms.log 2>&1 &
           echo $! > /tmp/cms.pid
           for i in $(seq 1 30); do
-            curl --fail --silent http://127.0.0.1:8000/health && break
-            sleep 1
+            if curl -fsS http://127.0.0.1:8000/health; then break; fi
+            sleep 2
           done
-          curl --fail --silent http://127.0.0.1:8000/health
-          curl --fail --silent http://127.0.0.1:8000/ready
+          curl -fsS http://127.0.0.1:8000/health
+      - name: Check readiness
+        run: curl -fsS http://127.0.0.1:8000/ready
       - name: Stop CMS
         if: always()
         run: |
