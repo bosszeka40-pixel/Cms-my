@@ -12,15 +12,19 @@
 - Reviewed `main` as a source of already-integrated fixes; did **not** blindly merge `main` because the current branch contains newer security hardening that must not be downgraded.
 - Preserved newer security settings such as fail-closed execution policy, HFT risk controls, `SECRET_KEY`, and `SESSION_HTTPS_ONLY`.
 - Added/retained deployment and health/readiness fixes where they were compatible with the current branch.
+- Confirmed current Netlify deploy-preview failure for commit `c8b4bd00`: failure occurs during `Install dependencies`, so the exact package-level cause still needs deploy-log evidence before changing dependencies.
+- Confirmed `requirements.txt` already contains `pytest`, so the older CI finding about missing pytest is no longer current.
+- Found stale `.gitmodules` metadata referencing a missing `Cms` submodule. Removed `.gitmodules` in commit `d83dafad25f00dede06f7c5e6268a103ecefd860` to eliminate the checkout-cleanup warning; this is safe because the `Cms/` path is absent from the branch.
 - CI/workflow execution still needs fresh verification; absence of a workflow run is not treated as a pass.
 
 ## What remains to do
-1. Run/verify CI for the current branch.
-2. Verify Docker startup and `/health` + `/ready` end-to-end.
-3. Compare remaining `main` differences file-by-file; transfer only compatible fixes, never downgrade security hardening.
-4. Review `backend/main.py`, `backend/hft_brain.py`, and `requirements.txt` against the integrated `main` changes.
-5. Continue Marketplace / Plugins route verification through UI → JS → API → backend → storage/integration → response/error → UI update → regression test.
-6. Update this file after each material change and record the next required action.
+1. Verify CI after the stale submodule metadata removal.
+2. Obtain/inspect the Netlify dependency-install error details before changing `requirements.txt` or build configuration.
+3. Verify Docker startup and `/health` + `/ready` end-to-end.
+4. Compare remaining `main` differences file-by-file; transfer only compatible fixes, never downgrade security hardening.
+5. Review `backend/main.py`, `backend/hft_brain.py`, and `requirements.txt` against the integrated `main` changes.
+6. Continue Marketplace / Plugins route verification through UI → JS → API → backend → storage/integration → response/error → UI update → regression test.
+7. Update this file after each material change and record the next required action.
 
 ## Full route to trace once
 1. UI/template
