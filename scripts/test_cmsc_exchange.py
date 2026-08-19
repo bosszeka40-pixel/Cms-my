@@ -1,27 +1,35 @@
-import sys
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from backend.main import cmsc_exchange_quote
+from backend import cmsc_exchange
 
 
 def main():
-    quote = cmsc_exchange_quote("100", "USD")
-    assert quote["cmsc"] == 100
-    assert quote["currency"] == "USD"
-    assert quote["eur_value"] == 100.0
-    assert quote["rate"] > 0
-    assert quote["commission_rate"] >= 0
-    assert quote["payable"] > 0
-    assert quote["source"]
-
-    eur = cmsc_exchange_quote("10", "EUR")
-    assert eur["payable"] >= 10
-    assert eur["rate"] == 1.0
-
-    print("CMSC exchange quote path OK")
+    rates = {"EUR": 1.0, "USD": 0.92, "GBP": 1.17, "RUB": 0.010, "CHF": 1.05, "USDT": 0.92, "USDC": 0.92, "BTC": 55000.0}
+    original = cmsc_exchange.current_eur_rate
+    cmsc_exchange.current_eur_rate = lambda currency: rates[currency]
+    try:
+        quote = cmsc_exchange.quote_cmsc(100, "USD", 0.02)
+        assert quote["cmsc_eur_rate"] == 1.0
+        assert quote["gross_payment"] == 108.6956521739
+        assert round(quote["fee_amount"], 8) == 2.17391304
+        assert round(quote["payable_amount"], 8) == 110.86956522
+        crypto_quote = cmsc_exchange.quote_cmsc(10, "USDT", 0.01)
+        assert crypto_quote["currency"] == "USDT"
+        assert crypto_quote["payable_amount"] > crypto_quote["gross_payment"]
+        try:
+            cmsc_exchange.quote_cmsc(10, "JPY", 0.02)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Unsupported currency must fail")
+        print("CMSC exchange quote smoke OK")
+    finally:
+        cmsc_exchange.current_eur_rate = original
 
 
 if __name__ == "__main__":
