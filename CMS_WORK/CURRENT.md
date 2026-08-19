@@ -15,12 +15,14 @@
 - Confirmed `requirements.txt` already contains `pytest`, so the older CI finding about missing pytest is no longer current.
 - Found stale `.gitmodules` metadata referencing a missing `Cms` submodule. Removed `.gitmodules` in commit `d83dafad25f00dede06f7c5e6268a103ecefd860` because the `Cms/` path is absent from the branch.
 - Found that `.github/workflows/cms-smoke.yml` only triggered on `main`, so the security branch could not produce its own smoke run. Updated it in commit `5a40e6f2cf71002543a781af387d61dbf2af695b5` to trigger on both `main` and `cleanup/security-hardening-2026-08`, and on PRs targeting either branch.
+- User manually ran the GitHub Actions workflow and reported a Node.js 20 deprecation warning for `actions/checkout@v4` and `actions/setup-python@v5`.
+- Updated `.github/workflows/cms-smoke.yml` to `actions/checkout@v5` and `actions/setup-python@v6` in commit `123c12714548d33375476de0c9d2d702f6e36cf2`, removing the deprecated Node.js 20 action targets while keeping the smoke workflow logic unchanged.
 - Current smoke workflow runs dependency install, Python compile, `healthcheck.py`, application startup, `/health`, and `/ready` checks.
-- CI still needs fresh verification after the workflow trigger fix; absence of a run is not treated as a pass.
+- CI still needs fresh verification after the action-version update; absence of a run is not treated as a pass.
 - Netlify deploy-preview previously failed during `Install dependencies`; exact package-level cause still needs deploy-log evidence before changing dependencies.
 
 ## What remains to do
-1. Verify the new smoke workflow run for `5a40e6f2cf71002543a781af387d61dbf2af695b5`.
+1. Run/verify the updated smoke workflow for commit `123c12714548d33375476de0c9d2d702f6e36cf2`.
 2. If CI fails, inspect the failing job/log and fix the root cause only.
 3. Obtain/inspect the Netlify dependency-install error details before changing `requirements.txt` or build configuration.
 4. Verify Docker startup and `/health` + `/ready` end-to-end.
