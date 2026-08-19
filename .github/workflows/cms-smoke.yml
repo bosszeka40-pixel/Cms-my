@@ -18,7 +18,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          curl --fail-with-body -fsSL \
+          curl --fail-with-body -sSL \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}"
