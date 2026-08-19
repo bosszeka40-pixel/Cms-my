@@ -2,9 +2,13 @@ name: cms-smoke
 
 on:
   push:
-    branches: ['main']
+    branches:
+      - main
+      - cleanup/security-hardening-2026-08
   pull_request:
-    branches: ['main']
+    branches:
+      - main
+      - cleanup/security-hardening-2026-08
 
 jobs:
   smoke:
