@@ -1,5 +1,10 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.cms_core import CMSEngine
 from backend.marketplace_billing import purchase_strategy_with_cmsc
