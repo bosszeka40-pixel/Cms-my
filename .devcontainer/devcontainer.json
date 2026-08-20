@@ -1,15 +1,17 @@
 {
   "name": "CMS Python 3.12",
-  "build": {
-    "context": "..",
-    "dockerfile": "../Dockerfile"
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
-  },
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python", "ms-vscode.live-server"]
+      "extensions": [
+        "ms-python.python",
+        "ms-vscode.live-server"
+      ]
+    },
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
     }
   },
   "forwardPorts": [8000],
@@ -19,5 +21,6 @@
       "onAutoForward": "openBrowser"
     }
   },
-  "postCreateCommand": "python -m pip install --upgrade pip && python -m pip install -r requirements.txt"
+  "postCreateCommand": "python -m pip install -r requirements.txt",
+  "postStartCommand": "bash scripts/codespace-start.sh"
 }
