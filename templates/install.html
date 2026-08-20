@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="page-title">Установка Super CMS</h1>
+<p class="lead">Создайте первого администратора. После завершения установщик будет заблокирован.</p>
+{% if errors %}<div class="message">{% for error in errors %}<div>{{ error }}</div>{% endfor %}</div>{% endif %}
+<form method="post" autocomplete="off">
+  <div class="field-group"><label for="username">Имя администратора</label><input id="username" name="username" required minlength="3" maxlength="80" value="{{ username|default('') }}"></div>
+  <div class="field-group"><label for="password">Пароль</label><input id="password" name="password" type="password" required minlength="12"></div>
+  <div class="field-group"><label for="password_confirm">Повтор пароля</label><input id="password_confirm" name="password_confirm" type="password" required minlength="12"></div>
+  <button type="submit" class="btn">Установить CMS</button>
+</form>
+{% endblock %}

@@ -1,0 +1,95 @@
+import pytest
+
+from backend.exchange_service import ExchangeService
+from backend.security.live_controls import LiveControlState
+
+
+class FakeClient:
+    def __init__(self):
+        self.markets = {"BTC/USDT": {"limits": {"amount": {"min": 0.001}}}}
+        self.fees = {"trading": {"taker": 0.001}}
+        self.created = []
+        self.cancelled = []
+
+    def amount_to_precision(self, symbol, amount):
+        return f"{amount:.6f}"
+
+    def fetch_ticker(self, symbol):
+        return {"last": 100000}
+
+    def create_order(self, *args):
+        self.created.append(args)
+        return {"id": "created"}
+
+    def cancel_order(self, *args):
+        self.cancelled.append(args)
+        return {"id": "cancelled"}
+
+
+def test_exchange_service_does_not_persist_credentials(monkeypatch):
+    service = ExchangeService()
+    fake = FakeClient()
+    monkeypatch.setattr(service, "_exchange_class", staticmethod(lambda name: ("binance", lambda config: fake)))
+    monkeypatch.setattr(fake, "load_markets", lambda: None, raising=False)
+    monkeypatch.setattr(fake, "fetch_balance", lambda: {"free": {"USDT": 100}}, raising=False)
+
+    service.connect("user-1", "binance", "SECRET_API_KEY", "SECRET_API_SECRET")
+    stored = service.get("user-1")
+    assert "SECRET_API_KEY" not in repr(stored)
+    assert "SECRET_API_SECRET" not in repr(stored)
+    assert stored["api_key_hint"] == "SECR..._KEY"
+
+
+def test_exchange_status_reports_central_execution_policy(monkeypatch):
+    service = ExchangeService()
+    fake = FakeClient()
+    monkeypatch.setattr(service, "get", lambda user_id: {"name": "binance", "client": fake, "sandbox": True, "api_key_hint": "SECR..._KEY"})
+    monkeypatch.setenv("TRADING_MODE", "shadow")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "true")
+    status = service.status("user-1")
+    assert status["trading_mode"] == "shadow"
+    assert status["live_trading_enabled"] is False
+
+    monkeypatch.setenv("TRADING_MODE", "live")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "true")
+    status = service.status("user-1")
+    assert status["trading_mode"] == "live"
+    assert status["live_trading_enabled"] is True
+
+
+def test_exchange_service_blocks_order_without_bot_control(monkeypatch):
+    service = ExchangeService(live_state=LiveControlState(global_kill_switch=False))
+    fake = FakeClient()
+    monkeypatch.setattr(service, "get", lambda user_id: {"client": fake})
+    monkeypatch.setenv("TRADING_MODE", "live")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "true")
+
+    with pytest.raises(PermissionError):
+        service.create_order("user-1", "BTC/USDT", "market", "buy", 0.001, bot_id="bot-1")
+    assert fake.created == []
+
+
+def test_exchange_service_allows_order_when_all_live_controls_enabled(monkeypatch):
+    state = LiveControlState(global_kill_switch=False)
+    state.set_bot_live("bot-1", enabled=True, actor="test")
+    service = ExchangeService(live_state=state)
+    fake = FakeClient()
+    monkeypatch.setattr(service, "get", lambda user_id: {"client": fake})
+    monkeypatch.setenv("TRADING_MODE", "live")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "true")
+
+    result = service.create_order("user-1", "BTC/USDT", "market", "buy", 0.001, bot_id="bot-1")
+    assert result["id"] == "created"
+    assert len(fake.created) == 1
+
+
+def test_exchange_service_blocks_cancel_in_demo(monkeypatch):
+    service = ExchangeService()
+    fake = FakeClient()
+    monkeypatch.setattr(service, "get", lambda user_id: {"client": fake})
+    monkeypatch.setenv("TRADING_MODE", "demo")
+    monkeypatch.setenv("LIVE_TRADING_GATE", "false")
+
+    with pytest.raises(PermissionError):
+        service.cancel_order("user-1", "order-1", "BTC/USDT", bot_id="bot-1")
+    assert fake.cancelled == []

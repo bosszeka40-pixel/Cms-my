@@ -1,9 +1,11 @@
 import hashlib
+import hmac
 from pathlib import Path
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from werkzeug.security import check_password_hash, generate_password_hash
 
 DATABASE_URL = "sqlite:///./cms_core.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -91,15 +93,8 @@ class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
         self.db_name = db_name
         database_url = db_name if db_name.startswith("sqlite://") else f"sqlite:///./{Path(db_name)}"
-        self.engine = create_engine(
-            database_url,
-            connect_args={"check_same_thread": False},
-        )
-        self.SessionLocal = sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=self.engine,
-        )
+        self.engine = create_engine(database_url, connect_args={"check_same_thread": False})
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         self.init_db()
 
     def init_db(self):
@@ -111,17 +106,20 @@ class CMSEngine:
         with self.engine.begin() as connection:
             columns = connection.exec_driver_sql("PRAGMA table_info(user_plugins)").fetchall()
             if not any(column[1] == "access_until" for column in columns):
-                connection.exec_driver_sql(
-                    "ALTER TABLE user_plugins ADD COLUMN access_until DATETIME"
-                )
+                connection.exec_driver_sql("ALTER TABLE user_plugins ADD COLUMN access_until DATETIME")
 
     @staticmethod
     def hash_password(password: str) -> str:
-        return hashlib.sha256(password.encode("utf-8")).hexdigest()
+        if not password:
+            raise ValueError("Пароль не может быть пустым.")
+        return generate_password_hash(password, method="scrypt")
 
     def create_user(self, email: str, password: str, kyc_status: bool = False, role: str = "user") -> User:
         session = self.SessionLocal()
         try:
+            email = email.strip().lower()
+            if not email:
+                raise ValueError("Email не может быть пустым.")
             password_hash = self.hash_password(password)
             user = User(email=email, password_hash=password_hash, kyc_status=kyc_status, role=role)
             session.add(user)
@@ -132,17 +130,38 @@ class CMSEngine:
             session.close()
 
     def get_user(self, email: str):
+        if not email:
+            return None
         session = self.SessionLocal()
         try:
-            return session.query(User).filter(User.email == email).first()
+            return session.query(User).filter(User.email == email.strip().lower()).first()
         finally:
             session.close()
 
     def authenticate_user(self, email: str, password: str):
-        user = self.get_user(email)
-        if user and user.password_hash == self.hash_password(password):
+        if not email or not password:
+            return None
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email.strip().lower()).first()
+            if not user:
+                return None
+            valid = False
+            is_legacy = False
+            try:
+                valid = check_password_hash(user.password_hash, password)
+            except (ValueError, TypeError):
+                legacy_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+                valid = hmac_compare(user.password_hash, legacy_hash)
+                is_legacy = valid
+            if not valid:
+                return None
+            if is_legacy:
+                user.password_hash = self.hash_password(password)
+                session.commit()
             return user
-        return None
+        finally:
+            session.close()
 
     def create_plugin(self, name: str, price: float, description: str = "") -> Plugin:
         session = self.SessionLocal()
@@ -190,11 +209,7 @@ class CMSEngine:
             session.close()
 
     def ensure_strategy_plugins(self):
-        defaults = [
-            ("pure_harvester", 0.0, "Базовая стратегия сбора прибыли."),
-            ("high_frequency_momentum", 0.0, "Моментум-стратегия для тестового режима."),
-            ("compound_defender", 0.0, "Защитная стратегия сложного процента."),
-        ]
+        defaults = [("pure_harvester", 0.0, "Базовая стратегия сбора прибыли."), ("high_frequency_momentum", 0.0, "Моментум-стратегия для тестового режима."), ("compound_defender", 0.0, "Защитная стратегия сложного процента.")]
         session = self.SessionLocal()
         try:
             existing = {plugin.name for plugin in session.query(Plugin).all()}
@@ -448,3 +463,7 @@ class CMSEngine:
             session.commit()
         finally:
             session.close()
+
+
+def hmac_compare(left: str, right: str) -> bool:
+    return hmac.compare_digest(left or "", right or "")

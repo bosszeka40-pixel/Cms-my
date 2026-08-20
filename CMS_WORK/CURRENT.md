@@ -1,10 +1,35 @@
 # Current Work
 
 ## Active branch
-`main`
+`cleanup/security-hardening-2026-08`
 
 ## Current function
-**Wallet — CMSC Exchange quote and payment intent**
+**Marketplace / Plugins**
+
+## Work log — 2026-08-19
+- Created rollback point before integrating deployment fixes: `rollback-before-full-5b0b93c`.
+- Reviewed commit `5b0b93c5f759c8b47e9576f8679cb65af4ee9aa6` and compared its intended deployment/startup fixes with the current branch.
+- Reviewed `main` as a source of already-integrated fixes; did **not** blindly merge `main` because the current branch contains newer security hardening that must not be downgraded.
+- Preserved newer security settings such as fail-closed execution policy, HFT risk controls, `SECRET_KEY`, and `SESSION_HTTPS_ONLY`.
+- Added/retained deployment and health/readiness fixes where they were compatible with the current branch.
+- Confirmed `requirements.txt` already contains `pytest`, so the older CI finding about missing pytest is no longer current.
+- Found stale `.gitmodules` metadata referencing a missing `Cms` submodule. Removed `.gitmodules` in commit `d83dafad25f00dede06f7c5e6268a103ecefd860` because the `Cms/` path is absent from the branch.
+- Found that `.github/workflows/cms-smoke.yml` only triggered on `main`, so the security branch could not produce its own smoke run. Updated it in commit `5a40e6f2cf71002543a781af387d61dbf2af695b5` to trigger on both `main` and `cleanup/security-hardening-2026-08`, and on PRs targeting either branch.
+- User manually ran the GitHub Actions workflow and reported a Node.js 20 deprecation warning for `actions/checkout@v4` and `actions/setup-python@v5`.
+- Updated `.github/workflows/cms-smoke.yml` to `actions/checkout@v5` and `actions/setup-python@v6` in commit `123c12714548d33375476de0c9d2d702f6e36cf2`, removing the deprecated Node.js 20 action targets while keeping the smoke workflow logic unchanged.
+- Current smoke workflow runs dependency install, Python compile, `healthcheck.py`, application startup, `/health`, and `/ready` checks.
+- CI still needs fresh verification after the action-version update; absence of a run is not treated as a pass.
+- Netlify deploy-preview previously failed during `Install dependencies`; exact package-level cause still needs deploy-log evidence before changing dependencies.
+
+## What remains to do
+1. Run/verify the updated smoke workflow for commit `123c12714548d33375476de0c9d2d702f6e36cf2`.
+2. If CI fails, inspect the failing job/log and fix the root cause only.
+3. Obtain/inspect the Netlify dependency-install error details before changing `requirements.txt` or build configuration.
+4. Verify Docker startup and `/health` + `/ready` end-to-end.
+5. Compare remaining `main` differences file-by-file; transfer only compatible fixes, never downgrade security hardening.
+6. Review `backend/main.py`, `backend/hft_brain.py`, and `requirements.txt` against the integrated `main` changes.
+7. Continue Marketplace / Plugins route verification through UI → JS → API → backend → storage/integration → response/error → UI update → regression test.
+8. Update this file after each material change and record the next required action.
 
 ## Full route to trace once
 1. UI/template
@@ -21,26 +46,8 @@
 
 ## Status
 - Overall: `IN PROGRESS`
-- Deployment smoke: `DONE`
-- Marketplace / Plugins — CMSC purchase path: `DONE`
-- Dashboard CMSC balance display: `DONE`
-- Dashboard Settings — theme: `DONE`
-- Wallet CMSC Exchange: `IMPLEMENTED — TESTING`
 - Do not mark DONE until the complete route is verified.
-- Withdrawal remains intentionally out of scope for this branch.
-
-## Current implementation
-- CMSC has a fixed internal settlement value of `1 CMSC = 1 EUR`.
-- `/api/exchange/cmsc/quote` calculates the current EUR conversion rate and applies the administrator-configured Exchange fee.
-- Supported payment currencies include EUR/USD/GBP/RUB/CHF and USDT/USDC/BTC.
-- `/api/exchange/cmsc/intent` creates a pending payment intent and audit record; it does not credit CMSC before real payment confirmation.
-- Administrator API exposes the CMSC Exchange fee setting with a 0–25% validation range.
-- `wallet.html` now calculates a quote in the browser and can create a pending payment intent.
-- `scripts/test_cmsc_exchange.py` validates fiat/crypto quote math and unsupported-currency rejection.
-- `.github/workflows/cmsc-exchange-smoke.yml` provides repeatable CI verification.
-
-## Important business rule
-Payment confirmation and actual card/crypto collection must be implemented through a real payment provider before CMSC is credited. A quote or intent alone must never increase the user's CMSC balance.
+- Do not start the next function until this branch is closed.
 
 ## Cleanup rule
 If code looks unused: mark candidate → search all references → run relevant tests → move if it belongs elsewhere → otherwise delete.

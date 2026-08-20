@@ -28,5 +28,4 @@ if os.getenv("CMS_FILE_LOGGING", "true").lower() not in {"0", "false", "no"}:
         root.addHandler(handler)
         root.setLevel(min(root.level or logging.WARNING, logging.ERROR))
     except Exception:
-        # Logging must never prevent the application from starting.
         pass

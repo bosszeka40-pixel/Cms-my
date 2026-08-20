@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "cleanup/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile Python
+        run: python -m compileall -q backend run.py tools
+      - name: Request/path map
+        run: python tools/cms_request_mapper.py .
+      - name: Compile diagnostic report
+        run: python tools/cms_compile_report.py .
+      - name: Security boundary tests
+        run: python -m unittest discover -s tests -v
+      - name: Pytest security suite
+        run: python -m pytest -q tests
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cms-audit-reports
+          path: |
+            docs/REQUEST_MAP.md
+            docs/REQUEST_MAP.json
+            docs/COMPILE_REPORT.md
+            docs/COMPILE_REPORT.json

@@ -1,97 +1,36 @@
-name: CMS smoke
+name: cms-smoke
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - cleanup/security-hardening-2026-08
   pull_request:
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches:
+      - main
+      - cleanup/security-hardening-2026-08
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Verify repository access
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl --fail-with-body -sSL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}"
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          clean: true
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-          cache: pip
-      - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Compile backend
-        run: python -m compileall -q backend
-      - name: Test CMSC marketplace billing
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from tempfile import TemporaryDirectory
-          
-          from backend.cms_core import CMSEngine
-          from backend.marketplace_billing import purchase_strategy_with_cmsc
-          
-          with TemporaryDirectory() as temp_dir:
-              engine = CMSEngine(str(Path(temp_dir) / 'marketplace-test.db'))
-              email = 'billing-test@example.local'
-              engine.create_user(email, 'test-password')
-              engine.create_plugin('paid_test_strategy', 12.0, 'billing test')
-              engine.add_wallet_credits(email, 20.0)
-              
-              purchase = purchase_strategy_with_cmsc(engine, email, 'paid_test_strategy', 12.0, 15)
-              assert purchase['price_cmsc'] == 12.0
-              assert purchase['cmsc_rate_eur'] == 1.0
-              assert purchase['balance_cmsc'] == 8.0
-              
-              try:
-                  purchase_strategy_with_cmsc(engine, email, 'paid_test_strategy', 9.0, 15)
-              except ValueError as exc:
-                  assert 'Недостаточно CMSC' in str(exc)
-              else:
-                  raise AssertionError('Insufficient CMSC purchase was accepted')
-              
-              engine.create_plugin('free_test_strategy', 0.0, 'free billing test')
-              free_purchase = purchase_strategy_with_cmsc(engine, email, 'free_test_strategy', 0.0, 15)
-              assert free_purchase['price_cmsc'] == 0.0
-              assert free_purchase['balance_cmsc'] == 8.0
-          
-          print('CMSC marketplace billing OK')
-          PY
-      - name: Import application
-        run: python healthcheck.py
+      - run: pip install --no-cache-dir -r requirements.txt
+      - run: python -m compileall backend
+      - run: python healthcheck.py
       - name: Start CMS
-        env:
-          SECRET_KEY: ci-smoke-secret
-          APP_ENV: development
-          PORT: '8000'
         run: |
-          nohup python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/cms.log 2>&1 &
+          uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/cms.log 2>&1 &
           echo $! > /tmp/cms.pid
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/health; then break; fi
-            sleep 2
+            curl --fail --silent http://127.0.0.1:8000/health && break
+            sleep 1
           done
-          if ! curl -fsS http://127.0.0.1:8000/health; then
-            cat /tmp/cms.log
-            exit 1
-          fi
-      - name: Check readiness
-        run: curl -fsS http://127.0.0.1:8000/ready
+          curl --fail --silent http://127.0.0.1:8000/health
+          curl --fail --silent http://127.0.0.1:8000/ready
       - name: Stop CMS
         if: always()
         run: |

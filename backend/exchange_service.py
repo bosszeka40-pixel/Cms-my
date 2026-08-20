@@ -4,6 +4,10 @@ from threading import Lock
 
 import ccxt
 
+from .security.execution_gateway import cancel_real_order, submit_real_order
+from .security.execution_policy import current_mode, real_execution_allowed
+from .security.live_controls import LIVE_CONTROL_STATE, LiveControlState
+
 
 SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
 
@@ -11,9 +15,10 @@ SUPPORTED_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"
 class ExchangeService:
     """Keeps authenticated CCXT clients in memory; API secrets are never persisted."""
 
-    def __init__(self):
+    def __init__(self, live_state: LiveControlState | None = None):
         self._clients = {}
         self._lock = Lock()
+        self._live_state = live_state or LIVE_CONTROL_STATE
 
     @staticmethod
     def _exchange_class(name):
@@ -43,7 +48,6 @@ class ExchangeService:
         if sandbox:
             client.set_sandbox_mode(True)
         client.load_markets()
-        # Fetching the balance verifies authentication without exposing credentials.
         client.fetch_balance()
         with self._lock:
             self._clients[user_id] = {
@@ -63,12 +67,14 @@ class ExchangeService:
 
     def status(self, user_id):
         connection = self.get(user_id) if user_id in self._clients else None
+        mode = current_mode().value
         return {
             "connected": bool(connection),
             "exchange": connection["name"] if connection else None,
             "sandbox": connection["sandbox"] if connection else None,
             "api_key": connection["api_key_hint"] if connection else None,
-            "live_trading_enabled": os.getenv("LIVE_TRADING_ENABLED", "false").lower() == "true",
+            "trading_mode": mode,
+            "live_trading_enabled": real_execution_allowed(),
         }
 
     def disconnect(self, user_id):
@@ -76,16 +82,13 @@ class ExchangeService:
             self._clients.pop(user_id, None)
 
     def balance(self, user_id):
-        connection = self.get(user_id)
-        return connection["client"].fetch_balance()
+        return self.get(user_id)["client"].fetch_balance()
 
     def ticker(self, user_id, symbol):
-        connection = self.get(user_id)
-        return connection["client"].fetch_ticker(symbol)
+        return self.get(user_id)["client"].fetch_ticker(symbol)
 
     def trading_fee(self, user_id, symbol):
-        connection = self.get(user_id)
-        client = connection["client"]
+        client = self.get(user_id)["client"]
         try:
             fee = client.fetch_trading_fee(symbol)
             rate = fee.get("taker") or fee.get("rate")
@@ -114,7 +117,10 @@ class ExchangeService:
             raise ValueError("Биржа не сообщила минимальный размер ордера.")
         return float(connection["client"].amount_to_precision(symbol, amount_min))
 
-    def create_order(self, user_id, symbol, order_type, side, amount, price=None, params=None):
+    def create_order(
+        self, user_id, symbol, order_type, side, amount, price=None, params=None,
+        *, bot_id=None, ai_bot_id=None, live_state=None,
+    ):
         connection = self.get(user_id)
         client = connection["client"]
         order_type = (order_type or "").lower()
@@ -125,18 +131,32 @@ class ExchangeService:
             raise ValueError("Количество должно быть положительным числом.")
         if symbol not in client.markets:
             raise ValueError("Торговая пара недоступна на подключенной бирже.")
-        minimum_price = price
-        if minimum_price is None:
-            minimum_price = client.fetch_ticker(symbol).get("last")
+        minimum_price = price if price is not None else client.fetch_ticker(symbol).get("last")
         minimum_amount = self.minimum_order_amount(user_id, symbol, minimum_price)
         if amount < minimum_amount:
             raise ValueError(f"Минимальное количество для {symbol}: {minimum_amount}.")
+        gateway_kwargs = {
+            "live_state": live_state or self._live_state,
+            "bot_id": bot_id,
+            "ai_bot_id": ai_bot_id,
+        }
         if order_type == "market":
-            return client.create_order(symbol, order_type, side, amount, None, params or {})
+            return submit_real_order(
+                client.create_order, symbol, order_type, side, amount, None, params or {}, **gateway_kwargs
+            )
         if price is None or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
             raise ValueError("Для лимитного ордера нужна положительная цена.")
-        return client.create_order(symbol, order_type, side, amount, price, params or {})
+        return submit_real_order(
+            client.create_order, symbol, order_type, side, amount, price, params or {}, **gateway_kwargs
+        )
 
-    def cancel_order(self, user_id, order_id, symbol, params=None):
-        connection = self.get(user_id)
-        return connection["client"].cancel_order(order_id, symbol, params or {})
+    def cancel_order(
+        self, user_id, order_id, symbol, params=None, *, bot_id=None, ai_bot_id=None, live_state=None
+    ):
+        client = self.get(user_id)["client"]
+        return cancel_real_order(
+            client.cancel_order, order_id, symbol, params or {},
+            live_state=live_state or self._live_state,
+            bot_id=bot_id,
+            ai_bot_id=ai_bot_id,
+        )
