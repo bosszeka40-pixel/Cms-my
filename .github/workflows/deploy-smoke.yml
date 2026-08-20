@@ -1,17 +1,28 @@
 name: deploy-smoke
+
 on:
   push:
-    branches: ['cleanup/security-hardening-2026-08']
+    branches: ['cleanup/security-hardening-2026-08', 'fix/**']
   pull_request:
+
+concurrency:
+  group: cms-deploy-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
       - run: pip install --no-cache-dir -r requirements.txt
       - run: python -m compileall backend
-      - run: python -c "from backend.main import app; print(app.title)"
-      - run: python -c "from backend.health import health, ready; print(health()); print(ready())"
+      - run: python healthcheck.py
+      - name: Import application
+        run: python -c "from backend.main import app; print(app.title)"
+      - name: Check health and readiness functions
+        run: python -c "from backend.health import health, ready; print(health()); print(ready())"
