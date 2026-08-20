@@ -7,12 +7,14 @@ if str(ROOT) not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.middleware.sessions import SessionMiddleware
 
 from backend.health import router
 
 
 def main():
     app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key='exchange-rate-limit-smoke-secret')
     app.include_router(router)
     client = TestClient(app)
 

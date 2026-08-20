@@ -5,13 +5,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.middleware.sessions import SessionMiddleware
+
 from backend.health import router
 
 
 def main():
-    from fastapi import FastAPI
     app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key='exchange-auth-smoke-secret')
     app.include_router(router)
     client = TestClient(app)
 

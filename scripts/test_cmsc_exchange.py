@@ -21,15 +21,17 @@ def main():
         crypto_quote = cmsc_exchange.quote_cmsc(10, "USDT", 0.01)
         assert crypto_quote["currency"] == "USDT"
         assert crypto_quote["payable_amount"] > crypto_quote["gross_payment"]
-        try:
-            cmsc_exchange.quote_cmsc(10, "JPY", 0.02)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("Unsupported currency must fail")
-        print("CMSC exchange quote smoke OK")
     finally:
         cmsc_exchange.current_eur_rate = original
+
+    try:
+        cmsc_exchange.quote_cmsc(10, "JPY", 0.02)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unsupported currency must fail")
+
+    print("CMSC exchange quote smoke OK")
 
 
 if __name__ == "__main__":

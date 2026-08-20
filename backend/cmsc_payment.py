@@ -82,6 +82,13 @@ class CMSCPaymentStore:
             if not row:
                 raise ValueError('Payment intent не найден.')
             if row.status == 'confirmed':
+                if row.provider_reference != provider_reference:
+                    raise ValueError('Payment intent уже подтверждён с другим provider reference.')
+                if row.currency.upper() != currency.upper():
+                    raise ValueError('Валюта повторного подтверждения не совпадает с intent.')
+                tolerance = max(0.00000001, row.payable_amount * 0.0001)
+                if abs(float(paid_amount) - row.payable_amount) > tolerance:
+                    raise ValueError('Сумма повторного подтверждения не совпадает с intent.')
                 return self._dict(row)
             if row.status != 'pending_payment':
                 raise ValueError('Payment intent нельзя подтвердить из текущего статуса.')
