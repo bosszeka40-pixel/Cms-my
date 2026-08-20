@@ -5,17 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from .market_history import ensure_table
-from .marketplace_billing import purchase_strategy_with_cmsc
 from .cmsc_exchange import DEFAULT_FEE_RATE, create_payment_intent, quote_cmsc
 from .cmsc_payment_api import router as cmsc_payment_router
 from .rate_limit import cmsc_intent_rate_limit, cmsc_quote_rate_limit
 
 router = APIRouter(tags=["health"])
 router.include_router(cmsc_payment_router)
-
-class StrategyPurchasePayload(BaseModel):
-    plugin_name: str
-    duration_days: int = 15
 
 class CmscExchangePayload(BaseModel):
     amount_cmsc: float
@@ -37,27 +32,6 @@ def _cmsc_exchange_fee_rate() -> float:
 
 def _safe_bad_gateway(message: str) -> HTTPException:
     return HTTPException(status_code=502, detail=message)
-
-@router.post("/api/strategies/purchase")
-def purchase_strategy(payload: StrategyPurchasePayload, request: Request):
-    from .main import _strategy_performance, engine
-    email = request.session.get("user_email")
-    if not email:
-        raise HTTPException(status_code=401, detail="Требуется авторизация.")
-    try:
-        performance = _strategy_performance()
-    except Exception as exc:
-        raise _safe_bad_gateway("Не удалось проверить цену стратегии.") from exc
-    result = performance.get(payload.plugin_name)
-    if not result:
-        raise HTTPException(status_code=404, detail="Стратегия не найдена.")
-    try:
-        purchase = purchase_strategy_with_cmsc(engine, email, payload.plugin_name, result.get("price_eur", 0.0), payload.duration_days)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not purchase:
-        raise HTTPException(status_code=404, detail="Стратегия не найдена.")
-    return purchase
 
 @router.post("/api/exchange/cmsc/quote")
 def cmsc_exchange_quote(payload: CmscExchangePayload, request: Request, _: None = Depends(cmsc_quote_rate_limit)):
