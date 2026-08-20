@@ -28,56 +28,69 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           clean: true
+      - name: Prepare writable CI workspace
+        run: |
+          rm -rf /tmp/cms-ci
+          mkdir -p /tmp/cms-ci
+          cp -a . /tmp/cms-ci/
+          chmod -R u+rwX /tmp/cms-ci
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
       - name: Install dependencies
+        working-directory: /tmp/cms-ci
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Compile backend
+        working-directory: /tmp/cms-ci
         run: python -m compileall -q backend
       - name: Test CMSC marketplace billing
+        working-directory: /tmp/cms-ci
         run: |
           python - <<'PY'
           from pathlib import Path
           from tempfile import TemporaryDirectory
-          
+
           from backend.cms_core import CMSEngine
           from backend.marketplace_billing import purchase_strategy_with_cmsc
-          
+
           with TemporaryDirectory() as temp_dir:
               engine = CMSEngine(str(Path(temp_dir) / 'marketplace-test.db'))
               email = 'billing-test@example.local'
               engine.create_user(email, 'test-password')
               engine.create_plugin('paid_test_strategy', 12.0, 'billing test')
               engine.add_wallet_credits(email, 20.0)
-              
+
               purchase = purchase_strategy_with_cmsc(engine, email, 'paid_test_strategy', 12.0, 15)
               assert purchase['price_cmsc'] == 12.0
               assert purchase['cmsc_rate_eur'] == 1.0
               assert purchase['balance_cmsc'] == 8.0
-              
+
               try:
                   purchase_strategy_with_cmsc(engine, email, 'paid_test_strategy', 9.0, 15)
               except ValueError as exc:
                   assert 'Недостаточно CMSC' in str(exc)
               else:
                   raise AssertionError('Insufficient CMSC purchase was accepted')
-              
+
               engine.create_plugin('free_test_strategy', 0.0, 'free billing test')
               free_purchase = purchase_strategy_with_cmsc(engine, email, 'free_test_strategy', 0.0, 15)
               assert free_purchase['price_cmsc'] == 0.0
               assert free_purchase['balance_cmsc'] == 8.0
-          
+
           print('CMSC marketplace billing OK')
           PY
       - name: Import application
+        working-directory: /tmp/cms-ci
+        env:
+          APP_ENV: ci
         run: python healthcheck.py
       - name: Start CMS
+        working-directory: /tmp/cms-ci
         env:
           SECRET_KEY: ci-smoke-secret
-          APP_ENV: development
+          APP_ENV: ci
           PORT: '8000'
         run: |
           nohup python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > /tmp/cms.log 2>&1 &
