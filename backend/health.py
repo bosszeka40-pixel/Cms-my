@@ -35,6 +35,9 @@ def _cmsc_exchange_fee_rate() -> float:
     from .main import strategy_manager
     return float(strategy_manager.config.get("cmsc_exchange_fee_rate", DEFAULT_FEE_RATE))
 
+def _safe_bad_gateway(message: str) -> HTTPException:
+    return HTTPException(status_code=502, detail=message)
+
 @router.post("/api/strategies/purchase")
 def purchase_strategy(payload: StrategyPurchasePayload, request: Request):
     from .main import _strategy_performance, engine
@@ -44,7 +47,7 @@ def purchase_strategy(payload: StrategyPurchasePayload, request: Request):
     try:
         performance = _strategy_performance()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Не удалось проверить цену стратегии: {exc}") from exc
+        raise _safe_bad_gateway("Не удалось проверить цену стратегии.") from exc
     result = performance.get(payload.plugin_name)
     if not result:
         raise HTTPException(status_code=404, detail="Стратегия не найдена.")
@@ -65,7 +68,7 @@ def cmsc_exchange_quote(payload: CmscExchangePayload, request: Request, _: None 
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Не удалось получить актуальный курс: {exc}") from exc
+        raise _safe_bad_gateway("Не удалось получить актуальный курс.") from exc
 
 @router.post("/api/exchange/cmsc/intent")
 def cmsc_exchange_intent(payload: CmscExchangePayload, request: Request, _: None = Depends(cmsc_intent_rate_limit)):
@@ -78,4 +81,4 @@ def cmsc_exchange_intent(payload: CmscExchangePayload, request: Request, _: None
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Не удалось создать платёжный intent: {exc}") from exc
+        raise _safe_bad_gateway("Не удалось создать платёжный intent.") from exc
