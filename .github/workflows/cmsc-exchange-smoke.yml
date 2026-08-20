@@ -1,0 +1,31 @@
+name: CMSC exchange smoke
+
+on:
+  push:
+    branches: [main, 'work/**', 'cleanup/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exchange:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile backend
+        run: python -m compileall -q backend
+      - name: CMSC exchange security smoke
+        env:
+          PYTHONPATH: .
+        run: python scripts/test_cmsc_exchange_security.py
