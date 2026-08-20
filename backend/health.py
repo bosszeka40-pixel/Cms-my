@@ -1,6 +1,4 @@
 """Health, readiness, and small deployment-safe integration probes."""
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
