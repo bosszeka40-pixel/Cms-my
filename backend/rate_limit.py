@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 from collections import defaultdict, deque
 from threading import Lock
 from time import monotonic
 
 from fastapi import HTTPException, Request
+
 
 class InMemoryRateLimiter:
     def __init__(self, limit: int, window_seconds: float) -> None:
@@ -24,6 +23,7 @@ class InMemoryRateLimiter:
             if len(events) >= self.limit:
                 raise HTTPException(status_code=429, detail='Слишком много запросов. Повторите позже.')
             events.append(now)
+
 
 cmsc_quote_rate_limit = InMemoryRateLimiter(limit=20, window_seconds=60)
 cmsc_intent_rate_limit = InMemoryRateLimiter(limit=5, window_seconds=60)
