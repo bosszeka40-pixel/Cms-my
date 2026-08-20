@@ -18,7 +18,14 @@ def expect_value_error(fn, *args, **kwargs):
 
 def main():
     original = exchange.current_eur_rate
-    exchange.current_eur_rate = lambda currency: 1.0
+
+    def deterministic_rate(currency):
+        normalized = currency.upper().strip()
+        if normalized == 'JPY':
+            return original(currency)
+        return 1.0
+
+    exchange.current_eur_rate = deterministic_rate
     try:
         expect_value_error(exchange.quote_cmsc, 0, 'EUR')
         expect_value_error(exchange.quote_cmsc, -1, 'EUR')
