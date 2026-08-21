@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "echo 'Using Vercel Python runtime'",
   "builds": [
     {
       "src": "backend/main.py",
