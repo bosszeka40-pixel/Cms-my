@@ -17,6 +17,7 @@ import ccxt
 from urllib.parse import urlencode
 
 from .admin import router as admin_router
+from .health import router as health_router
 from .bot import HFTBot
 from .cms_core import CMSEngine
 from .hft_brain import CMSProductionHFTBot
@@ -35,9 +36,15 @@ from .risk_management import RiskManager
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 
-app = FastAPI(title="Daily Compound Harvester CMS", version="1.0.0")
+# Validate required production configuration BEFORE mutating any module globals.
+# importlib.reload() re-executes this module in its existing namespace, so raising
+# after `app`/`templates` are reassigned would leave the module half-initialized
+# (e.g. an `app` with no mounted `/static` route). Guarding first keeps a failed
+# reload from corrupting already-imported state.
 if os.getenv("APP_ENV", "development").lower() == "production" and not os.getenv("SECRET_KEY"):
     raise RuntimeError("SECRET_KEY must be configured in production.")
+
+app = FastAPI(title="Daily Compound Harvester CMS", version="1.0.0")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SECRET_KEY", "development-only-change-me"),
@@ -46,6 +53,7 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend")), name="static")
 app.include_router(admin_router)
+app.include_router(health_router)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -888,7 +896,8 @@ async def logout(request: Request):
     return RedirectResponse(url="/", status_code=302)
 
 @app.post("/api/user/connect-exchange")
-def connect_exchange(config: ExchangeConfig):
+def connect_exchange(config: ExchangeConfig, request: Request):
+    _require_user(request)
     try:
         exchange_class = getattr(ccxt, config.exchange_name.lower())
         exchange = exchange_class({
@@ -1215,7 +1224,8 @@ def bot_backtest(payload: BacktestPayload, request: Request):
     return {"results": results}
 
 @app.post("/api/bot/simulate")
-def simulate_trade(payload: HFTSimulatePayload):
+def simulate_trade(payload: HFTSimulatePayload, request: Request):
+    _require_user(request)
     try:
         capital = production_bot.trade_loop(payload.market_data, payload.ai_stream)
         metrics = production_bot.metrics()
