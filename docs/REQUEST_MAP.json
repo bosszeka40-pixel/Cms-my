@@ -1,0 +1,1896 @@
+{
+  "generated_by": "tools/cms_request_mapper.py",
+  "routes": [
+    {
+      "file": "backend/main.py",
+      "path": "/",
+      "methods": [
+        "GET"
+      ],
+      "handler": "serve_root",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/admin/risk",
+      "methods": [
+        "POST"
+      ],
+      "handler": "admin_risk_action",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/ai-shadow/evaluate",
+      "methods": [
+        "POST"
+      ],
+      "handler": "ai_shadow_evaluate",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/ai-shadow/feed/start",
+      "methods": [
+        "POST"
+      ],
+      "handler": "ai_shadow_feed_start",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/ai-shadow/feed/status",
+      "methods": [
+        "GET"
+      ],
+      "handler": "ai_shadow_feed_status",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/ai-shadow/feed/stop",
+      "methods": [
+        "POST"
+      ],
+      "handler": "ai_shadow_feed_stop",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/ai-shadow/monitor",
+      "methods": [
+        "POST"
+      ],
+      "handler": "ai_shadow_monitor",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/ai-shadow/settle",
+      "methods": [
+        "POST"
+      ],
+      "handler": "ai_shadow_settle",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/bot/backtest",
+      "methods": [
+        "POST"
+      ],
+      "handler": "bot_backtest",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/bot/brain",
+      "methods": [
+        "GET"
+      ],
+      "handler": "brain_status",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/bot/simulate",
+      "methods": [
+        "POST"
+      ],
+      "handler": "simulate_trade",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/bot/start",
+      "methods": [
+        "POST"
+      ],
+      "handler": "start_bot",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/bot/status",
+      "methods": [
+        "GET"
+      ],
+      "handler": "bot_status",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/bot/stop",
+      "methods": [
+        "POST"
+      ],
+      "handler": "stop_bot",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/chat",
+      "methods": [
+        "POST"
+      ],
+      "handler": "chat",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/market/data",
+      "methods": [
+        "GET"
+      ],
+      "handler": "market_data",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/market/history",
+      "methods": [
+        "GET"
+      ],
+      "handler": "market_history",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/market/news",
+      "methods": [
+        "GET"
+      ],
+      "handler": "market_news",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/market/signal",
+      "methods": [
+        "GET"
+      ],
+      "handler": "market_signal",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/metrics",
+      "methods": [
+        "GET"
+      ],
+      "handler": "get_metrics",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/report",
+      "methods": [
+        "GET"
+      ],
+      "handler": "get_report",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/risk/kill-switch",
+      "methods": [
+        "POST"
+      ],
+      "handler": "set_kill_switch",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/risk/status",
+      "methods": [
+        "GET"
+      ],
+      "handler": "risk_status",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/strategies",
+      "methods": [
+        "GET"
+      ],
+      "handler": "strategies",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/strategies/activate",
+      "methods": [
+        "POST"
+      ],
+      "handler": "activate_strategy",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/strategies/performance",
+      "methods": [
+        "GET"
+      ],
+      "handler": "strategy_performance",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/strategies/purchase",
+      "methods": [
+        "POST"
+      ],
+      "handler": "purchase_strategy",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/strategy/execute",
+      "methods": [
+        "POST"
+      ],
+      "handler": "execute_strategy",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/trading/history",
+      "methods": [
+        "GET"
+      ],
+      "handler": "trading_history",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/trading/manual",
+      "methods": [
+        "POST"
+      ],
+      "handler": "manual_trade",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/trading/status",
+      "methods": [
+        "GET"
+      ],
+      "handler": "trading_status",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/trading/test",
+      "methods": [
+        "POST"
+      ],
+      "handler": "trading_test",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/api/user/connect-exchange",
+      "methods": [
+        "POST"
+      ],
+      "handler": "connect_exchange",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/auth/telegram/callback",
+      "methods": [
+        "GET"
+      ],
+      "handler": "telegram_callback",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/auth/{provider}",
+      "methods": [
+        "GET"
+      ],
+      "handler": "social_login",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/auth/{provider}/callback",
+      "methods": [
+        "GET"
+      ],
+      "handler": "social_callback",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/forgot-password",
+      "methods": [
+        "GET"
+      ],
+      "handler": "forgot_password_page",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/forgot-password",
+      "methods": [
+        "POST"
+      ],
+      "handler": "forgot_password_submit",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/health.py",
+      "path": "/health",
+      "methods": [
+        "GET"
+      ],
+      "handler": "health",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/home",
+      "methods": [
+        "GET"
+      ],
+      "handler": "home",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/live-controls",
+      "methods": [
+        "GET"
+      ],
+      "handler": "live_controls",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/live-controls/ai-bots/{ai_bot_id}",
+      "methods": [
+        "POST"
+      ],
+      "handler": "set_ai_bot_live_control",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/live-controls/audit",
+      "methods": [
+        "GET"
+      ],
+      "handler": "live_control_audit",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/live-controls/bots/{bot_id}",
+      "methods": [
+        "POST"
+      ],
+      "handler": "set_bot_live_control",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/live-controls/global",
+      "methods": [
+        "POST"
+      ],
+      "handler": "set_global_live_control",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/login",
+      "methods": [
+        "POST"
+      ],
+      "handler": "admin_login",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/login",
+      "methods": [
+        "GET"
+      ],
+      "handler": "login_page",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/login",
+      "methods": [
+        "POST"
+      ],
+      "handler": "login_submit",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/login/dev-admin-bypass",
+      "methods": [
+        "POST"
+      ],
+      "handler": "dev_admin_bypass",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/logout",
+      "methods": [
+        "GET"
+      ],
+      "handler": "logout",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/plugins",
+      "methods": [
+        "POST"
+      ],
+      "handler": "create_plugin",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/plugins",
+      "methods": [
+        "GET"
+      ],
+      "handler": "list_plugins",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/health.py",
+      "path": "/ready",
+      "methods": [
+        "GET"
+      ],
+      "handler": "ready",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/register",
+      "methods": [
+        "GET"
+      ],
+      "handler": "register_page",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "path": "/register",
+      "methods": [
+        "POST"
+      ],
+      "handler": "register_submit",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "path": "/users",
+      "methods": [
+        "POST"
+      ],
+      "handler": "create_user",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    }
+  ],
+  "frontend_requests": [
+    {
+      "file": "frontend/index.html",
+      "url": "/api/user/connect-exchange"
+    },
+    {
+      "file": "frontend/market_live.js",
+      "url": "/api/market/history?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}&timeframe=1m"
+    },
+    {
+      "file": "frontend/market_live.js",
+      "url": "/api/market/data?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}"
+    },
+    {
+      "file": "frontend/market_terminal.js",
+      "url": "/api/market/history?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}&timeframe=${encodeURIComponent(timeframe.value)}"
+    },
+    {
+      "file": "frontend/market_terminal_patch.js",
+      "url": "/api/market/data?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}"
+    },
+    {
+      "file": "static/market_live.js",
+      "url": "/api/market/history?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}&timeframe=1m"
+    },
+    {
+      "file": "static/market_live.js",
+      "url": "/api/market/data?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}"
+    },
+    {
+      "file": "static/market_terminal.js",
+      "url": "/api/market/history?pair=${encodeURIComponent(pair.value)}&exchange=${encodeURIComponent(exchange.value)}&timeframe=${encodeURIComponent(timeframe.value)}"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/metrics"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/bot/brain"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/report"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/admin/live-controls/${kind}/${encodeURIComponent(id)}"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/admin/live-controls/${kind}/${encodeURIComponent(id)}"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/admin/live-controls"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/admin/live-controls/global"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/admin/live-controls/bots/${encodeURIComponent(id)}"
+    },
+    {
+      "file": "templates/admin.html",
+      "url": "/api/admin/live-controls/ai-bots/${encodeURIComponent(id)}"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/market/data?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/market/history?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}&timeframe=${encodeURIComponent(timeframe)}"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/trading/manual"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/trading/history"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/bot/backtest"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/market/signal?pair=${encodeURIComponent(pairSelect.value)}&exchange=${encodeURIComponent(exchangeSelect.value)}"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/market/news?limit=5"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/risk/status"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "url": "/api/bot/status"
+    },
+    {
+      "file": "templates/dashboard.html",
+      "url": "/api/chat"
+    },
+    {
+      "file": "templates/marketplace.html",
+      "url": "/api/strategies/activate"
+    }
+  ],
+  "websockets": [
+    {
+      "file": "frontend/market_live.js",
+      "url": "wss://stream.binance.com:9443/ws/${symbol()}@trade"
+    },
+    {
+      "file": "static/market_live.js",
+      "url": "wss://stream.binance.com:9443/ws/${symbol()}@trade"
+    }
+  ],
+  "template_endpoints": [
+    {
+      "file": "templates/admin.html",
+      "endpoint": "admin_risk_action"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "static"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "static"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "static"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "index"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "dashboard"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "wallet_page"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "marketplace"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "bot_management"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "settings"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "admin_panel"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "logout"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "dashboard"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "login"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "register"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "static"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "static"
+    },
+    {
+      "file": "templates/base.html",
+      "endpoint": "static"
+    },
+    {
+      "file": "templates/bot_management.html",
+      "endpoint": "trading_test"
+    },
+    {
+      "file": "templates/dashboard.html",
+      "endpoint": "marketplace"
+    },
+    {
+      "file": "templates/dashboard.html",
+      "endpoint": "bot_management"
+    },
+    {
+      "file": "templates/dashboard.html",
+      "endpoint": "marketplace"
+    },
+    {
+      "file": "templates/dashboard.html",
+      "endpoint": "bot_management"
+    },
+    {
+      "file": "templates/forgot_password.html",
+      "endpoint": "login"
+    },
+    {
+      "file": "templates/index.html",
+      "endpoint": "dashboard"
+    },
+    {
+      "file": "templates/index.html",
+      "endpoint": "marketplace"
+    },
+    {
+      "file": "templates/index.html",
+      "endpoint": "bot_management"
+    },
+    {
+      "file": "templates/index.html",
+      "endpoint": "logout"
+    },
+    {
+      "file": "templates/index.html",
+      "endpoint": "login"
+    },
+    {
+      "file": "templates/index.html",
+      "endpoint": "register"
+    },
+    {
+      "file": "templates/login.html",
+      "endpoint": "forgot_password"
+    },
+    {
+      "file": "templates/login.html",
+      "endpoint": "register"
+    },
+    {
+      "file": "templates/login.html",
+      "endpoint": "dev_admin_bypass"
+    },
+    {
+      "file": "templates/login.html",
+      "endpoint": "social_login"
+    },
+    {
+      "file": "templates/login.html",
+      "endpoint": "social_login"
+    },
+    {
+      "file": "templates/login.html",
+      "endpoint": "telegram_callback"
+    },
+    {
+      "file": "templates/register.html",
+      "endpoint": "login"
+    },
+    {
+      "file": "templates/register.html",
+      "endpoint": "social_login"
+    },
+    {
+      "file": "templates/register.html",
+      "endpoint": "social_login"
+    },
+    {
+      "file": "templates/register.html",
+      "endpoint": "telegram_callback"
+    },
+    {
+      "file": "templates/settings.html",
+      "endpoint": "admin_panel"
+    },
+    {
+      "file": "templates/settings.html",
+      "endpoint": "dashboard"
+    },
+    {
+      "file": "templates/settings.html",
+      "endpoint": "marketplace"
+    },
+    {
+      "file": "templates/settings.html",
+      "endpoint": "bot_management"
+    },
+    {
+      "file": "templates/settings.html",
+      "endpoint": "wallet_page"
+    }
+  ],
+  "sensitive_calls": [
+    {
+      "file": "backend/ai_shadow_feed.py",
+      "line": 4,
+      "text": "never calls create_order/cancel_order/fetch_balance or any private exchange API.",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/ai_shadow_feed.py",
+      "line": 106,
+      "text": "self._exchange_client.fetch_ticker, self.state.pair",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/ccxt_guard.py",
+      "line": 31,
+      "text": "original_create = getattr(client, \"create_order\", None)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/ccxt_guard.py",
+      "line": 37,
+      "text": "client.create_order = MethodType(guarded_create, client)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/ccxt_guard.py",
+      "line": 39,
+      "text": "original_cancel = getattr(client, \"cancel_order\", None)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/ccxt_guard.py",
+      "line": 45,
+      "text": "client.cancel_order = MethodType(guarded_cancel, client)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 33,
+      "text": "def connect(self, user_id, name, api_key, api_secret, passphrase=None, sandbox=False):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 34,
+      "text": "if not user_id or not isinstance(api_key, str) or not isinstance(api_secret, str):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 36,
+      "text": "api_key = api_key.strip()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 37,
+      "text": "api_secret = api_secret.strip()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 38,
+      "text": "if not api_key or not api_secret:",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 42,
+      "text": "\"apiKey\": api_key,",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 43,
+      "text": "\"secret\": api_secret,",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 51,
+      "text": "client.fetch_balance()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 57,
+      "text": "\"api_key_hint\": f\"{api_key[:4]}...{api_key[-4:]}\" if len(api_key) > 8 else \"****\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 75,
+      "text": "\"api_key\": connection[\"api_key_hint\"] if connection else None,",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 85,
+      "text": "return self.get(user_id)[\"client\"].fetch_balance()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 88,
+      "text": "return self.get(user_id)[\"client\"].fetch_ticker(symbol)",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 120,
+      "text": "def create_order(",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 134,
+      "text": "minimum_price = price if price is not None else client.fetch_ticker(symbol).get(\"last\")",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 145,
+      "text": "client.create_order, symbol, order_type, side, amount, None, params or {}, **gateway_kwargs",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 150,
+      "text": "client.create_order, symbol, order_type, side, amount, price, params or {}, **gateway_kwargs",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 153,
+      "text": "def cancel_order(",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "line": 158,
+      "text": "client.cancel_order, order_id, symbol, params or {},",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/market_history.py",
+      "line": 189,
+      "text": "batch = exchange.fetch_ohlcv(pair, timeframe=timeframe, since=cursor, limit=1000)",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/market_history.py",
+      "line": 216,
+      "text": "batch = exchange.fetch_ohlcv(pair, timeframe=\"1d\", since=cursor, limit=1000)",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 137,
+      "text": "api_key: str",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 138,
+      "text": "api_secret: str",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 597,
+      "text": "api_key = str(form.get(\"api_key\", \"\")).strip()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 598,
+      "text": "api_secret = str(form.get(\"api_secret\", \"\")).strip()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 599,
+      "text": "api_password = str(form.get(\"api_password\", \"\")).strip()",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 603,
+      "text": "elif not api_key or not api_secret:",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 608,
+      "text": "config = {\"apiKey\": api_key, \"secret\": api_secret, \"enableRateLimit\": True}",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 609,
+      "text": "if api_password:",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 610,
+      "text": "config[\"password\"] = api_password",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 618,
+      "text": "exchange_key_masked=engine.mask_secret(api_key),",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 904,
+      "text": "'apiKey': config.api_key,",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 905,
+      "text": "'secret': config.api_secret,",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 1041,
+      "text": "ticker = client.fetch_ticker(pair)",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "line": 1042,
+      "text": "order_book = client.fetch_order_book(pair, limit=10)",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "tests/test_ccxt_guard.py",
+      "line": 8,
+      "text": "def test_ccxt_client_blocks_create_order_by_default(monkeypatch):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_ccxt_guard.py",
+      "line": 14,
+      "text": "client.create_order(\"BTC/USDT\", \"market\", \"buy\", 0.001)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_ccxt_guard.py",
+      "line": 17,
+      "text": "def test_ccxt_client_blocks_cancel_order_by_default(monkeypatch):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_ccxt_guard.py",
+      "line": 23,
+      "text": "client.cancel_order(\"test-order\", \"BTC/USDT\")",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety.py",
+      "line": 6,
+      "text": "\"api_key\": \"KEY\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety.py",
+      "line": 7,
+      "text": "\"api_secret\": \"SECRET\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety.py",
+      "line": 12,
+      "text": "assert result[\"api_key\"] == \"[REDACTED]\"",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety.py",
+      "line": 13,
+      "text": "assert result[\"api_secret\"] == \"[REDACTED]\"",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety_integration.py",
+      "line": 6,
+      "text": "\"apiKey\": \"LIVE_API_KEY\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety_integration.py",
+      "line": 7,
+      "text": "\"secret\": \"LIVE_API_SECRET\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety_integration.py",
+      "line": 20,
+      "text": "assert \"LIVE_API_KEY\" not in repr(safe)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety_integration.py",
+      "line": 21,
+      "text": "assert \"LIVE_API_SECRET\" not in repr(safe)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_connection_modes.py",
+      "line": 17,
+      "text": "def fetch_balance(self):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_connection_modes.py",
+      "line": 33,
+      "text": "result = service.connect(\"u1\", \"binance\", \"API_KEY\", \"API_SECRET\", sandbox=True)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_connection_modes.py",
+      "line": 53,
+      "text": "result = service.connect(\"u1\", \"binance\", \"API_KEY\", \"API_SECRET\", sandbox=False)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 17,
+      "text": "def fetch_ticker(self, symbol):",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 20,
+      "text": "def create_order(self, *args):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 24,
+      "text": "def cancel_order(self, *args):",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 34,
+      "text": "monkeypatch.setattr(fake, \"fetch_balance\", lambda: {\"free\": {\"USDT\": 100}}, raising=False)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 36,
+      "text": "service.connect(\"user-1\", \"binance\", \"SECRET_API_KEY\", \"SECRET_API_SECRET\")",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 38,
+      "text": "assert \"SECRET_API_KEY\" not in repr(stored)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 39,
+      "text": "assert \"SECRET_API_SECRET\" not in repr(stored)",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 40,
+      "text": "assert stored[\"api_key_hint\"] == \"SECR..._KEY\"",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 46,
+      "text": "monkeypatch.setattr(service, \"get\", lambda user_id: {\"name\": \"binance\", \"client\": fake, \"sandbox\": True, \"api_key_hint\": \"SECR..._KEY\"})",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 68,
+      "text": "service.create_order(\"user-1\", \"BTC/USDT\", \"market\", \"buy\", 0.001, bot_id=\"bot-1\")",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 81,
+      "text": "result = service.create_order(\"user-1\", \"BTC/USDT\", \"market\", \"buy\", 0.001, bot_id=\"bot-1\")",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "line": 94,
+      "text": "service.cancel_order(\"user-1\", \"order-1\", \"BTC/USDT\", bot_id=\"bot-1\")",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_execution_gateway_regressions.py",
+      "line": 51,
+      "text": "forbidden = {\"create_order\", \"cancel_order\", \"edit_order\", \"privatePostOrder\", \"privateDeleteOrder\"}",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_safe_errors.py",
+      "line": 5,
+      "text": "exc = RuntimeError(\"authentication failed for API_KEY=abc123 SECRET=xyz789\")",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tools/cms_request_mapper.py",
+      "line": 16,
+      "text": "PRIVATE={'create_order','cancel_order','edit_order','fetch_balance','fetch_orders','fetch_open_orders','fetch_closed_orders','fetch_my_trades','fetch_positions','api_key','api_secret','api_password'}",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tools/cms_request_mapper.py",
+      "line": 17,
+      "text": "PUBLIC={'fetch_ticker','fetch_order_book','fetch_ohlcv','fetch_trades'}",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/security/credential_safety.py",
+      "line": 6,
+      "text": "\"api_key\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/credential_safety.py",
+      "line": 8,
+      "text": "\"api_secret\",",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    }
+  ],
+  "modules": [
+    {
+      "file": "healthcheck.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "run.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "sitecustomize.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/__init__.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/admin.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/ai_shadow.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": true
+    },
+    {
+      "file": "backend/ai_shadow_feed.py",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/bot.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/ccxt_guard.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/cms_core.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": true
+    },
+    {
+      "file": "backend/exchange_service.py",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "backend/execution_guard.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/health.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/hft_brain.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/install_service.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": true
+    },
+    {
+      "file": "backend/installer.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/market_history.py",
+      "private_exchange": false,
+      "public_market_data": true,
+      "database": true
+    },
+    {
+      "file": "backend/password_compat.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": true
+    },
+    {
+      "file": "backend/risk_management.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/strategy_performance.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/main.py",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "tests/__init__.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_admin_live_controls.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_auth_hardening.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_ccxt_guard.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_cms_health.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_credential_safety_integration.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_connection_modes.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_execution_gateway.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_exchange_service_security.py",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": false
+    },
+    {
+      "file": "tests/test_execution_gateway.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_execution_gateway_live_controls.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_execution_gateway_regressions.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_execution_paths.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_http_protection.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_install_service.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": true
+    },
+    {
+      "file": "tests/test_installer.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_live_controls.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_live_controls_gateway.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_request_policy.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_safe_errors.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_security_boundaries.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tests/test_smoke.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tools/cms_compile_report.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tools/cms_inspector.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tools/cms_release_director.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "tools/cms_request_mapper.py",
+      "private_exchange": true,
+      "public_market_data": true,
+      "database": true
+    },
+    {
+      "file": "tools/cms_template_designer.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/modules/__init__.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/modules/daily_harvester.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/modules/strategy_manager.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/__init__.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/credential_safety.py",
+      "private_exchange": true,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/execution_gateway.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/execution_policy.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/http_protection.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/live_controls.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/request_policy.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/security/safe_errors.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "backend/tests/test_execution_policy.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": false
+    },
+    {
+      "file": "netlify/functions/api.py",
+      "private_exchange": false,
+      "public_market_data": false,
+      "database": true
+    }
+  ],
+  "summary": {
+    "routes": 56,
+    "frontend_requests": 28,
+    "websockets": 2,
+    "template_refs": 45,
+    "private_files": 13,
+    "public_market_files": 6,
+    "db_files": 8
+  }
+}

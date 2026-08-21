@@ -1,0 +1,15 @@
+{
+  "generated_by": "tools/cms_compile_report.py",
+  "read_only": true,
+  "summary": {
+    "python_files_checked": 62,
+    "syntax_errors": 0,
+    "tests_status": "passed"
+  },
+  "errors": [],
+  "tests": {
+    "status": "passed",
+    "returncode": 0,
+    "output": "........................................................................ [ 84%]\n.............                                                            [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.12/site-packages/starlette/formparsers.py:12\n  /vercel/share/v0-project/.venv/lib/python3.12/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.\n    import multipart\n\nbackend/cms_core.py:13\n  /vercel/share/v0-project/backend/cms_core.py:13: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)\n    Base = declarative_base()\n\n.venv/lib/python3.12/site-packages/httpx/_client.py:690\ntests/test_cms_health.py::test_public_login_page_loads\ntests/test_cms_health.py::test_dashboard_requires_authentication\ntests/test_cms_health.py::test_bot_simulation_requires_authentication\n  /vercel/share/v0-project/.venv/lib/python3.12/site-packages/httpx/_client.py:690: DeprecationWarning: The 'app' shortcut is now deprecated. Use the explicit style 'transport=WSGITransport(app=...)' instead.\n    warnings.warn(message, DeprecationWarning)\n\ntests/test_cms_health.py::test_public_login_page_loads\ntests/test_smoke.py::test_public_pages_are_registered\n  /vercel/share/v0-project/.venv/lib/python3.12/site-packages/starlette/templating.py:178: DeprecationWarning: The `name` is not the first parameter anymore. The first parameter should be the `Request` instance.\n  Replace `TemplateResponse(name, {\"request\": request})` by `TemplateResponse(request, name)`.\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n85 passed, 8 warnings in 1.99s"
+  }
+}
