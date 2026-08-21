@@ -1,56 +1,65 @@
-# Current Work
+# Current Work — Strict Audit
 
-## Active branch
-`cleanup/security-hardening-2026-08`
+Date: 2026-08-21
 
-## Current function
-**Marketplace / Plugins**
+## Active baseline
+`main` @ `1b7fdd643ffd01e3da9f3ebc6682859568c76215`
 
-## Work log — 2026-08-19
-- Created rollback point before integrating deployment fixes: `rollback-before-full-5b0b93c`.
-- Reviewed commit `5b0b93c5f759c8b47e9576f8679cb65af4ee9aa6` and compared its intended deployment/startup fixes with the current branch.
-- Reviewed `main` as a source of already-integrated fixes; did **not** blindly merge `main` because the current branch contains newer security hardening that must not be downgraded.
-- Preserved newer security settings such as fail-closed execution policy, HFT risk controls, `SECRET_KEY`, and `SESSION_HTTPS_ONLY`.
-- Added/retained deployment and health/readiness fixes where they were compatible with the current branch.
-- Confirmed `requirements.txt` already contains `pytest`, so the older CI finding about missing pytest is no longer current.
-- Found stale `.gitmodules` metadata referencing a missing `Cms` submodule. Removed `.gitmodules` in commit `d83dafad25f00dede06f7c5e6268a103ecefd860` because the `Cms/` path is absent from the branch.
-- Found that `.github/workflows/cms-smoke.yml` only triggered on `main`, so the security branch could not produce its own smoke run. Updated it in commit `5a40e6f2cf71002543a781af387d61dbf2af695b5` to trigger on both `main` and `cleanup/security-hardening-2026-08`, and on PRs targeting either branch.
-- User manually ran the GitHub Actions workflow and reported a Node.js 20 deprecation warning for `actions/checkout@v4` and `actions/setup-python@v5`.
-- Updated `.github/workflows/cms-smoke.yml` to `actions/checkout@v5` and `actions/setup-python@v6` in commit `123c12714548d33375476de0c9d2d702f6e36cf2`, removing the deprecated Node.js 20 action targets while keeping the smoke workflow logic unchanged.
-- Current smoke workflow runs dependency install, Python compile, `healthcheck.py`, application startup, `/health`, and `/ready` checks.
-- CI still needs fresh verification after the action-version update; absence of a run is not treated as a pass.
-- Netlify deploy-preview previously failed during `Install dependencies`; exact package-level cause still needs deploy-log evidence before changing dependencies.
+## Current phase
+**Strict full repository audit before further functional changes.**
 
-## What remains to do
-1. Run/verify the updated smoke workflow for commit `123c12714548d33375476de0c9d2d702f6e36cf2`.
-2. If CI fails, inspect the failing job/log and fix the root cause only.
-3. Obtain/inspect the Netlify dependency-install error details before changing `requirements.txt` or build configuration.
-4. Verify Docker startup and `/health` + `/ready` end-to-end.
-5. Compare remaining `main` differences file-by-file; transfer only compatible fixes, never downgrade security hardening.
-6. Review `backend/main.py`, `backend/hft_brain.py`, and `requirements.txt` against the integrated `main` changes.
-7. Continue Marketplace / Plugins route verification through UI → JS → API → backend → storage/integration → response/error → UI update → regression test.
-8. Update this file after each material change and record the next required action.
+The project is **NOT DONE** and must not be declared production-ready.
 
-## Full route to trace once
-1. UI/template
-2. JavaScript/event handlers
-3. API endpoint
-4. Router/controller
-5. Service/domain logic
-6. Database/storage
-7. External integration if applicable
-8. Response/error handling
-9. UI state/update
-10. Integration/regression test
-11. Design consistency
+## What has been audited
 
-## Status
-- Overall: `IN PROGRESS`
-- Do not mark DONE until the complete route is verified.
-- Do not start the next function until this branch is closed.
+- all Git branches listed in the repository;
+- current FastAPI routes in `backend/main.py`;
+- admin router routes in `backend/admin.py`;
+- CMSEngine models and persistence paths;
+- StrategyManager/DailyCompoundHarvester;
+- RiskManager;
+- HFTBot and CMSProductionHFTBot/AICryptoMemoryBrain;
+- AI Shadow trader/feed;
+- ExchangeService and real-order gateway;
+- execution policies/live controls/request policy/credential safety;
+- market history/news pipeline;
+- Jinja templates and active frontend static mount;
+- duplicate `static/` and `frontend/` assets;
+- Codespace startup files;
+- Netlify/Vercel/Docker/Render/Railway/Fly/Procfile deployment contracts;
+- CI and smoke workflows;
+- existing regression tests;
+- branch divergence and rollback points.
 
-## Cleanup rule
-If code looks unused: mark candidate → search all references → run relevant tests → move if it belongs elsewhere → otherwise delete.
+## Current blockers
+
+1. `/health` and `/ready` are defined but not mounted into the FastAPI application.
+2. `/api/bot/simulate` is unauthenticated while regression tests require anonymous 401.
+3. `/api/user/connect-exchange` is unauthenticated and duplicates ExchangeService.
+4. Main browser POST routes do not have a global CSRF contract.
+5. RiskManager kill switch and real-order LiveControlState kill switch are separate.
+6. `/api/trading/manual` reports `executed` without exchange execution.
+7. Plugin purchase does not debit CMSC or create a payment ledger.
+8. Strategy activation is not persisted and unknown strategies fall back to pure_harvester.
+9. Telegram token field is ignored by the backend.
+10. Bot/HFT/AI memory is process-local and bot start/stop does not create a real loop.
+11. CI health checks do not prove actual `/health` and `/ready` routing.
+12. Active frontend assets are duplicated with a second root `static/` tree.
+
+## Required method
+
+For every fix:
+
+`reproduce → identify root cause → change minimum code → preserve all unrelated functionality → add/update regression test → run full suite → run real HTTP smoke → inspect response → record result here/ERRORS.md`.
+
+## No blind merges
+
+Divergent branches are reference material, not merge targets. Recover useful fixes file-by-file/commit-by-commit only after dependency tracing.
+
+## No deletion
+
+Do not delete legacy/duplicate code during this audit. Record candidates in `CMS_WORK/LEGACY.md`; deletion requires a separate dependency/reference/test gate.
 
 ## Recovery
-If chat history is lost, read `CMS_WORK/TREE.md` and this file first, then continue from the active branch.
+
+Read `CMS_WORK/STRICT_AUDIT_2026-08-21.md`, `BRANCH_MAP_2026-08-21.md`, `FUNCTION_MAP_2026-08-21.md`, and `CONNECTION_MAP_2026-08-21.md` before continuing.
