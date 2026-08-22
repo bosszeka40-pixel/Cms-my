@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from .live_guard import live_guard_check
 from .live_trading_guard import LiveTradingGuard
 from .risk_management import RiskManager
 
@@ -20,8 +21,15 @@ class TradingExecutionGate:
         self.live_guard = LiveTradingGuard()
         self.risk_manager = RiskManager()
 
-    def check(self, balance: float, leverage: float, order_notional: float,
-              stop_loss_pct: float = 0.02) -> ExecutionDecision:
+    def check(self, balance: float, leverage: float, order_notional: float = None,
+              stop_loss_pct: float = 0.02, notional: float = None) -> ExecutionDecision:
+        if order_notional is None:
+            order_notional = notional or 0.0
+
+        safety = live_guard_check(risk_score=stop_loss_pct)
+        if not safety.allowed:
+            return ExecutionDecision(False, safety.reason)
+
         if not self.live_guard.allow_order(order_notional):
             return ExecutionDecision(False, "Live trading guard blocked order.")
 
