@@ -2,20 +2,16 @@
 set -e
 
 if python - <<'PY'
-import socket
-s = socket.socket()
-s.settimeout(0.5)
+import urllib.request
 try:
-    s.connect(("127.0.0.1", 8000))
-except OSError:
+    urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=1)
+except Exception:
     raise SystemExit(1)
-finally:
-    s.close()
 raise SystemExit(0)
 PY
 then
     exit 0
 fi
 
-nohup python run.py > /tmp/cms.log 2>&1 &
+nohup uvicorn backend.main:app --host 0.0.0.0 --port 8000 > /tmp/cms.log 2>&1 &
 echo $! > /tmp/cms.pid
