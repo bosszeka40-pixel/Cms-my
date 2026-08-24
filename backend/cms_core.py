@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, DateTime, Text, ForeignKey
@@ -7,7 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from werkzeug.security import check_password_hash, generate_password_hash
 
-DATABASE_URL = "sqlite:///./cms_core.db"
+DATABASE_URL = os.getenv("CMS_DATABASE_URL") or ("sqlite:////tmp/cms_core.db" if os.getenv("VERCEL") else "sqlite:///./cms_core.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -92,7 +93,10 @@ class SiteSetting(Base):
 class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
         self.db_name = db_name
-        database_url = db_name if db_name.startswith("sqlite://") else f"sqlite:///./{Path(db_name)}"
+        if db_name == "cms_core.db" and os.getenv("VERCEL"):
+            database_url = os.getenv("CMS_DATABASE_URL") or "sqlite:////tmp/cms_core.db"
+        else:
+            database_url = db_name if db_name.startswith("sqlite://") else f"sqlite:///./{Path(db_name)}"
         self.engine = create_engine(database_url, connect_args={"check_same_thread": False})
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         self.init_db()
