@@ -14,29 +14,8 @@
 
     {% if message %}<div class="message success">{{ message }}</div>{% endif %}
 
-    <section class="terminal-grid">
-        <div class="card">
-            <h2>Рынок <span id="market-source" class="status-pill">нет данных</span></h2>
-            <div class="form-grid">
-                <div class="field-group"><label for="market-pair">Пара</label><select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
-                <div class="field-group"><label for="market-exchange">Биржа</label><select id="market-exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
-                <div class="field-group"><label for="market-timeframe">Таймфрейм</label><select id="market-timeframe">{% for timeframe in chart_timeframes %}<option {% if timeframe == '1h' %}selected{% endif %}>{{ timeframe }}</option>{% endfor %}</select></div>
-            </div>
-            <div class="button-row"><button class="btn" id="refresh-market" type="button">Обновить данные</button><button class="btn btn-outline" id="get-signal" type="button">Сигнал</button></div>
-            <div id="ticker" class="market-stats muted">Загрузите публичные котировки.</div>
-            <div id="signal-result" class="small-note" role="status"></div>
-            <canvas id="price-chart" height="260" aria-label="График свечей"></canvas>
-        </div>
-        <div class="card">
-            <h2>Стакан</h2>
-            <div class="order-book">
-                <div><strong>Покупки</strong><div id="bids">—</div></div>
-                <div><strong>Продажи</strong><div id="asks">—</div></div>
-            </div>
-        </div>
-    </section>
-
-    <section class="grid">
+    <!-- Bot status + Activity -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
         <div class="card">
             <h2>Статус бота</h2>
             <div class="stat-grid">
@@ -55,138 +34,127 @@
             </div>
         </div>
         <div class="card">
+            <h2>Журнал активности</h2>
+            <div id="bot-activity-log" style="max-height:300px;overflow-y:auto;font-size:.82rem;">
+                {% if bot_status.activity_log %}
+                    {% for event in bot_status.activity_log %}
+                    <div style="padding:.5rem;border-bottom:1px solid var(--border);">
+                        <div style="font-size:.72rem;color:var(--muted);">{{ event.time[:19]|replace('T',' ') if event.time else '—' }}</div>
+                        <div style="font-weight:600;">{{ event.event or '—' }}</div>
+                        <div style="color:var(--muted);">{{ event.detail or '' }}</div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="term-empty">Бот не активен. Нажмите «Запустить».</div>
+                {% endif %}
+            </div>
+            <div style="padding:.5rem;text-align:center;">
+                <button class="btn btn-outline btn-sm" onclick="refreshActivity()" type="button">Обновить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Strategy + Config -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div class="card">
             <h2>Стратегия</h2>
             <form method="post" id="strategy-form">
                 <input type="hidden" name="action" value="save_strategy">
                 <div class="field-group"><label for="strategy">Стратегия</label>
-                    <select id="strategy" name="strategy" onchange="updateStrategyParams(this.value)">
+                    <select id="strategy" name="strategy">
                         <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester — Бесплатно</option>
                         <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum — Бесплатно</option>
                         <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender — Бесплатно</option>
-                        <option value="trend_breakout_compound" {% if current_strategy == 'trend_breakout_compound' %}selected{% endif %}>Trend Breakout — €2.50</option>
-                        <option value="multi_sentiment_scalper" {% if current_strategy == 'multi_sentiment_scalper' %}selected{% endif %}>Multi Sentiment — €4.00</option>
-                        <option value="ai_adaptive_momentum" {% if current_strategy == 'ai_adaptive_momentum' %}selected{% endif %}>AI Adaptive — €7.50</option>
-                        <option value="quantum_grid_trader" {% if current_strategy == 'quantum_grid_trader' %}selected{% endif %}>Quantum Grid — €12.00</option>
-                        <option value="neural_pattern_recognition" {% if current_strategy == 'neural_pattern_recognition' %}selected{% endif %}>Neural Pattern — €15.00</option>
-                        <option value="delta_neutral_hedger" {% if current_strategy == 'delta_neutral_hedger' %}selected{% endif %}>Delta Neutral — €10.00</option>
-                        <option value="volatility_harvest" {% if current_strategy == 'volatility_harvest' %}selected{% endif %}>Volatility Harvest — €8.00</option>
+                        <option value="trend_breakout_compound" {% if current_strategy == 'trend_breakout_compound' %}selected{% endif %}>Trend Breakout — Бесплатно</option>
+                        <option value="multi_sentiment_scalper" {% if current_strategy == 'multi_sentiment_scalper' %}selected{% endif %}>Multi Sentiment — Бесплатно</option>
+                        <option value="neural_pattern_recognizer" {% if current_strategy == 'neural_pattern_recognizer' %}selected{% endif %}>Neural Pattern — Платиновая</option>
+                        <option value="delta_neutral_hedger" {% if current_strategy == 'delta_neutral_hedger' %}selected{% endif %}>Delta Neutral — Платиновая</option>
+                        <option value="volatility_harvest" {% if current_strategy == 'volatility_harvest' %}selected{% endif %}>Volatility Harvest — Премиум</option>
                     </select>
                 </div>
-                <div class="form-grid" id="strategy-params">
-                    <div class="field-group"><label for="leverage">Леверидж</label><input id="leverage" name="leverage" type="number" step="0.1" min="0.1" max="2.0" value="{{ config.leverage }}"></div>
-                    <div class="field-group"><label for="risk_tolerance">Риск</label><input id="risk_tolerance" name="risk_tolerance" type="number" step="0.01" min="0.0" max="1.0" value="{{ config.risk_tolerance }}"></div>
-                    <div class="field-group"><label for="fee_rate">Комиссия</label><input id="fee_rate" name="fee_rate" type="number" step="0.0001" min="0.0" max="0.05" value="{{ config.fee_rate }}"></div>
+                <div class="field-group"><label for="strategy-info">Описание</label><p id="strategy-info" class="muted" style="font-size:.85rem;">—</p></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;">
+                    <div class="field-group"><label for="leverage">Леверидж</label><input type="number" id="leverage" name="leverage" step="0.1" min="0.1" max="10" value="{{ config.get('leverage', 1.5) }}"></div>
+                    <div class="field-group"><label for="risk_tolerance">Риск</label><input type="number" id="risk_tolerance" name="risk_tolerance" step="0.01" min="0" max="1" value="{{ config.get('risk_tolerance', 0.03) }}"></div>
+                    <div class="field-group"><label for="fee_rate">Комиссия</label><input type="number" id="fee_rate" name="fee_rate" step="0.001" min="0" max="0.05" value="{{ config.get('fee_rate', 0.001) }}"></div>
                 </div>
-                <div id="strategy-info" class="small-note muted" style="margin:.5rem 0;"></div>
-                <button class="btn" type="submit">Сохранить стратегию</button>
+                <button class="btn" type="submit" style="margin-top:1rem;">Сохранить стратегию</button>
             </form>
         </div>
-    </section>
-
-    <section class="grid">
         <div class="card">
-            <h2>Авто-генерация стратегий</h2>
-            <p class="muted" style="font-size:.82rem;">Бот автоматически создаёт, тестирует и публикует лучшие стратегии в маркетплейс (15 дней бесплатно).</p>
-            <div class="stat-grid">
-                <div><span class="stat-value">{{ bot_status.strategies_generated|default(0) }}</span><div class="stat-label">Сгенерировано</div></div>
-                <div><span class="stat-value">{{ bot_status.strategies_published|default(0) }}</span><div class="stat-label">Опубликовано</div></div>
-                <div><span class="stat-value">{{ 'Вкл' if bot_status.auto_generate else 'Выкл' }}</span><div class="stat-label">Авто-генерация</div></div>
+            <h2>Авто-генерация</h2>
+            <p class="muted" style="font-size:.85rem;margin-bottom:1rem;">Бот создаёт новые стратегии, тестирует их и публикует в маркетплейс на 15 дней бесплатно.</p>
+            <div class="stat-grid" style="margin-bottom:1rem;">
+                <div class="stat-tile"><div class="stat-value">{{ bot_status.strategies_generated|default(0) }}</div><div class="stat-label">Сгенерировано</div></div>
+                <div class="stat-tile"><div class="stat-value">{{ bot_status.strategies_published|default(0) }}</div><div class="stat-label">Опубликовано</div></div>
             </div>
-            <div class="button-row" style="margin-top:.75rem;">
-                <button class="btn" id="generate-btn" type="button" onclick="generateStrategies()">Сгенерировать сейчас</button>
-                <button class="btn btn-outline" id="auto-gen-btn" type="button" onclick="toggleAutoGenerate()">{{ 'Отключить авто' if bot_status.auto_generate else 'Включить авто' }}</button>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                <button class="btn" id="generate-btn" onclick="generateStrategies()" type="button">Сгенерировать сейчас</button>
+                <button class="btn btn-outline" onclick="toggleAutoGenerate()" type="button">{{ 'Выкл. авто' if bot_status.auto_generate else 'Вкл. авто' }}</button>
             </div>
             <div id="generation-result" class="small-note" style="margin-top:.75rem;"></div>
-        </div>
-        <div class="card">
-            <h2>Память бота <span class="status-pill">{{ bot_memory.total_trades|default(0) }} сделок</span></h2>
-            <p class="muted" style="font-size:.82rem;">Бот запоминает результаты и учится на них.</p>
-            <div class="stat-grid">
-                <div><span class="stat-value">{{ '%.4f'|format(bot_memory.avg_pnl|default(0)) }}</span><div class="stat-label">Средний P/L</div></div>
-                <div><span class="stat-value">{{ bot_memory.win_rate|default(0) }}%</span><div class="stat-label">Винрейт</div></div>
+
+            <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem;">
+                <h3>Создать свою стратегию</h3>
+                <form onsubmit="createStrategy(event)">
+                    <div class="field-group"><label>Название</label><input type="text" id="new-strategy-name" required placeholder="Моя стратегия"></div>
+                    <div class="field-group"><label>Описание</label><input type="text" id="new-strategy-desc" placeholder="Описание стратегии"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;">
+                        <div class="field-group"><label>Тип</label>
+                            <select id="new-strategy-type">
+                                <option value="trend_following">Trend Following</option>
+                                <option value="mean_reversion">Mean Reversion</option>
+                                <option value="breakout">Breakout</option>
+                                <option value="scalping">Scalping</option>
+                                <option value="arbitrage">Arbitrage</option>
+                            </select>
+                        </div>
+                        <div class="field-group"><label>Леверидж</label><input type="number" id="new-leverage" value="1.5" step="0.1" min="0.1" max="10"></div>
+                    </div>
+                    <div class="field-group"><label>Риск</label><input type="number" id="new-risk" value="0.03" step="0.01" min="0" max="1"></div>
+                    <label class="term-check-row" style="margin:.5rem 0;"><input type="checkbox" id="new-strategy-public"> Опубликовать в маркетплейсе (15 дн. бесплатно)</label>
+                    <button class="btn btn-sm" type="submit">Создать стратегию</button>
+                </form>
+                <div id="user-strategies" class="small-note" style="margin-top:.5rem;"></div>
             </div>
-            {% if bot_memory.strategies_used %}
-                <p class="small-note muted">Стратегии: {{ bot_memory.strategies_used|join(', ') }}</p>
-            {% endif %}
-            {% if bot_status.activity_log %}
-                <h3>Активность</h3>
-                <div id="bot-activity" class="small-note">
-                    {% for event in bot_status.activity_log|reverse %}
-                        <p>{{ event.time[:19]|replace('T',' ') }} — {{ event.event }}{% if event.detail %}: {{ event.detail }}{% endif %}{% if event.pair %}: {{ event.pair }}, P/L {{ '%.4f'|format(event.pl) }}{% endif %}</p>
-                    {% endfor %}
-                </div>
-            {% endif %}
         </div>
-    </section>
+    </div>
 
-    <section class="grid">
+    <!-- Market data -->
+    <div class="terminal-grid" style="margin-bottom:1rem;">
         <div class="card">
-            <h2>Новости <span id="news-sentiment" class="status-pill">нет данных</span></h2>
-            <button class="btn btn-secondary" id="refresh-news" type="button">Обновить</button>
-            <div id="news-list" class="small-note">Новостей пока не загружено.</div>
-        </div>
-        <div class="card">
-            <h2>Риск <span id="risk-kill-switch" class="status-pill">нет данных</span></h2>
-            <p class="muted">Дневные лимиты и kill-switch применяются глобально.</p>
-            <div id="risk-status">Загружаем статус риска...</div>
-        </div>
-    </section>
-
-    <section class="grid">
-        <div class="card">
-            <h2>Создать свою стратегию</h2>
-            <p class="muted" style="font-size:.82rem;">Создайте стратегию вручную и добавьте в маркетплейс.</p>
-            <form id="create-strategy-form" onsubmit="return createStrategy(event)">
-                <div class="field-group"><label for="new-strategy-name">Название</label><input id="new-strategy-name" required placeholder="Моя стратегия"></div>
-                <div class="field-group"><label for="new-strategy-desc">Описание</label><textarea id="new-strategy-desc" rows="2" placeholder="Описание стратегии..."></textarea></div>
-                <div class="field-group"><label for="new-strategy-type">Тип</label>
-                    <select id="new-strategy-type">
-                        <option value="pure_harvester">Pure Harvester</option>
-                        <option value="high_frequency_momentum">HFT Momentum</option>
-                        <option value="compound_defender">Compound Defender</option>
-                        <option value="trend_breakout_compound">Trend Breakout</option>
-                    </select>
-                </div>
-                <div class="form-grid">
-                    <div class="field-group"><label for="new-leverage">Леверидж</label><input id="new-leverage" type="number" step="0.1" min="0.1" max="2.0" value="1.5"></div>
-                    <div class="field-group"><label for="new-risk">Риск</label><input id="new-risk" type="number" step="0.01" min="0" max="1" value="0.03"></div>
-                </div>
-                <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;margin:.5rem 0;">
-                    <input type="checkbox" id="new-strategy-public"> Опубликовать в маркетплейсе (15 дней бесплатно)
-                </label>
-                <button class="btn btn-sm" type="submit">Создать стратегию</button>
-            </form>
-            <div id="user-strategies" class="small-note muted" style="margin-top:.5rem;"></div>
+            <h2>Рынок <span id="market-source" class="status-pill">нет данных</span></h2>
+            <div class="form-grid">
+                <div class="field-group"><label for="market-pair">Пара</label><select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
+                <div class="field-group"><label for="market-exchange">Биржа</label><select id="market-exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="button-row"><button class="btn" id="refresh-market" type="button">Обновить данные</button><button class="btn btn-outline" id="get-signal" type="button">Сигнал</button></div>
+            <div id="ticker" class="market-stats muted" style="margin-top:.5rem;">Загрузите данные.</div>
+            <div id="signal-result" class="small-note" role="status"></div>
+            <canvas id="price-chart" height="260" aria-label="График" style="margin-top:.5rem;width:100%;"></canvas>
         </div>
         <div class="card">
             <h2>Демо-торговля</h2>
-            <p class="muted" style="font-size:.82rem;">Быстрый тест стратегии на демо-средствах.</p>
-            <form id="demo-trade-form" onsubmit="return demoTrade(event)">
-                <div class="field-group"><label for="demo-pair">Пара</label>
-                    <select id="demo-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select>
-                </div>
-                <div class="form-grid">
-                    <div class="field-group"><label for="demo-sentiment">Сентимент</label><input id="demo-sentiment" type="number" step="0.1" min="-1" max="1" value="0.5"></div>
-                    <div class="field-group"><label for="demo-change">Изменение %</label><input id="demo-change" type="number" step="0.1" min="-10" max="10" value="1.0"></div>
-                </div>
-                <button class="btn btn-sm" type="submit">Тестовая сделка</button>
+            <form onsubmit="demoTrade(event)">
+                <div class="field-group"><label>Пара</label><select id="demo-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
+                <div class="field-group"><label>Сентимент</label><input type="number" id="demo-sentiment" value="0.5" step="0.1" min="-1" max="1"></div>
+                <div class="field-group"><label>Изменение цены %</label><input type="number" id="demo-change" value="0" step="0.1"></div>
+                <button class="btn btn-sm" type="submit" style="margin-top:.5rem;">Выполнить сделку</button>
             </form>
-            <div id="demo-result" class="small-note" style="margin-top:.5rem;"></div>
+            <div id="demo-result" style="margin-top:.5rem;font-size:.82rem;"></div>
         </div>
-    </section>
+    </div>
 {% endblock %}
+
 {% block scripts %}
-<script src="{{ url_for('static', filename='cms_sections.js') }}" defer></script>
 <script>
 const strategyParams = {
-    'pure_harvester': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'Базовая стратегия. Покупает при росте цены и хорошем сентименте.'},
-    'high_frequency_momentum': {leverage: 2.0, risk: 0.05, fee: 0.001, desc: 'Быстрые сделки на моментуме. Высокий риск.'},
-    'compound_defender': {leverage: 1.0, risk: 0.02, fee: 0.001, desc: 'Защитная стратегия. Минимальный риск.'},
-    'trend_breakout_compound': {leverage: 1.8, risk: 0.04, fee: 0.001, desc: 'Прорыв тренда с компаундированием.'},
-    'multi_sentiment_scalper': {leverage: 2.0, risk: 0.06, fee: 0.001, desc: 'Скальпинг на основе мульти-сентимента.'},
-    'ai_adaptive_momentum': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'ИИ-адаптивный моментум с обучением.'},
-    'quantum_grid_trader': {leverage: 1.2, risk: 0.02, fee: 0.001, desc: 'Квантовый сеточный трейдер.'},
-    'neural_pattern_recognition': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'Нейросетевой анализ паттернов.'},
+    'pure_harvester': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'Сбор дневной доходности через реинвестирование прибыли.'},
+    'high_frequency_momentum': {leverage: 2.0, risk: 0.05, fee: 0.001, desc: 'Высокочастотная торговля на основе импульса.'},
+    'compound_defender': {leverage: 1.2, risk: 0.02, fee: 0.001, desc: 'Защитная стратегия с компаундированием.'},
+    'trend_breakout_compound': {leverage: 1.8, risk: 0.04, fee: 0.001, desc: 'Компаунд-пробой на тренде.'},
+    'multi_sentiment_scalper': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'Мультисентиментный скальпинг.'},
+    'neural_pattern_recognizer': {leverage: 2.0, risk: 0.03, fee: 0.001, desc: 'Нейросетевой анализ паттернов.'},
     'delta_neutral_hedger': {leverage: 1.0, risk: 0.01, fee: 0.001, desc: 'Дельта-нейтральный хеджер.'},
     'volatility_harvest': {leverage: 1.8, risk: 0.05, fee: 0.001, desc: 'Сбор волатильности на рынке.'},
 };
@@ -204,6 +172,26 @@ document.getElementById('strategy').addEventListener('change', function() {
     updateStrategyParams(this.value);
 });
 updateStrategyParams('{{ current_strategy }}');
+
+async function refreshActivity() {
+    try {
+        const resp = await fetch('/api/bot/status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const el = document.getElementById('bot-activity-log');
+        if (data.activity_log && data.activity_log.length) {
+            el.innerHTML = data.activity_log.map(a =>
+                `<div style="padding:.5rem;border-bottom:1px solid var(--border);">` +
+                `<div style="font-size:.72rem;color:var(--muted);">${(a.time||'').substring(0,19).replace('T',' ')}</div>` +
+                `<div style="font-weight:600;">${a.event || '—'}</div>` +
+                `<div style="color:var(--muted);">${a.detail || a.strategy || ''}</div>` +
+                `</div>`
+            ).join('');
+        } else {
+            el.innerHTML = '<div class="term-empty">Бот не активен.</div>';
+        }
+    } catch(_) {}
+}
 
 async function generateStrategies() {
     const btn = document.getElementById('generate-btn');
@@ -229,6 +217,7 @@ async function generateStrategies() {
         }
     } catch(e) { el.textContent = 'Ошибка сети'; }
     btn.disabled = false; btn.textContent = 'Сгенерировать сейчас';
+    refreshActivity();
 }
 
 async function toggleAutoGenerate() {
@@ -251,6 +240,7 @@ async function createStrategy(e) {
     if (resp.ok) {
         document.getElementById('user-strategies').textContent = 'Стратегия "' + data.name + '" создана!';
         loadUserStrategies();
+        refreshActivity();
     } else {
         document.getElementById('user-strategies').textContent = 'Ошибка: ' + (data.detail || 'неизвестная');
     }
@@ -262,7 +252,7 @@ async function loadUserStrategies() {
     const strategies = await resp.json();
     const el = document.getElementById('user-strategies');
     if (strategies.length === 0) { el.textContent = 'У вас пока нет стратегий.'; return; }
-    el.innerHTML = strategies.map(s => '<p>' + s.name + ' (' + s.strategy_type + ')' + (s.is_public ? ' ★' : '') + ' — создана ' + s.created_at[:10] + '</p>').join('');
+    el.innerHTML = strategies.map(s => '<p>' + s.name + ' (' + s.strategy_type + ')' + (s.is_public ? ' ★ публичная' : '') + ' — ' + s.created_at[:10] + '</p>').join('');
 }
 loadUserStrategies();
 
@@ -270,7 +260,7 @@ async function demoTrade(e) {
     e.preventDefault();
     const payload = {
         pair: document.getElementById('demo-pair').value,
-        strategy: '{{ current_strategy }}',
+        strategy: document.getElementById('strategy').value,
         sentiment: parseFloat(document.getElementById('demo-sentiment').value),
         price_change: parseFloat(document.getElementById('demo-change').value),
     };
@@ -279,9 +269,13 @@ async function demoTrade(e) {
     const el = document.getElementById('demo-result');
     if (resp.ok) {
         el.innerHTML = '<p style="color:var(--success);">P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€</p>';
+        refreshActivity();
     } else {
         el.innerHTML = '<p style="color:var(--danger);">Ошибка: ' + (data.detail || 'неизвестная') + '</p>';
     }
 }
+
+// Auto refresh activity
+setInterval(refreshActivity, 5000);
 </script>
 {% endblock %}

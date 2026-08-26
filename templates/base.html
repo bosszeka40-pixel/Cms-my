@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='terminal.css') }}">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="{{ theme|default('light') }}">
 <div class="app-shell">
@@ -32,7 +33,8 @@
                 <a class="nav-link {% if request.url.path == '/manual-trading' %}active{% endif %}" href="{{ url_for('manual_trading') }}"><span aria-hidden="true">▤</span> Ручная торговля</a>
 
                 <div class="nav-group">Проверка</div>
-                <a class="nav-link {% if request.url.path == '/testing' %}active{% endif %}" href="{{ url_for('testing') }}"><span aria-hidden="true">◈</span> Тесты и Демо</a>
+                <a class="nav-link {% if request.url.path == '/strategies' %}active{% endif %}" href="{{ url_for('strategies_page') }}"><span aria-hidden="true">◈</span> Стратегии</a>
+                <a class="nav-link {% if request.url.path == '/demo' %}active{% endif %}" href="{{ url_for('demo_page') }}"><span aria-hidden="true">▶</span> Демо-торговля</a>
 
                 <div class="nav-group">Система</div>
                 <a class="nav-link {% if request.url.path == '/wallet' %}active{% endif %}" href="{{ url_for('wallet_page') }}"><span aria-hidden="true">◉</span> Кошелёк</a>

@@ -75,17 +75,14 @@ SOCIAL_PROVIDERS = {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
         "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
-        "scope": "openid email profile",
-    },
+        "scope": "openid email profile"},
     "github": {
         "client_id_env": "GITHUB_CLIENT_ID",
         "client_secret_env": "GITHUB_CLIENT_SECRET",
         "authorize_url": "https://github.com/login/oauth/authorize",
         "token_url": "https://github.com/login/oauth/access_token",
         "userinfo_url": "https://api.github.com/user",
-        "scope": "read:user user:email",
-    },
-}
+        "scope": "read:user user:email"}}
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "")
 
@@ -99,8 +96,7 @@ def social_login_context() -> dict:
             os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET")
         ),
         "telegram_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME),
-        "telegram_bot_username": TELEGRAM_BOT_USERNAME,
-    }
+        "telegram_bot_username": TELEGRAM_BOT_USERNAME}
 
 
 def _login_user(request: Request, user) -> RedirectResponse:
@@ -116,8 +112,7 @@ _payout_settings = {
     "crypto_address": "",
     "card_provider": "Stripe",
     "card_recipient": "",
-    "card_currency": "EUR",
-}
+    "card_currency": "EUR"}
 
 
 def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float, fee_rate: float | None = None):
@@ -210,8 +205,7 @@ async def social_login(provider: str, request: Request):
         "redirect_uri": callback,
         "response_type": "code",
         "scope": config["scope"],
-        "state": state,
-    }
+        "state": state}
     return RedirectResponse(f"{config['authorize_url']}?{urlencode(params)}", status_code=302)
 
 @app.get("/auth/{provider}/callback", name="social_callback")
@@ -239,8 +233,7 @@ async def social_callback(provider: str, request: Request, code: str = "", state
                 "client_secret": client_secret,
                 "code": code,
                 "redirect_uri": callback_url,
-                "grant_type": "authorization_code",
-            },
+                "grant_type": "authorization_code"},
             headers={"Accept": "application/json"},
             timeout=10,
         )
@@ -352,8 +345,7 @@ def _market_signal(pair: str, exchange_name: str):
         "horizon": "ближайшие часы и следующий день",
         "confidence": min(0.95, round(0.5 + abs(change) / 10, 2)),
         "source": "сохранённые публичные OHLCV-свечи",
-        "disclaimer": "Сигнал информационный и не является гарантией доходности.",
-    }
+        "disclaimer": "Сигнал информационный и не является гарантией доходности."}
 
 
 def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT"):
@@ -408,8 +400,7 @@ def _strategy_catalog(email: str, performance: dict):
             "available": price == 0 or bool(owned and owned["active"]),
             "active": bool(owned and owned["active"]),
             "owned": bool(owned),
-            "access_until": owned["access_until"] if owned else None,
-        })
+            "access_until": owned["access_until"] if owned else None})
     return catalog
 
 class PluginActionPayload(BaseModel):
@@ -438,9 +429,8 @@ class DemoTradePayload(BaseModel):
 
 @app.get("/", name="index")
 async def serve_root(request: Request):
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "user_id": request.session.get("user_email") if request.session else None}
+    return templates.TemplateResponse(request, "index.html",
+        { "user_id": request.session.get("user_email") if request.session else None}
     )
 
 @app.get("/home", name="home")
@@ -455,15 +445,12 @@ DEV_ADMIN_EMAIL = "dev-admin@local"
 
 @app.get("/login", name="login")
 async def login_page(request: Request):
-    return templates.TemplateResponse(
-        "login.html",
+    return templates.TemplateResponse(request, "login.html",
         {
-            "request": request,
-            "message": None,
+                        "message": None,
             "user_id": request.session.get("user_email"),
             "dev_admin_bypass_enabled": DEV_ADMIN_BYPASS_ENABLED,
-            **social_login_context(),
-        },
+            **social_login_context()},
     )
 
 
@@ -482,58 +469,48 @@ async def login_submit(request: Request, username: str = Form(...), password: st
     user = engine.secure_login(username, password)
     if user:
         return _login_user(request, user)
-    return templates.TemplateResponse(
-        "login.html",
+    return templates.TemplateResponse(request, "login.html",
         {
-            "request": request,
-            "message": "Неверный логин или пароль.",
+                        "message": "Неверный логин или пароль.",
             "user_id": None,
             "dev_admin_bypass_enabled": DEV_ADMIN_BYPASS_ENABLED,
-            **social_login_context(),
-        },
+            **social_login_context()},
     )
 
 @app.get("/register", name="register")
 async def register_page(request: Request):
-    return templates.TemplateResponse(
-        "register.html",
+    return templates.TemplateResponse(request, "register.html",
         {
-            "request": request,
-            "message": None,
+                        "message": None,
             "user_id": request.session.get("user_email"),
-            **social_login_context(),
-        },
+            **social_login_context()},
     )
 
 @app.post("/register")
 async def register_submit(request: Request, username: str = Form(...), email: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
     if password != confirm_password:
-        return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "message": "Пароли не совпадают.", "user_id": None, **social_login_context()},
+        return templates.TemplateResponse(request, "register.html",
+            { "message": "Пароли не совпадают.", "user_id": None, **social_login_context()},
         )
     try:
         user = engine.create_user(email, password)
         request.session["user_email"] = user.email
         return RedirectResponse(url="/dashboard", status_code=302)
     except Exception as e:
-        return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "message": f"Ошибка регистрации: {e}", "user_id": None, **social_login_context()},
+        return templates.TemplateResponse(request, "register.html",
+            { "message": f"Ошибка регистрации: {e}", "user_id": None, **social_login_context()},
         )
 
 @app.get("/forgot-password", name="forgot_password")
 async def forgot_password_page(request: Request):
-    return templates.TemplateResponse(
-        "forgot_password.html",
-        {"request": request, "message": None, "user_id": request.session.get("user_email")}
+    return templates.TemplateResponse(request, "forgot_password.html",
+        { "message": None, "user_id": request.session.get("user_email")}
     )
 
 @app.post("/forgot-password")
 async def forgot_password_submit(request: Request, email: str = Form(...)):
-    return templates.TemplateResponse(
-        "forgot_password.html",
-        {"request": request, "message": "Инструкции по восстановлению пароля отправлены на указанный email.", "user_id": request.session.get("user_email")}
+    return templates.TemplateResponse(request, "forgot_password.html",
+        { "message": "Инструкции по восстановлению пароля отправлены на указанный email.", "user_id": request.session.get("user_email")}
     )
 
 @app.api_route("/dashboard", methods=["GET", "POST"], name="dashboard")
@@ -550,11 +527,9 @@ async def dashboard(request: Request):
     user = engine.get_user(user_email)
     username = user.email if user else user_email
     balance = "—"
-    return templates.TemplateResponse(
-        "dashboard.html",
+    return templates.TemplateResponse(request, "dashboard.html",
         {
-            "request": request,
-            "username": username,
+                        "username": username,
             "email": user_email,
             "balance": balance,
             "wallet": engine.get_or_create_wallet(user_email),
@@ -563,8 +538,7 @@ async def dashboard(request: Request):
             "selected_theme": request.session.get("theme", "light"),
             "message": message,
             "memories": engine.recent_memories(user_email, 5),
-            "demo": engine.get_demo_session(user_email),
-        },
+            "demo": engine.get_demo_session(user_email)},
     )
 
 def _connection_action(user_email: str, action: str, form) -> tuple[str | None, str | None]:
@@ -662,11 +636,9 @@ async def settings_page(request: Request):
     username = user.email if user else user_email
     is_admin = bool(user and user.role == "admin")
     wallet = engine.get_or_create_wallet(user_email)
-    return templates.TemplateResponse(
-        "settings.html",
+    return templates.TemplateResponse(request, "settings.html",
         {
-            "request": request,
-            "user_id": user_email,
+                        "user_id": user_email,
             "username": username,
             "email": user_email,
             "selected_theme": request.session.get("theme", "light"),
@@ -675,8 +647,7 @@ async def settings_page(request: Request):
             "wallet": wallet,
             "exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
             "wallets": list(WALLET_PROVIDERS),
-            "demo": engine.get_demo_session(user_email),
-        },
+            "demo": engine.get_demo_session(user_email)},
     )
 
 @app.api_route("/marketplace", methods=["GET", "POST"], name="marketplace")
@@ -712,11 +683,9 @@ async def marketplace(request: Request):
     site_settings = engine.get_site_settings()
     allowed_exchanges = {name.strip().lower() for name in site_settings["allowed_exchanges"].split(",") if name.strip()}
     allowed_wallets = [name.strip() for name in site_settings["allowed_wallets"].split(",") if name.strip()]
-    return templates.TemplateResponse(
-        "marketplace.html",
+    return templates.TemplateResponse(request, "marketplace.html",
         {
-            "request": request,
-            "user_id": user_email,
+                        "user_id": user_email,
             "wallet": engine.get_or_create_wallet(user_email),
             "internal_currency": "CMS Credits (CMSC)",
             "exchanges": sorted(allowed_exchanges & SUPPORTED_MARKET_EXCHANGES) or sorted(SUPPORTED_MARKET_EXCHANGES),
@@ -724,8 +693,7 @@ async def marketplace(request: Request):
             "wallets": allowed_wallets or list(WALLET_PROVIDERS),
             "plugins": _strategy_catalog(user_email, performance),
             "purchases": engine.user_plugins(user_email),
-            "plugin_message": plugin_message,
-        },
+            "plugin_message": plugin_message},
     )
 
 def _trading_context(user_email: str, message: str | None = None) -> dict:
@@ -738,8 +706,7 @@ def _trading_context(user_email: str, message: str | None = None) -> dict:
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
         "chart_timeframes": ["1m", "5m", "15m", "1h", "1d"],
         "demo": engine.get_demo_session(user_email),
-        "bot_memory": bot.get_memory_summary(),
-    }
+        "bot_memory": bot.get_memory_summary()}
 
 
 @app.api_route("/bot-management", methods=["GET", "POST"], name="bot_management")
@@ -768,17 +735,14 @@ async def bot_management(request: Request):
                 message = "Настройки стратегии сохранены."
             except (TypeError, ValueError):
                 message = "Проверьте значения левериджа, риска и комиссии."
-    return templates.TemplateResponse(
-        "bot_management.html",
+    return templates.TemplateResponse(request, "bot_management.html",
         {
-            "request": request,
-            "bot_status": bot.status(),
+                        "bot_status": bot.status(),
             "current_strategy": strategy_manager.current_strategy(),
             "config": strategy_manager.config,
             "manual_trade_result": None,
             "balance_history": [{"time": "start", "value": 100}],
-            **_trading_context(user_email, message),
-        },
+            **_trading_context(user_email, message)},
     )
 
 
@@ -787,21 +751,38 @@ async def manual_trading(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse(
-        "manual_trading.html",
-        {"request": request, **_trading_context(user_email)},
+    return templates.TemplateResponse(request, "manual_trading.html",
+        { **_trading_context(user_email)},
     )
 
+
+@app.get("/strategies", name="strategies_page")
+async def strategies_page(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    ctx = _trading_context(user_email)
+    ctx["bot_status"] = bot.status()
+    ctx["current_strategy"] = strategy_manager.current_strategy()
+    return templates.TemplateResponse(request, "strategies.html", ctx)
+
+@app.get("/demo", name="demo_page")
+async def demo_page(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    ctx = _trading_context(user_email)
+    ctx["bot_status"] = bot.status()
+    return templates.TemplateResponse(request, "demo.html", ctx)
 
 @app.get("/testing", name="testing")
 async def testing_page(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse(
-        "testing.html",
-        {"request": request, "bot_status": bot.status(), **_trading_context(user_email)},
-    )
+    ctx = _trading_context(user_email)
+    ctx["bot_status"] = bot.status()
+    return templates.TemplateResponse(request, "strategies.html", ctx)
 
 @app.api_route("/wallet", methods=["GET", "POST"], name="wallet_page")
 async def wallet_page(request: Request):
@@ -824,17 +805,14 @@ async def wallet_page(request: Request):
                     "Платёжный шлюз для пополнения CMSC ещё не подключен администратором. "
                     "Обратитесь в поддержку для оплаты вручную."
                 )
-    return templates.TemplateResponse(
-        "wallet.html",
+    return templates.TemplateResponse(request, "wallet.html",
         {
-            "request": request,
-            "user_id": user_email,
+                        "user_id": user_email,
             "user_email": user_email,
             "wallet": engine.get_or_create_wallet(user_email),
             "internal_currency": "CMS Credits (CMSC)",
             "payment_currencies": CMSC_PAYMENT_CURRENCIES,
-            "message": message,
-        },
+            "message": message},
     )
 
 @app.api_route("/admin", methods=["GET", "POST"], name="admin_panel")
@@ -909,8 +887,7 @@ async def admin_panel(request: Request):
                     "crypto_network": str(form.get("crypto_network", "")).strip(),
                     "crypto_address": crypto_address,
                     "card_provider": card_provider,
-                    "card_recipient": card_recipient,
-                })
+                    "card_recipient": card_recipient})
                 message = "Настройки выплат сохранены."
         elif action == "update_user_role":
             try:
@@ -954,11 +931,9 @@ async def admin_panel(request: Request):
     all_purchases = engine.list_all_purchases()
     all_wallets = engine.list_all_wallets()
     purchase_counts = Counter(item[1] for item in all_purchases)
-    return templates.TemplateResponse(
-        "admin.html",
+    return templates.TemplateResponse(request, "admin.html",
         {
-            "request": request,
-            "user_id": user_email,
+                        "user_id": user_email,
             "users": engine.list_users(),
             "plugins": engine.list_plugins(),
             "purchases": all_purchases,
@@ -977,8 +952,7 @@ async def admin_panel(request: Request):
             "allowed_wallets": {name.strip() for name in site_settings["allowed_wallets"].split(",")},
             "plugin_purchase_counts": sorted(purchase_counts.items(), key=lambda item: item[1], reverse=True),
             "connected_wallets_count": sum(1 for w in all_wallets if w[2] or w[4]),
-            **social_login_context(),
-        },
+            **social_login_context()},
     )
 
 
@@ -1181,8 +1155,7 @@ def strategy_performance(request: Request, pair: str = "BTC/USDT", exchange: str
             "exchange": exchange,
             "period": "последние 30 дней",
             "currency": "EUR",
-            "strategies": _strategy_performance(exchange, pair),
-        }
+            "strategies": _strategy_performance(exchange, pair)}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось рассчитать доходность: {exc}") from exc
 
@@ -1226,10 +1199,8 @@ def market_data(request: Request, pair: str = "BTC/USDT", exchange: str = "binan
         "ticker": {"last": ticker.get("last"), "change": ticker.get("percentage")},
         "order_book": {
             "bids": (order_book.get("bids") or [])[:10],
-            "asks": (order_book.get("asks") or [])[:10],
-        },
-        "candles": candles[-100:],
-    }
+            "asks": (order_book.get("asks") or [])[:10]},
+        "candles": candles[-100:]}
 
 
 @app.get("/api/market/history")
@@ -1271,8 +1242,7 @@ def market_news(request: Request, refresh: bool = True, limit: int = 100):
             "count": len(news),
             "sentiment": analyze_news_sentiment(news),
             "source": "сохранённая история CoinDesk RSS",
-            "analysis_policy": "В историю и анализ попадают только новости, опубликованные к моменту запроса.",
-        }
+            "analysis_policy": "В историю и анализ попадают только новости, опубликованные к моменту запроса."}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось обновить новости: {exc}") from exc
 
@@ -1394,8 +1364,7 @@ def bot_backtest(payload: BacktestPayload, request: Request):
             "pnl": round((data["final_balance_eur"] - 100.0) * scale, 2),
             "roi": data["monthly_return_pct"],
             "wins": round(data["win_rate_pct"] / 100 * data["trades"]),
-            "trades": data["trades"],
-        }
+            "trades": data["trades"]}
         for name, data in performance.items()
     ]
     return {"results": results}
@@ -1433,8 +1402,7 @@ def get_metrics(request: Request):
         "brain": production_bot.brain.summarize(),
         "strategy": strategy_manager.current_strategy(),
         "config": strategy_manager.config,
-        "risk": risk_manager.status(),
-    }
+        "risk": risk_manager.status()}
 
 @app.post("/api/strategy/execute")
 def execute_strategy(payload: StrategyPayload, request: Request):

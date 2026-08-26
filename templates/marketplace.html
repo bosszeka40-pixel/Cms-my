@@ -1,5 +1,4 @@
 {% extends 'base.html' %}
-
 {% block breadcrumb %}Обзор / Маркетплейс{% endblock %}
 
 {% block content %}
@@ -7,7 +6,7 @@
         <div>
             <span class="eyebrow">Магазин расширений</span>
             <h1 class="page-title">Маркетплейс</h1>
-            <p class="lead">Стратегии и модули для бота. Бесплатные, платиновые и премиум. 15 дней бесплатно при первом доступе.</p>
+            <p class="lead">Стратегии и модули для бота. 15 дней бесплатно при первом доступе к платиновым и премиум.</p>
         </div>
         <div class="hero-badge"><strong>{{ '%.2f'|format(wallet.credits) }}</strong><span>CMSC на балансе</span></div>
     </div>
@@ -27,26 +26,50 @@
             <button class="filter-btn" type="button" data-category="Платиновые">Платиновые</button>
             <button class="filter-btn" type="button" data-category="Премиум модули">Премиум</button>
             <button class="filter-btn" type="button" data-category="Пользовательские">Мои стратегии</button>
-            {% for plugin in plugins %}
-                {% set ns = namespace(found=false) %}
-                {% for btn in ['Бесплатные','Платиновые','Премиум модули','Пользовательские'] %}
-                    {% if plugin.category == btn %}{% set ns.found = true %}{% endif %}
-                {% endfor %}
-                {% if not ns.found %}
-                    <button class="filter-btn" type="button" data-category="{{ plugin.category }}">{{ plugin.category }}</button>
-                {% endif %}
-            {% endfor %}
         </div>
         <div class="connection-hint">
             {% if wallet.exchange_provider or wallet.provider %}
                 {% if wallet.exchange_provider %}<span class="badge badge-success">Биржа: {{ wallet.exchange_provider }}</span>{% endif %}
-                {% if wallet.provider %}<span class="badge badge-success">Кошелёк: {{ wallet.provider }}</span>{% endif %}
             {% else %}
                 <span class="badge badge-warning">Подключения в профиле</span>
                 <a href="{{ url_for('settings') }}" class="btn btn-sm btn-outline">Профиль → Настройки</a>
             {% endif %}
         </div>
     </section>
+
+    <!-- Featured sections -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem;">
+        <!-- Platinum Section -->
+        <div class="card" style="border-color:var(--warning);">
+            <div style="padding:1rem;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+                    <span style="font-size:1.2rem;">💎</span>
+                    <h2 style="margin:0;font-size:1rem;">Платиновые стратегии</h2>
+                </div>
+                <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;">Продвинутые стратегии с высокой доходностью. <strong>15 дней бесплатно</strong> при активации.</p>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <span class="badge badge-success">15 дн. бесплатно</span>
+                    <span class="badge badge-accent">HFT + ИИ</span>
+                    <span class="badge badge-accent">Auto-трейдинг</span>
+                </div>
+            </div>
+        </div>
+        <!-- Premium Modules -->
+        <div class="card" style="border-color:var(--primary);">
+            <div style="padding:1rem;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+                    <span style="font-size:1.2rem;">⚡</span>
+                    <h2 style="margin:0;font-size:1rem;">Премиум модули</h2>
+                </div>
+                <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;">Расширения для бота: анализ новостей, нейросетевой анализ, дельта-хеджирование.</p>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <span class="badge badge-success">15 дн. бесплатно</span>
+                    <span class="badge badge-accent">AI анализ</span>
+                    <span class="badge badge-accent">Риск-менеджмент</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <section id="marketplace-grid" class="market-grid">
         {% for plugin in plugins %}

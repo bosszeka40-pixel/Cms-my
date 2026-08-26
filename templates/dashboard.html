@@ -39,22 +39,22 @@
         </div>
         <div class="card">
             <h2>Быстрый доступ</h2>
-            <p class="muted" style="font-size:.82rem;margin-bottom:.75rem;">Основные разделы CMS.</p>
             <div class="quick-actions">
-                <a class="btn btn-secondary btn-sm" href="{{ url_for('marketplace') }}" style="width:100%;">▦ Маркетплейс стратегий</a>
+                <a class="btn btn-secondary btn-sm" href="{{ url_for('strategies_page') }}" style="width:100%;">◈ Тесты стратегий</a>
+                <a class="btn btn-secondary btn-sm" href="{{ url_for('demo_page') }}" style="width:100%;">▶ Демо-торговля</a>
+                <a class="btn btn-secondary btn-sm" href="{{ url_for('marketplace') }}" style="width:100%;">▦ Маркетплейс</a>
                 <a class="btn btn-secondary btn-sm" href="{{ url_for('bot_management') }}" style="width:100%;">⚙ Управление ботом</a>
-                <a class="btn btn-secondary btn-sm" href="{{ url_for('wallet_page') }}" style="width:100%;">▤ Кошелёк</a>
-                <a class="btn btn-outline btn-sm" href="{{ url_for('settings') }}" style="width:100%;">✦ Настройки и подключения</a>
+                <a class="btn btn-outline btn-sm" href="{{ url_for('settings') }}" style="width:100%;">✦ Настройки</a>
             </div>
-            <div style="margin-top:.75rem;">
-                <strong style="font-size:.85rem;">Демо-режим</strong>
-                <p class="muted" style="font-size:.8rem;">Баланс: {{ '%.2f'|format(demo.demo_balance|default(100)) }}€ | P/L: {{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</p>
-                <a class="btn btn-sm" href="{{ url_for('testing') }}" style="width:100%;">Тестировать стратегии</a>
+        </div>
+        <div class="card">
+            <h2>Активность бота</h2>
+            <div id="dash-bot-activity" style="max-height:300px;overflow-y:auto;font-size:.82rem;">
+                <div class="term-empty">Загрузка...</div>
             </div>
         </div>
         <div class="card" style="grid-column:1/-1;">
             <h2>Статистика активности</h2>
-            <p class="muted" style="font-size:.82rem;margin-bottom:.5rem;">Последние результаты из памяти бота.</p>
             <canvas id="memory-chart" height="120" aria-label="График последних результатов"></canvas>
             <div class="table-wrap">
                 <table>
@@ -63,7 +63,7 @@
                         {% for item in memories %}
                             <tr><td>{{ item.created_at[:16]|replace('T',' ') }}</td><td>{{ item.action }}</td><td>{{ '%.4f'|format(item.result) }}</td></tr>
                         {% else %}
-                            <tr><td colspan="3" class="muted">Пока нет результатов. Запустите тест в разделе «Бот».</td></tr>
+                            <tr><td colspan="3" class="muted">Пока нет результатов. Запустите тест в разделе «Стратегии».</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -93,6 +93,30 @@ document.getElementById('chat-form').addEventListener('submit', async (event) =>
     const data = await response.json();
     addMessage('Бот', response.ok ? data.answer : (data.detail || 'Ошибка чата'));
 });
+
+// Load bot activity
+async function loadBotActivity() {
+    try {
+        const resp = await fetch('/api/bot/status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const el = document.getElementById('dash-bot-activity');
+        if (data.activity_log && data.activity_log.length) {
+            el.innerHTML = data.activity_log.map(a =>
+                `<div style="padding:.4rem .5rem;border-bottom:1px solid var(--border);">` +
+                `<div style="font-size:.7rem;color:var(--muted);">${(a.time||'').substring(11,19)}</div>` +
+                `<div style="font-weight:600;">${a.event || '—'}</div>` +
+                `<div style="color:var(--muted);font-size:.78rem;">${a.detail || a.strategy || ''}</div>` +
+                `</div>`
+            ).join('');
+        } else {
+            el.innerHTML = '<div class="term-empty">Бот не активен</div>';
+        }
+    } catch(_) {}
+}
+loadBotActivity();
+setInterval(loadBotActivity, 8000);
+
 (function drawMemoryChart() {
     const canvas = document.getElementById('memory-chart');
     const context = canvas.getContext('2d');
@@ -106,12 +130,10 @@ document.getElementById('chat-form').addEventListener('submit', async (event) =>
     const slot = canvas.width / points.length;
     const barWidth = Math.max(2, slot * 0.6);
     const mid = canvas.height / 2;
-    const dark = document.body.classList.contains('dark') || (document.body.classList.contains('auto') && window.matchMedia('(prefers-color-scheme: dark)').matches);
     values.forEach((value, index) => {
         const x = index * slot + slot / 2;
         const barHeight = (Math.abs(value) / maxAbs) * (canvas.height / 2 - 8);
         context.fillStyle = value >= 0 ? '#10b981' : '#ef4444';
-        if (!dark) context.fillStyle = value >= 0 ? '#059669' : '#dc2626';
         if (value >= 0) context.fillRect(x - barWidth / 2, mid - barHeight, barWidth, barHeight);
         else context.fillRect(x - barWidth / 2, mid, barWidth, barHeight);
     });
