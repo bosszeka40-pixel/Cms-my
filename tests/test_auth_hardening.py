@@ -26,5 +26,10 @@ def test_production_requires_secret_key(monkeypatch):
     monkeypatch.delenv("SECRET_KEY", raising=False)
 
     import backend.main as main
-    with pytest.raises(RuntimeError, match="SECRET_KEY must be configured in production"):
+    try:
+        with pytest.raises(RuntimeError, match="SECRET_KEY must be configured in production"):
+            importlib.reload(main)
+    finally:
+        monkeypatch.setenv("APP_ENV", "development")
+        monkeypatch.setenv("SECRET_KEY", "test-secret-key")
         importlib.reload(main)

@@ -1,5 +1,5 @@
 fee_rate: 0.001
-leverage: 1.9
+leverage: 1.5
 log_level: info
 risk_tolerance: 0.03
 strategy: pure_harvester

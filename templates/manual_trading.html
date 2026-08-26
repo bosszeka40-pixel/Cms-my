@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block breadcrumb %}Торговля / Ручная торговля{% endblock %}
+
+{% block content %}
+    <div class="page-head">
+        <div><span class="eyebrow">Ручной режим</span><h1 class="page-title">Ручная торговля</h1><p class="lead">Котировки, заявки и подтверждённая симуляция исполнения.</p></div>
+        <div class="hero-badge"><strong>SIM</strong><span>без реальных ордеров</span></div>
+    </div>
+
+    <section class="terminal-grid">
+        <div class="card">
+            <h2>Инструмент <span id="market-source" class="status-pill">нет данных</span></h2>
+            <div class="form-grid">
+                <div class="field-group"><label for="market-pair">Пара</label><select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
+                <div class="field-group"><label for="market-exchange">Биржа</label><select id="market-exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
+                <div class="field-group"><label for="market-timeframe">Таймфрейм</label><select id="market-timeframe">{% for timeframe in chart_timeframes %}<option {% if timeframe == '1h' %}selected{% endif %}>{{ timeframe }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="button-row"><button class="btn" id="refresh-market" type="button">Обновить цену</button><button class="btn btn-outline" id="get-signal" type="button">Сигнал</button></div>
+            <div id="ticker" class="market-stats muted">Загрузите текущий инструмент.</div>
+            <div id="signal-result" class="small-note" role="status"></div>
+            <canvas id="price-chart" height="240"></canvas>
+        </div>
+        <div class="card">
+            <h2>Сделка</h2>
+            <form id="manual-trade-form">
+                <div class="form-grid">
+                    <div class="field-group"><label for="manual-side">Направление</label><select id="manual-side"><option value="buy">Купить</option><option value="sell">Продать</option></select></div>
+                    <div class="field-group"><label for="manual-price">Цена</label><input id="manual-price" type="number" min="0" step="any" required></div>
+                    <div class="field-group"><label for="manual-amount">Количество</label><input id="manual-amount" type="number" min="0" step="any" required></div>
+                    <div class="field-group"><label for="manual-balance">Баланс</label><input id="manual-balance" type="number" min="0" step="any" value="100" required></div>
+                </div>
+                <button class="btn" type="submit">Исполнить</button>
+            </form>
+            <div id="manual-result" class="small-note" role="status"></div>
+            <h3>Стакан</h3>
+            <div class="order-book"><div><strong>Bids</strong><div id="bids">—</div></div><div><strong>Asks</strong><div id="asks">—</div></div></div>
+        </div>
+    </section>
+
+    <section class="grid">
+        <div class="card">
+            <h2>История сделок</h2>
+            <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead><tbody id="trade-history">
+                {% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>
+                {% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+        <div class="card">
+            <h2>Баланс</h2>
+            <canvas id="balance-chart" data-trades='{{ trade_history|tojson }}' height="200"></canvas>
+            <h3>Риск</h3>
+            <div id="risk-status">Загружаем...</div>
+        </div>
+    </section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='cms_sections.js') }}" defer></script>{% endblock %}

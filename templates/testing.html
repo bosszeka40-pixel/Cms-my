@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block breadcrumb %}Проверка / Тесты стратегий{% endblock %}
+
+{% block content %}
+    <div class="page-head">
+        <div><span class="eyebrow">Безопасная проверка</span><h1 class="page-title">Тесты стратегий</h1><p class="lead">Быстрый тест, исторический backtest, баланс и журнал сделок.</p></div>
+        <div class="hero-badge"><strong>365d</strong><span>backtest</span></div>
+    </div>
+
+    <section class="terminal-grid">
+        <div class="card">
+            <h2>Тест сделки</h2>
+            <form id="trade-test-form">
+                <div class="form-grid">
+                    <div class="field-group"><label for="pair">Пара</label><select id="pair" name="pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
+                    <div class="field-group"><label for="exchange">Биржа</label><select id="exchange" name="exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
+                    <div class="field-group"><label for="news_sentiment">Сентимент</label><input type="number" step="0.01" id="news_sentiment" name="news_sentiment" value="0.0"></div>
+                    <div class="field-group"><label for="price_change">Изменение цены (%)</label><input type="number" step="0.01" id="price_change" name="price_change" value="0.0"></div>
+                    <div class="field-group"><label for="current_balance">Баланс</label><input type="number" step="0.01" min="0" id="current_balance" name="current_balance" value="100.0"></div>
+                </div>
+                <button class="btn" id="test-submit" type="submit">Запустить тест</button>
+            </form>
+            <div class="card result-card" id="trade-result" hidden></div>
+        </div>
+        <div class="card">
+            <h2>Backtest</h2>
+            <p class="muted">Использует сохранённую историю дневных свечей за год.</p>
+            <button class="btn" id="run-backtest" type="button">Запустить 365 дней</button>
+            <div id="backtest-result" class="table-wrap"></div>
+        </div>
+    </section>
+
+    <section class="grid">
+        <div class="card">
+            <h2>Кривая баланса</h2>
+            <canvas id="balance-chart" data-trades='{{ trade_history|tojson }}' height="220"></canvas>
+        </div>
+        <div class="card">
+            <h2>История</h2>
+            <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead><tbody id="trade-history">
+                {% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>
+                {% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='cms_sections.js') }}" defer></script>{% endblock %}

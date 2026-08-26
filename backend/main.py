@@ -47,11 +47,16 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend")), name="static")
 app.include_router(admin_router)
 
+@app.get("/health", name="health")
+async def health():
+    return {"status": "ok"}
+
+
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 def template_url_for(name: str, **values):
     if name == "static" and "filename" in values:
-        values["path"] = values.pop("filename")
+        return f"/static/{values['filename']}"
     return app.url_path_for(name, **values)
 
 templates.env.globals["url_for"] = template_url_for
@@ -352,8 +357,14 @@ def _market_signal(pair: str, exchange_name: str):
 
 
 def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT"):
-    client = _public_exchange(exchange_name)
-    daily = refresh_history(MARKET_DATABASE, client, exchange_name, pair)
+    from datetime import datetime, timedelta, timezone
+
+    ensure_table(MARKET_DATABASE)
+    daily = load_history(MARKET_DATABASE, exchange_name, pair)
+    freshness_cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
+    if not daily or str(daily[-1].get("day", "")) < freshness_cutoff:
+        client = _public_exchange(exchange_name)
+        daily = refresh_history(MARKET_DATABASE, client, exchange_name, pair)
     month = daily[-31:]
     names = [plugin.name for plugin in engine.list_plugins()]
     return evaluate_strategies(month, names)
@@ -500,7 +511,7 @@ async def dashboard(request: Request):
     message = None
     if request.method == "POST":
         form = await request.form()
-        if form.get("action") == "save_theme" and form.get("theme") in {"light", "dark"}:
+        if form.get("action") == "save_theme" and form.get("theme") in {"light", "dark", "auto"}:
             request.session["theme"] = form["theme"]
             message = "Тема оформления сохранена."
     user = engine.get_user(user_email)
@@ -522,6 +533,71 @@ async def dashboard(request: Request):
         },
     )
 
+def _connection_action(user_email: str, action: str, form) -> tuple[str | None, str | None]:
+    message = None
+    exchange_info = None
+    if action == "disconnect_exchange":
+        engine.update_wallet(
+            user_email,
+            exchange_provider=None,
+            exchange_key_masked=None,
+            exchange_sandbox=True,
+        )
+        engine.record_audit("exchange_disconnected", "manual", user_email)
+        message = "Биржа отключена."
+    elif action == "connect_exchange":
+        exchange_name = str(form.get("exchange_name", "")).strip().lower()
+        api_key = str(form.get("api_key", "")).strip()
+        api_secret = str(form.get("api_secret", "")).strip()
+        api_password = str(form.get("api_password", "")).strip()
+        sandbox = form.get("sandbox") is not None
+        if exchange_name not in SUPPORTED_MARKET_EXCHANGES:
+            message = "Выберите поддерживаемую биржу."
+        elif not api_key or not api_secret:
+            message = "Укажите API Key и API Secret."
+        else:
+            try:
+                exchange_class = getattr(ccxt, exchange_name)
+                config = {"apiKey": api_key, "secret": api_secret, "enableRateLimit": True}
+                if api_password:
+                    config["password"] = api_password
+                client = exchange_class(config)
+                if sandbox and hasattr(client, "set_sandbox_mode"):
+                    client.set_sandbox_mode(True)
+                client.load_markets()
+                engine.update_wallet(
+                    user_email,
+                    exchange_provider=exchange_name,
+                    exchange_key_masked=engine.mask_secret(api_key),
+                    exchange_sandbox=sandbox,
+                )
+                engine.record_audit("exchange_connected", exchange_name, user_email)
+                exchange_info = f"Биржа {exchange_name.capitalize()} подключена ({'sandbox' if sandbox else 'live'})."
+            except Exception as exc:
+                message = f"Не удалось подключить биржу: {exc}"
+    elif action == "connect_wallet":
+        wallet_provider = str(form.get("wallet_provider", "")).strip()
+        wallet_address = str(form.get("wallet_address", "")).strip()
+        if wallet_provider not in WALLET_PROVIDERS:
+            message = "Выберите поддерживаемый кошелек."
+        elif not wallet_address:
+            message = "Укажите адрес кошелька."
+        else:
+            engine.update_wallet(user_email, wallet_provider=wallet_provider, wallet_address=wallet_address)
+            engine.record_audit("wallet_connected", wallet_provider, user_email)
+            message = f"Кошелек {wallet_provider} подключен."
+    elif action == "connect_telegram":
+        telegram_username = str(form.get("telegram_username", "")).strip().lstrip("@")
+        telegram_token = str(form.get("telegram_token", "")).strip()
+        if not telegram_username or not telegram_token:
+            message = "Укажите Telegram username и Bot token."
+        else:
+            engine.update_wallet(user_email, telegram_username=telegram_username)
+            engine.record_audit("telegram_connected", telegram_username, user_email)
+            message = f"Telegram @{telegram_username} подключен."
+    return message, exchange_info
+
+
 @app.api_route("/settings", methods=["GET", "POST"], name="settings")
 async def settings_page(request: Request):
     user_email = request.session.get("user_email")
@@ -530,15 +606,20 @@ async def settings_page(request: Request):
     message = None
     if request.method == "POST":
         form = await request.form()
-        theme = form.get("theme", "light")
-        if theme in {"light", "dark"}:
-            request.session["theme"] = theme
-            message = "Настройки аккаунта сохранены."
+        action = form.get("action")
+        if action == "save_theme":
+            theme = form.get("theme", "light")
+            if theme in {"light", "dark", "auto"}:
+                request.session["theme"] = theme
+                message = "Тема оформления сохранена."
+            else:
+                message = "Выберите доступную тему оформления."
         else:
-            message = "Выберите доступную тему оформления."
+            message, _ = _connection_action(user_email, str(action), form)
     user = engine.get_user(user_email)
     username = user.email if user else user_email
     is_admin = bool(user and user.role == "admin")
+    wallet = engine.get_or_create_wallet(user_email)
     return templates.TemplateResponse(
         "settings.html",
         {
@@ -549,6 +630,9 @@ async def settings_page(request: Request):
             "selected_theme": request.session.get("theme", "light"),
             "message": message,
             "is_admin": is_admin,
+            "wallet": wallet,
+            "exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
+            "wallets": list(WALLET_PROVIDERS),
         },
     )
 
@@ -558,8 +642,6 @@ async def marketplace(request: Request):
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
     plugin_message = None
-    message = None
-    exchange_info = None
     try:
         performance = _strategy_performance()
     except Exception:
@@ -584,55 +666,6 @@ async def marketplace(request: Request):
                 )
             except (TypeError, ValueError) as exc:
                 plugin_message = str(exc)
-        elif action == "connect_exchange":
-            exchange_name = str(form.get("exchange_name", "")).strip().lower()
-            api_key = str(form.get("api_key", "")).strip()
-            api_secret = str(form.get("api_secret", "")).strip()
-            api_password = str(form.get("api_password", "")).strip()
-            sandbox = form.get("sandbox") is not None
-            if exchange_name not in SUPPORTED_MARKET_EXCHANGES:
-                message = "Выберите поддерживаемую биржу."
-            elif not api_key or not api_secret:
-                message = "Укажите API Key и API Secret."
-            else:
-                try:
-                    exchange_class = getattr(ccxt, exchange_name)
-                    config = {"apiKey": api_key, "secret": api_secret, "enableRateLimit": True}
-                    if api_password:
-                        config["password"] = api_password
-                    client = exchange_class(config)
-                    if sandbox and hasattr(client, "set_sandbox_mode"):
-                        client.set_sandbox_mode(True)
-                    client.load_markets()
-                    engine.update_wallet(
-                        user_email,
-                        exchange_provider=exchange_name,
-                        exchange_key_masked=engine.mask_secret(api_key),
-                        exchange_sandbox=sandbox,
-                    )
-                    engine.record_audit("exchange_connected", exchange_name, user_email)
-                    exchange_info = f"Биржа {exchange_name.capitalize()} подключена ({'sandbox' if sandbox else 'live'})."
-                except Exception as exc:
-                    message = f"Не удалось подключить биржу: {exc}"
-        elif action == "connect_wallet":
-            wallet_provider = str(form.get("wallet_provider", "")).strip()
-            wallet_address = str(form.get("wallet_address", "")).strip()
-            if wallet_provider not in WALLET_PROVIDERS:
-                message = "Выберите поддерживаемый кошелек."
-            elif not wallet_address:
-                message = "Укажите адрес кошелька."
-            else:
-                engine.update_wallet(user_email, wallet_provider=wallet_provider, wallet_address=wallet_address)
-                engine.record_audit("wallet_connected", wallet_provider, user_email)
-                message = f"Кошелек {wallet_provider} подключен."
-        elif action == "connect_telegram":
-            telegram_username = str(form.get("telegram_username", "")).strip().lstrip("@")
-            if not telegram_username:
-                message = "Укажите Telegram username."
-            else:
-                engine.update_wallet(user_email, telegram_username=telegram_username)
-                engine.record_audit("telegram_connected", telegram_username, user_email)
-                message = f"Telegram @{telegram_username} подключен."
     site_settings = engine.get_site_settings()
     allowed_exchanges = {name.strip().lower() for name in site_settings["allowed_exchanges"].split(",") if name.strip()}
     allowed_wallets = [name.strip() for name in site_settings["allowed_wallets"].split(",") if name.strip()]
@@ -648,11 +681,20 @@ async def marketplace(request: Request):
             "wallets": allowed_wallets or list(WALLET_PROVIDERS),
             "plugins": _strategy_catalog(user_email, performance),
             "purchases": engine.user_plugins(user_email),
-            "message": message,
-            "exchange_info": exchange_info,
             "plugin_message": plugin_message,
         },
     )
+
+def _trading_context(user_email: str, message: str | None = None) -> dict:
+    return {
+        "user_id": user_email,
+        "message": message,
+        "trade_history": engine.list_trades(user_email, 20),
+        "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
+        "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
+        "chart_timeframes": ["1m", "5m", "15m", "1h", "1d"],
+    }
+
 
 @app.api_route("/bot-management", methods=["GET", "POST"], name="bot_management")
 async def bot_management(request: Request):
@@ -683,18 +725,35 @@ async def bot_management(request: Request):
         "bot_management.html",
         {
             "request": request,
-            "user_id": user_email,
             "bot_status": bot.status(),
             "current_strategy": strategy_manager.current_strategy(),
             "config": strategy_manager.config,
-            "message": message,
             "manual_trade_result": None,
             "balance_history": [{"time": "start", "value": 100}],
-            "trade_history": engine.list_trades(user_email, 20),
-            "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
-            "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
-            "chart_timeframes": ["1m", "5m", "15m", "1h", "1d"],
+            **_trading_context(user_email, message),
         },
+    )
+
+
+@app.get("/manual-trading", name="manual_trading")
+async def manual_trading(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse(
+        "manual_trading.html",
+        {"request": request, **_trading_context(user_email)},
+    )
+
+
+@app.get("/testing", name="testing")
+async def testing_page(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse(
+        "testing.html",
+        {"request": request, "bot_status": bot.status(), **_trading_context(user_email)},
     )
 
 @app.api_route("/wallet", methods=["GET", "POST"], name="wallet_page")
@@ -888,7 +947,8 @@ async def logout(request: Request):
     return RedirectResponse(url="/", status_code=302)
 
 @app.post("/api/user/connect-exchange")
-def connect_exchange(config: ExchangeConfig):
+def connect_exchange(config: ExchangeConfig, request: Request):
+    _require_user(request)
     try:
         exchange_class = getattr(ccxt, config.exchange_name.lower())
         exchange = exchange_class({
@@ -1215,7 +1275,8 @@ def bot_backtest(payload: BacktestPayload, request: Request):
     return {"results": results}
 
 @app.post("/api/bot/simulate")
-def simulate_trade(payload: HFTSimulatePayload):
+def simulate_trade(payload: HFTSimulatePayload, request: Request):
+    _require_user(request)
     try:
         capital = production_bot.trade_loop(payload.market_data, payload.ai_stream)
         metrics = production_bot.metrics()

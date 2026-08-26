@@ -1,42 +1,153 @@
 {% extends 'base.html' %}
 
+{% block breadcrumb %}Система / Профиль и настройки{% endblock %}
+
 {% block content %}
-    <h1 class="page-title">Настройки аккаунта</h1>
-    <p class="lead">Настройте внешний вид личного кабинета и быстро переходите к функциям CMS.</p>
+    <div class="page-head">
+        <div><span class="eyebrow">Система</span><h1 class="page-title">Профиль и настройки</h1><p class="lead">Профиль, подключения биржи и кошелька, оформление — в одном разделе.</p></div>
+    </div>
     {% if message %}
         <div class="message success">{{ message }}</div>
     {% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Профиль</h2>
-            <p><strong>Имя пользователя:</strong> {{ username }}</p>
-            <p><strong>Email:</strong> {{ email }}</p>
-            <p class="muted">Для изменения персональных данных обратитесь к администратору.</p>
+
+    <div class="settings-section">
+        <div class="settings-section-title">Профиль</div>
+        <div class="card" style="display:flex;align-items:center;gap:1rem;margin-bottom:.75rem;">
+            <div class="avatar">{{ username[:2]|upper if username else '??' }}</div>
+            <div style="flex:1;">
+                <strong>{{ username }}</strong><br>
+                <span class="muted">{{ email }}</span>
+            </div>
             {% if is_admin %}
-                <a class="btn" href="{{ url_for('admin_panel') }}">Админ панель</a>
+                <a class="btn btn-sm btn-outline" href="{{ url_for('admin_panel') }}">★ Админ</a>
             {% endif %}
         </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-section-title">Подключение биржи</div>
         <div class="card">
-            <h2>Оформление</h2>
-            <form method="post">
-                <div class="field-group">
-                    <label for="theme">Тема интерфейса</label>
-                    <select id="theme" name="theme">
-                        <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Светлая</option>
-                        <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Тёмная</option>
-                    </select>
+            {% if wallet.exchange_provider %}
+                <div class="settings-item">
+                    <div style="display:flex;align-items:center;gap:.5rem;">
+                        <div class="settings-item-icon">✓</div>
+                        <div>
+                            <strong>{{ wallet.exchange_provider }}</strong>
+                            {% if wallet.exchange_sandbox %}<span class="badge badge-warning">Sandbox</span>{% else %}<span class="badge badge-success">Live</span>{% endif %}<br>
+                            <span class="muted" style="font-size:.82rem;">API: {{ wallet.exchange_address or '—' }}</span>
+                        </div>
+                    </div>
+                    <form method="post" action="{{ url_for('settings') }}">
+                        <input type="hidden" name="action" value="disconnect_exchange">
+                        <button type="submit" class="btn btn-sm btn-danger">Отключить</button>
+                    </form>
                 </div>
-                <button type="submit" class="btn">Сохранить настройки</button>
+            {% endif %}
+            <form method="post" action="{{ url_for('settings') }}">
+                <input type="hidden" name="action" value="connect_exchange">
+                <div class="grid" style="grid-template-columns: 1fr 1fr;">
+                    <div class="field-group">
+                        <label for="exchange_name">Биржа</label>
+                        <select id="exchange_name" name="exchange_name">
+                            {% for ex in exchanges|default(['binance','bybit','kraken','okx','bitfinex']) %}
+                                <option value="{{ ex }}">{{ ex }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label for="api_key">API Key</label>
+                        <input type="text" id="api_key" name="api_key" placeholder="API Key">
+                    </div>
+                    <div class="field-group">
+                        <label for="api_secret">API Secret</label>
+                        <input type="password" id="api_secret" name="api_secret" placeholder="API Secret">
+                    </div>
+                    <div class="field-group">
+                        <label for="api_password">Passphrase (если требуется)</label>
+                        <input type="password" id="api_password" name="api_password" placeholder="Passphrase">
+                    </div>
+                </div>
+                <label style="font-weight:400;display:flex;align-items:center;gap:.4rem;font-size:.87rem;color:var(--muted);">
+                    <input type="checkbox" name="sandbox" checked style="width:auto;margin:0;"> Sandbox / testnet
+                </label>
+                <button type="submit" class="btn">{{ 'Обновить подключение' if wallet.exchange_provider else 'Подключить биржу' }}</button>
             </form>
         </div>
-        <div class="card">
-            <h2>Разделы CMS</h2>
-            <div class="button-row">
-                <a class="btn" href="{{ url_for('dashboard') }}">Дашборд</a>
-                <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
-                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
-                <a class="btn" href="{{ url_for('wallet_page') }}">Кошелёк</a>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-section-title">Кошелёк и Telegram</div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;">
+            <div class="card">
+                <h3>Кошелёк</h3>
+                {% if wallet.provider %}
+                    <p><strong>{{ wallet.provider }}</strong> — {{ wallet.address or '—' }}</p>
+                {% endif %}
+                <form method="post" action="{{ url_for('settings') }}">
+                    <input type="hidden" name="action" value="connect_wallet">
+                    <div class="field-group">
+                        <label for="wallet_provider">Провайдер</label>
+                        <select id="wallet_provider" name="wallet_provider">
+                            {% for wp in wallets|default(['MetaMask','Trust Wallet','Binance Wallet','WalletConnect','Ledger','Trezor']) %}
+                                <option value="{{ wp }}">{{ wp }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label for="wallet_address">Адрес</label>
+                        <input type="text" id="wallet_address" name="wallet_address" placeholder="0x...">
+                    </div>
+                    <button type="submit" class="btn btn-sm">{{ 'Обновить' if wallet.provider else 'Подключить' }}</button>
+                </form>
             </div>
+            <div class="card">
+                <h3>Telegram</h3>
+                {% if wallet.telegram %}
+                    <p><strong>{{ wallet.telegram }}</strong></p>
+                {% endif %}
+                <form method="post" action="{{ url_for('settings') }}">
+                    <input type="hidden" name="action" value="connect_telegram">
+                    <div class="field-group">
+                        <label for="telegram_username">Username</label>
+                        <input type="text" id="telegram_username" name="telegram_username" placeholder="@username">
+                    </div>
+                    <div class="field-group">
+                        <label for="telegram_token">Bot token</label>
+                        <input type="password" id="telegram_token" name="telegram_token" placeholder="123456:ABC-DEF...">
+                    </div>
+                    <button type="submit" class="btn btn-sm">{{ 'Обновить' if wallet.telegram else 'Подключить' }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-section-title">Оформление</div>
+        <div class="card">
+            <form method="post" action="{{ url_for('settings') }}">
+                <input type="hidden" name="action" value="save_theme">
+                <div class="theme-card-grid">
+                    {% for val, label, icon in [('light','Светлая','☀'),('dark','Тёмная','☾'),('auto','Авто','◐')] %}
+                    <button name="theme" value="{{ val }}" class="theme-card {{ 'active' if selected_theme == val }}">
+                        <span>{{ icon }}</span><strong>{{ label }}</strong>
+                    </button>
+                    {% endfor %}
+                </div>
+                <noscript>
+                    <div class="field-group"><label for="theme">Тема</label><select id="theme" name="theme"><option value="light">Светлая</option><option value="dark">Тёмная</option><option value="auto">Авто</option></select></div>
+                    <button class="btn btn-sm" type="submit">Сохранить</button>
+                </noscript>
+</form>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-section-title">Разделы CMS</div>
+        <div class="button-row">
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('dashboard') }}">▣ Дашборд</a>
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('marketplace') }}">▦ Маркетплейс</a>
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('bot_management') }}">⚙ Бот</a>
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('wallet_page') }}">▤ Кошелёк</a>
         </div>
     </div>
 {% endblock %}

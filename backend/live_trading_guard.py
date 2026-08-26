@@ -20,6 +20,8 @@ class LiveTradingGuard:
             return False
         return notional <= self.max_order_notional
 
+    allowed = allow_order
+
     def status(self) -> dict:
         return {
             "live_trading_enabled": self.enabled,

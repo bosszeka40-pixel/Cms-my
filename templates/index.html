@@ -2,31 +2,39 @@
 
 {% block content %}
     {% if user_id %}
-        <h1 class="page-title">Добро пожаловать обратно, {{ user_name or 'Пользователь' }}!</h1>
-        <p class="lead">Вы уже в системе. Перейдите в дашборд, маркетплейс или управление ботом.</p>
-        <div class="button-row">
-            <a class="btn" href="{{ url_for('dashboard') }}">Дашборд</a>
-            <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
-            <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
-            <a class="btn" href="{{ url_for('logout') }}">Выйти</a>
+        <div class="hero">
+            <div>
+                <span class="eyebrow">Личный кабинет</span>
+                <h1 class="page-title">Здравствуйте, {{ username or 'Пользователь' }}</h1>
+                <p class="lead">Все торговые режимы и настройки CMS собраны в одном понятном интерфейсе.</p>
+            </div>
+            <div class="hero-badge"><strong>CMS</strong><span>V12</span></div>
         </div>
+        <section class="feature-grid">
+            <a class="card feature-card" href="{{ url_for('dashboard') }}"><h2>Дашборд</h2><p class="muted">Статистика, ИИ-ассистент и быстрые действия.</p></a>
+            <a class="card feature-card" href="{{ url_for('bot_management') }}"><h2>Бот</h2><p class="muted">Запуск, стратегия, рынок и риск-контроль.</p></a>
+            <a class="card feature-card" href="{{ url_for('manual_trading') }}"><h2>Ручная торговля</h2><p class="muted">Котировки и контролируемое исполнение сделок.</p></a>
+            <a class="card feature-card" href="{{ url_for('testing') }}"><h2>Тесты</h2><p class="muted">Симуляция сделки и исторический backtest.</p></a>
+        </section>
+        <section class="grid">
+            <a class="card feature-card" href="{{ url_for('marketplace') }}"><h2>Маркетплейс</h2><p class="muted">Стратегии, производительность и подписки.</p></a>
+            <a class="card feature-card" href="{{ url_for('wallet_page') }}"><h2>Кошелёк</h2><p class="muted">Баланс CMSC и реферальная программа.</p></a>
+            <a class="card feature-card" href="{{ url_for('settings') }}"><h2>Настройки</h2><p class="muted">Профиль, подключения и тема оформления.</p></a>
+        </section>
     {% else %}
         <div class="hero">
             <div>
-                <span class="eyebrow">CMS TRADING CONTROL</span>
-                <h1 class="page-title">Управляйте торговлей безопасно</h1>
-                <p class="lead">Публичные котировки, sandbox-проверки и контролируемые live-ордера в одном интерфейсе.</p>
+                <span class="eyebrow">CMS Trading Control</span>
+                <h1 class="page-title">Торговая CMS без путаницы</h1>
+                <p class="lead">Отдельные разделы для бота, ручных сделок и тестов. Подключения — в профиле, маркетплейс — только для стратегий.</p>
             </div>
-            <div class="hero-badge"><strong>DRY-RUN</strong><span>по умолчанию</span></div>
+            <div class="hero-badge"><strong>SAFE</strong><span>sandbox first</span></div>
         </div>
-        <div class="feature-grid">
-            <div class="card"><h2>Проверка API</h2><p class="muted">Ключи проверяются без сохранения секретов в базе данных.</p></div>
-            <div class="card"><h2>Sandbox first</h2><p class="muted">Сначала тестовая сеть, затем отдельное подтверждение live-режима.</p></div>
-            <div class="card"><h2>Контроль риска</h2><p class="muted">Лимит номинала сделки и журнал операций защищают ручные действия.</p></div>
-        </div>
-        <div class="button-row">
-            <a class="btn" href="{{ url_for('login') }}">Войти</a>
-            <a class="btn" href="{{ url_for('register') }}">Регистрация</a>
-        </div>
+        <section class="feature-grid">
+            <article class="card"><h2>Чёткая структура</h2><p class="muted">Каждый режим находится на своей странице и не мешает остальным.</p></article>
+            <article class="card"><h2>Безопасность</h2><p class="muted">Секреты не сохраняются в открытом виде, по умолчанию доступен sandbox.</p></article>
+            <article class="card"><h2>Единый стиль</h2><p class="muted">Светлая, тёмная и автоматическая темы применяются ко всем страницам.</p></article>
+        </section>
+        <div class="button-row"><a class="btn" href="{{ url_for('login') }}">Войти</a><a class="btn btn-outline" href="{{ url_for('register') }}">Регистрация</a></div>
     {% endif %}
 {% endblock %}

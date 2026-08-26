@@ -1,174 +1,134 @@
 {% extends 'base.html' %}
 
+{% block breadcrumb %}Обзор / Маркетплейс{% endblock %}
+
 {% block content %}
-    <h1 class="page-title">Маркетплейс</h1>
-    <p class="lead">Подключите биржу, кошелек и Telegram, а затем купите плагины или подключите стратегию.</p>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Баланс</h2>
-            <p><strong>{{ '%.2f'|format(wallet.credits) }} CMSC</strong></p>
-            <p class="muted">Цены стратегий указаны в евро (€), срок доступа к платной стратегии — 15 дней.</p>
-            <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
-            <p>Адрес: {{ wallet.address or 'Не указано' }}</p>
-            <p>Подключенная биржа: {{ wallet.exchange_provider or 'Не подключена' }}</p>
-            <p>API ключ (маскированный): {{ wallet.exchange_address or 'Не указано' }}</p>
-            <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>
+    <div class="page-head">
+        <div>
+            <span class="eyebrow">Магазин расширений</span>
+            <h1 class="page-title">Маркетплейс</h1>
+            <p class="lead">Стратегии и модули для бота. Покупка, активация и продление — в одном разделе.</p>
         </div>
-        <div class="card">
-            <h2>Подключение биржи</h2>
-            {% if exchange_info %}
-                <div class="card" style="margin-bottom: 15px;">
-                    <p>{{ exchange_info }}</p>
-                </div>
-            {% endif %}
-            <p class="muted">Поддерживаемые биржи (ссылки на официальные сайты для регистрации):</p>
-            <ul class="exchange-links">
-                {% for ex in exchange_directory %}
-                    <li><a href="{{ ex.website }}" target="_blank" rel="noopener noreferrer">{{ ex.name }}</a></li>
-                {% endfor %}
-            </ul>
-            <form method="post">
-                <input type="hidden" name="action" value="connect_exchange">
-                <div class="field-group">
-                    <label for="exchange_name">Биржа</label>
-                    <select id="exchange_name" name="exchange_name">
-                        {% for ex in exchanges %}
-                            <option value="{{ ex }}">{{ ex }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="api_key">API Key</label>
-                    <input type="text" id="api_key" name="api_key" placeholder="API Key">
-                </div>
-                <div class="field-group">
-                    <label for="api_secret">API Secret</label>
-                    <input type="password" id="api_secret" name="api_secret" placeholder="API Secret">
-                    <label for="api_password">Passphrase (если требуется)</label>
-                    <input type="password" id="api_password" name="api_password" placeholder="Passphrase">
-                    <label><input type="checkbox" name="sandbox" checked> Использовать sandbox/testnet</label>
-                </div>
-                <button type="submit" class="btn">Подключить биржу</button>
-            </form>
-        </div>
-        <div class="card">
-            <h2>Подключение кошелька</h2>
-            <form method="post">
-                <input type="hidden" name="action" value="connect_wallet">
-                <div class="field-group">
-                    <label for="wallet_provider">Провайдер кошелька</label>
-                    <select id="wallet_provider" name="wallet_provider">
-                        {% for wallet_provider in wallets %}
-                            <option value="{{ wallet_provider }}">{{ wallet_provider }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="wallet_address">Адрес кошелька</label>
-                    <input type="text" id="wallet_address" name="wallet_address" placeholder="0x...">
-                </div>
-                <button type="submit" class="btn">Подключить кошелек</button>
-            </form>
-        </div>
-        <div class="card">
-            <h2>Подключение Telegram</h2>
-            <form method="post">
-                <input type="hidden" name="action" value="connect_telegram">
-                <div class="field-group">
-                    <label for="telegram_username">Telegram username</label>
-                    <input type="text" id="telegram_username" name="telegram_username" placeholder="@username">
-                </div>
-                <div class="field-group">
-                    <label for="telegram_token">Bot token</label>
-                    <input type="text" id="telegram_token" name="telegram_token" placeholder="123456:ABC-DEF...">
-                </div>
-                <button type="submit" class="btn">Подключить Telegram</button>
-            </form>
-        </div>
+        <div class="hero-badge"><strong>{{ '%.2f'|format(wallet.credits) }}</strong><span>CMSC на балансе</span></div>
     </div>
+
     {% if plugin_message %}
-        <div class="message">{{ plugin_message }}</div>
+        <div class="message success" style="margin-bottom:1rem;">{{ plugin_message }}</div>
     {% endif %}
-    <div class="card">
-        <h2>Плагины</h2>
+
+    <section class="market-toolbar card">
+        <label class="search-box">
+            <span class="visually-hidden">Поиск стратегии</span>
+            <input id="marketplace-search" type="search" placeholder="Найти стратегию или описание..." autocomplete="off">
+        </label>
+        <div id="marketplace-categories" class="filter-row" aria-label="Категории">
+            <button class="filter-btn active" type="button" data-category="all">Все</button>
+            {% set categories = [] %}
+            {% for plugin in plugins %}
+                {% if plugin.category not in categories %}
+                    {% if categories.append(plugin.category) %}{% endif %}
+                    <button class="filter-btn" type="button" data-category="{{ plugin.category }}">{{ plugin.category }}</button>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="connection-hint">
+            {% if wallet.exchange_provider or wallet.provider %}
+                {% if wallet.exchange_provider %}<span class="badge badge-success">Биржа: {{ wallet.exchange_provider }}</span>{% endif %}
+                {% if wallet.provider %}<span class="badge badge-success">Кошелёк: {{ wallet.provider }}</span>{% endif %}
+            {% else %}
+                <span class="badge badge-warning">Подключения находятся в профиле</span>
+                <a href="{{ url_for('settings') }}" class="btn btn-sm btn-outline">Профиль → Настройки</a>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="marketplace-grid" class="market-grid">
         {% for plugin in plugins %}
-            <div class="card" style="margin-bottom: 15px;">
-                <h3>{{ plugin.name }}</h3>
-                <p>{{ plugin.description }}</p>
-                <p>Категория: <strong>{{ plugin.category }}</strong></p>
-                <p>Результат за 30 дней: <strong>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</strong>,
-                    баланс €100 → €{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</p>
-                <p>Цена: <strong>{% if plugin.price_eur %}€{{ '%.2f'|format(plugin.price_eur) }} / 15 дней{% else %}Бесплатно{% endif %}</strong></p>
-                <p>Статус:
+            <article class="card market-card" data-name="{{ plugin.name|lower }} {{ plugin.description|lower }}" data-category="{{ plugin.category }}">
+                <header class="market-card-head">
+                    <h3>{{ plugin.name }}</h3>
                     {% if plugin.active %}
-                        <strong class="status-pill">✔ активна{% if plugin.access_until %} до {{ plugin.access_until[:16]|replace('T', ' ') }}{% endif %}</strong>
+                        <span class="badge badge-success">Активна</span>
                     {% elif plugin.owned %}
-                        <strong class="status-pill">куплена, не активирована{% if plugin.access_until %} (доступ до {{ plugin.access_until[:16]|replace('T', ' ') }}){% endif %}</strong>
-                    {% elif plugin.available %}
-                        <strong class="status-pill">бесплатно доступна</strong>
+                        <span class="badge badge-warning">Куплена</span>
                     {% else %}
-                        <strong class="status-pill">требуется покупка</strong>
+                        <span class="badge badge-accent">{{ 'Бесплатно' if plugin.available else 'Платно' }}</span>
                     {% endif %}
-                </p>
-                {% if plugin.price_eur %}
-                    <form method="post" style="margin-top: 10px;">
-                        <input type="hidden" name="action" value="buy_plugin">
-                        <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
-                        {% if plugin.license_options %}
-                            <label for="duration-{{ plugin.name }}">Срок доступа</label>
-                            <select id="duration-{{ plugin.name }}" name="duration_days">
+                </header>
+                <p class="market-description muted">{{ plugin.description }}</p>
+                <dl class="market-metrics">
+                    <div><dt>30 дней</dt><dd>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</dd></div>
+                    <div><dt>€100 даёт</dt><dd>€{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</dd></div>
+                    <div><dt>Категория</dt><dd>{{ plugin.category }}</dd></div>
+                </dl>
+                <footer class="market-card-footer">
+                    <strong class="price">{% if plugin.price_eur %}€{{ '%.2f'|format(plugin.price_eur) }}<small>/15 дн.</small>{% else %}Бесплатно{% endif %}</strong>
+                    {% if plugin.price_eur %}
+                        <form method="post" class="license-form">
+                            <input type="hidden" name="action" value="buy_plugin">
+                            <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
+                            <select name="duration_days" aria-label="Срок лицензии">
                                 {% for option in plugin.license_options %}
                                     <option value="{{ option.days }}">{{ option.days }} дн. — €{{ '%.2f'|format(option.price_eur) }}</option>
                                 {% endfor %}
                             </select>
-                        {% endif %}
-                        <button class="btn" type="submit">{{ 'Продлить доступ' if plugin.owned else 'Купить' }}</button>
-                    </form>
+                            <button class="btn btn-sm" type="submit">{{ 'Продлить' if plugin.owned else 'Купить' }}</button>
+                        </form>
+                    {% elif plugin.available %}
+                        <button class="btn btn-outline btn-sm activate-btn" type="button" data-plugin="{{ plugin.name }}" {% if plugin.active %}disabled{% endif %}>
+                            {{ 'Уже активна' if plugin.active else 'Активировать' }}
+                        </button>
+                    {% endif %}
+                </footer>
+                {% if plugin.access_until and plugin.active %}
+                    <p class="expiry muted">до {{ plugin.access_until[:16]|replace('T',' ') }}</p>
                 {% endif %}
-                {% if plugin.available %}
-                    <button class="btn activate-btn" type="button" data-plugin="{{ plugin.name }}" {% if plugin.active %}disabled{% endif %} style="margin-top: 8px;">
-                        {{ 'Уже активна' if plugin.active else 'Активировать в боте' }}
-                    </button>
-                {% endif %}
-            </div>
-        {% endfor %}
-    </div>
-    <div class="card">
-        <h2>Покупки</h2>
-        {% if purchases %}
-            <ul>
-                {% for item in purchases %}
-                    <li>{{ item.name }} — {{ item.when }}</li>
-                {% endfor %}
-            </ul>
+            </article>
         {% else %}
-            <p>Пока нет покупок.</p>
-        {% endif %}
-    </div>
+            <article class="card empty-state"><h3>Товаров пока нет</h3><p class="muted">Маркетплейс обновляется администратором.</p></article>
+        {% endfor %}
+    </section>
+    <p id="marketplace-empty" class="empty-note muted" hidden>По выбранному фильтру ничего не найдено.</p>
+
+    {% if purchases %}
+    <section class="card purchase-history">
+        <h3>История покупок</h3>
+        <ul>
+            {% for item in purchases %}
+                <li>{{ item.name }} — {{ item.when }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
 {% endblock %}
+
 {% block scripts %}
 <script>
-document.querySelectorAll('.activate-btn').forEach(button => {
-    button.addEventListener('click', async () => {
-        button.disabled = true;
-        const pluginName = button.dataset.plugin;
-        try {
-            const response = await fetch('/api/strategies/activate', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({plugin_name: pluginName})
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Ошибка активации стратегии');
-            button.textContent = 'Уже активна';
-            location.reload();
-        } catch (error) {
-            button.disabled = false;
-            alert(error.message);
-        }
+(() => {
+  const search = document.getElementById('marketplace-search');
+  const categoryButtons = [...document.querySelectorAll('#marketplace-categories .filter-btn')];
+  const cards = [...document.querySelectorAll('.market-card')];
+  const emptyMessage = document.getElementById('marketplace-empty');
+  let category = 'all';
+
+  const applyFilters = () => {
+    const query = search.value.trim().toLowerCase();
+    let visible = 0;
+    cards.forEach((card) => {
+      const matches = (category === 'all' || card.dataset.category === category) && (!query || card.dataset.name.includes(query));
+      card.hidden = !matches;
+      visible += Number(matches);
     });
-});
+    emptyMessage.hidden = visible !== 0;
+  };
+
+  categoryButtons.forEach((button) => button.addEventListener('click', () => {
+    categoryButtons.forEach((item) => item.classList.remove('active'));
+    button.classList.add('active');
+    category = button.dataset.category;
+    applyFilters();
+  }));
+  search.addEventListener('input', applyFilters);
+})();
 </script>
 {% endblock %}

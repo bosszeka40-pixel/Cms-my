@@ -349,7 +349,7 @@ class CMSEngine:
     def _wallet_to_dict(wallet) -> dict:
         if not wallet:
             return {"credits": 0.0, "balance": 0.0, "provider": None, "address": None, "exchange_provider": None, "exchange_address": None, "telegram": None}
-        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "telegram": wallet.telegram_username}
+        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "exchange_sandbox": bool(wallet.exchange_sandbox), "telegram": wallet.telegram_username}
 
     def update_wallet(self, email: str, **fields) -> dict:
         session = self.SessionLocal()

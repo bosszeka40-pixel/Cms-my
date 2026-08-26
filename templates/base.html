@@ -3,56 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Super CMS V12{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}">
 </head>
 <body class="{{ theme|default('light') }}">
-    <header>
-        <div class="brand"><span class="win-logo" aria-hidden="true">▦</span><h2>Super CMS V12</h2></div>
-        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">
-            <span aria-hidden="true">☰</span> Меню
-        </button>
-        <nav id="main-menu">
-            <a href="{{ url_for('index') }}"><span class="nav-icon" aria-hidden="true">⌂</span>Главная</a>
+<div class="app-shell">
+    <aside class="sidebar" id="main-menu" aria-label="Основная навигация">
+        <div class="sidebar-brand">
+            <span class="win-logo" aria-hidden="true">▦</span>
+            <div><strong>Super CMS</strong><small>V12 Control Center</small></div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="{{ url_for('index') }}">
+                <span aria-hidden="true">⌂</span> Главная
+            </a>
+
             {% if user_id %}
-                <a href="{{ url_for('dashboard') }}"><span class="nav-icon" aria-hidden="true">▣</span>Дашборд</a>
-                <a href="{{ url_for('wallet_page') }}"><span class="nav-icon" aria-hidden="true">▤</span>Кошелёк</a>
-                <a href="{{ url_for('marketplace') }}"><span class="nav-icon" aria-hidden="true">▦</span>Маркетплейс</a>
-                <a href="{{ url_for('bot_management') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Бот</a>
-                <a href="{{ url_for('settings') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Настройки</a>
+                <div class="nav-group">Обзор</div>
+                <a class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span aria-hidden="true">▣</span> Дашборд</a>
+                <a class="nav-link {% if request.url.path == '/marketplace' %}active{% endif %}" href="{{ url_for('marketplace') }}"><span aria-hidden="true">▦</span> Маркетплейс</a>
+
+                <div class="nav-group">Торговля</div>
+                <a class="nav-link {% if request.url.path == '/bot-management' %}active{% endif %}" href="{{ url_for('bot_management') }}"><span aria-hidden="true">⚙</span> Бот</a>
+                <a class="nav-link {% if request.url.path == '/manual-trading' %}active{% endif %}" href="{{ url_for('manual_trading') }}"><span aria-hidden="true">▤</span> Ручная торговля</a>
+
+                <div class="nav-group">Проверка</div>
+                <a class="nav-link {% if request.url.path == '/testing' %}active{% endif %}" href="{{ url_for('testing') }}"><span aria-hidden="true">◈</span> Тесты стратегий</a>
+
+                <div class="nav-group">Система</div>
+                <a class="nav-link {% if request.url.path == '/wallet' %}active{% endif %}" href="{{ url_for('wallet_page') }}"><span aria-hidden="true">◉</span> Кошелёк</a>
+                <a class="nav-link {% if request.url.path == '/settings' %}active{% endif %}" href="{{ url_for('settings') }}"><span aria-hidden="true">✦</span> Профиль и настройки</a>
                 {% if is_admin %}
-                    <a href="{{ url_for('admin_panel') }}"><span class="nav-icon" aria-hidden="true">★</span>Админ</a>
+                    <a class="nav-link" href="{{ url_for('admin_panel') }}"><span aria-hidden="true">★</span> Администрирование</a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}"><span class="nav-icon" aria-hidden="true">↪</span>Выйти</a>
-                <form class="theme-switcher" method="post" action="{{ url_for('dashboard') }}">
-                    <input type="hidden" name="action" value="save_theme">
-                    <input type="hidden" name="theme" value="{{ 'dark' if theme|default('light') == 'light' else 'light' }}">
-                    <button class="theme-button" type="submit" title="Переключить тему">
-                        {{ '☀ Светлая' if theme|default('light') == 'dark' else '☾ Тёмная' }}
-                    </button>
-                </form>
             {% else %}
-                <a href="{{ url_for('login') }}"><span class="nav-icon" aria-hidden="true">➜</span>Войти</a>
-                <a href="{{ url_for('register') }}"><span class="nav-icon" aria-hidden="true">✚</span>Регистрация</a>
+                <div class="nav-group">Аккаунт</div>
+                <a class="nav-link {% if request.url.path == '/login' %}active{% endif %}" href="{{ url_for('login') }}"><span aria-hidden="true">➜</span> Войти</a>
+                <a class="nav-link {% if request.url.path == '/register' %}active{% endif %}" href="{{ url_for('register') }}"><span aria-hidden="true">✚</span> Регистрация</a>
             {% endif %}
         </nav>
-    </header>
-    <div class="container">
-        {% block content %}{% endblock %}
+
+        <div class="sidebar-footer">
+            {% if user_id %}
+                <span class="user-chip">{{ user_id }}</span>
+                <a class="btn btn-outline btn-sm" href="{{ url_for('logout') }}">Выйти</a>
+            {% else %}
+                <span class="version-note">v12 · secure mode</span>
+            {% endif %}
+        </div>
+    </aside>
+
+    <div class="app-main">
+        <header class="topbar">
+            <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu" aria-label="Открыть меню"><span aria-hidden="true">☰</span></button>
+            <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
+
+            <div class="topbar-actions">
+                {% if user_id %}
+                    <form class="theme-switcher" id="theme-form" method="post" action="{{ url_for('settings') }}" title="Тема оформления">
+                        <input type="hidden" name="action" value="save_theme">
+                        <label class="visually-hidden" for="header-theme">Тема</label>
+                        <select id="header-theme" name="theme">
+                            <option value="light" {% if theme|default('light') == 'light' %}selected{% endif %}>☀ Светлая</option>
+                            <option value="dark" {% if theme|default('light') == 'dark' %}selected{% endif %}>☾ Тёмная</option>
+                            <option value="auto" {% if theme|default('light') == 'auto' %}selected{% endif %}>◐ Авто</option>
+                        </select>
+                        <noscript><button class="btn btn-sm" type="submit">OK</button></noscript>
+                    </form>
+                    <span class="topbar-avatar" aria-hidden="true">{{ (username or user_id)[:1]|upper }}</span>
+                {% else %}
+                    <a class="btn btn-sm" href="{{ url_for('login') }}">Войти</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <main class="cms-content container">
+            {% block content %}{% endblock %}
+        </main>
     </div>
-    {% block scripts %}{% endblock %}
-    <script src="{{ url_for('static', filename='market_terminal.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='market_live.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='market_terminal_patch.js') }}" defer></script>
-    <script>
-        const menuToggle = document.querySelector('.menu-toggle');
-        const mainMenu = document.getElementById('main-menu');
-        menuToggle?.addEventListener('click', () => {
-            const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
-            menuToggle.setAttribute('aria-expanded', String(!expanded));
-            mainMenu.classList.toggle('is-open', !expanded);
-        });
-    </script>
+</div>
+
+{% block scripts %}{% endblock %}
+<script src="{{ url_for('static', filename='market_terminal.js') }}" defer></script>
+<script src="{{ url_for('static', filename='market_live.js') }}" defer></script>
+<script src="{{ url_for('static', filename='market_terminal_patch.js') }}" defer></script>
+<script>
+(() => {
+    const menuToggle = document.querySelector('.menu-toggle');
+    const sidebar = document.getElementById('main-menu');
+    const closeMenu = () => {
+        document.body.classList.remove('menu-open');
+        menuToggle?.setAttribute('aria-expanded', 'false');
+    };
+    menuToggle?.addEventListener('click', () => {
+        const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+        document.body.classList.toggle('menu-open', !expanded);
+        menuToggle.setAttribute('aria-expanded', String(!expanded));
+    });
+    document.addEventListener('click', event => {
+        if (window.innerWidth <= 767 && !sidebar?.contains(event.target) && !menuToggle?.contains(event.target)) closeMenu();
+    });
+    window.addEventListener('resize', () => { if (window.innerWidth > 767) closeMenu(); });
+
+    const themeForm = document.getElementById('theme-form');
+    const themeSelect = document.getElementById('header-theme');
+    themeSelect?.addEventListener('change', async () => {
+        document.body.className = themeSelect.value;
+        try { await fetch(themeForm.action, {method:'POST', body:new FormData(themeForm)}); }
+        catch { themeForm.submit(); }
+    });
+})();
+</script>
 </body>
 </html>

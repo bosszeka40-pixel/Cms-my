@@ -1,40 +1,52 @@
 {% extends 'base.html' %}
 
+{% block breadcrumb %}Система / Кошелёк{% endblock %}
+
 {% block content %}
-    <h1 class="page-title">Кошелёк</h1>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
-    <div class="card">
-        <h2>Баланс</h2>
-        <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.balance) }} CMSC</p>
-        <p>Подключённый провайдер: {{ wallet.provider or '—' }}</p>
-        <p>Подключённая биржа: {{ wallet.exchange_provider or '—' }}</p>
-        <p>Telegram: {{ wallet.telegram or '—' }}</p>
+    <div class="page-head"><div><span class="eyebrow">Система</span><h1 class="page-title">Кошелёк</h1><p class="lead">Баланс, покупка CMSC и реферальная программа.</p></div></div>
+    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+    <div class="stat-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:18px;">
+        <div class="card stat-tile">
+            <div class="stat-value">{{ '%.2f'|format(wallet.credits) }}</div>
+            <div class="stat-label">CMSC</div>
+        </div>
+        <div class="card stat-tile">
+            <div class="stat-value" style="font-size:.95rem;padding-top:.4rem;">{{ wallet.provider or '—' }}</div>
+            <div class="stat-label">Кошелёк</div>
+        </div>
+        <div class="card stat-tile">
+            <div class="stat-value" style="font-size:.95rem;padding-top:.4rem;">{{ wallet.exchange_provider or '—' }}</div>
+            <div class="stat-label">Биржа</div>
+        </div>
     </div>
+
     <div class="card">
-        <h2>CMS Credits (CMSC)</h2>
-        <p class="muted">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный биржевой курс.</p>
+        <h2>Купить CMSC</h2>
+        <p class="muted" style="font-size:.82rem;margin-bottom:.75rem;">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный курс.</p>
         <form method="post">
             <input type="hidden" name="action" value="buy_credits">
-            <div class="field-group">
-                <label for="amount">Количество CMSC</label>
-                <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
-            </div>
-            <div class="field-group">
-                <label for="currency">Валюта оплаты</label>
-                <select id="currency" name="currency">
-                    {% for currency in payment_currencies %}
-                        <option value="{{ currency }}">{{ currency }}</option>
-                    {% endfor %}
-                </select>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;">
+                <div class="field-group">
+                    <label for="amount">Количество</label>
+                    <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
+                </div>
+                <div class="field-group">
+                    <label for="currency">Валюта</label>
+                    <select id="currency" name="currency">
+                        {% for currency in payment_currencies %}
+                            <option value="{{ currency }}">{{ currency }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
             <button type="submit" class="btn">Купить CMSC</button>
         </form>
     </div>
-    <div class="card">
+
+    <div class="card" style="margin-top:1rem;">
         <h2>Реферальная программа</h2>
-        <p>Ваш код: <strong>{{ user_email|replace('@', '-') }}</strong></p>
-        <p class="muted">Приглашайте пользователей и получайте CMSC-бонусы.</p>
+        <p>Ваш код: <code style="background:var(--bg-tertiary);padding:.2rem .5rem;border-radius:4px;font-size:.9em;">{{ user_email|replace('@', '-') }}</code></p>
+        <p class="muted" style="font-size:.85rem;">Приглашайте пользователей и получайте CMSC-бонусы.</p>
     </div>
 {% endblock %}
