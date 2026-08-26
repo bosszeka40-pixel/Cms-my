@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='terminal.css') }}">
 </head>
 <body class="{{ theme|default('light') }}">
 <div class="app-shell">
@@ -31,13 +32,13 @@
                 <a class="nav-link {% if request.url.path == '/manual-trading' %}active{% endif %}" href="{{ url_for('manual_trading') }}"><span aria-hidden="true">▤</span> Ручная торговля</a>
 
                 <div class="nav-group">Проверка</div>
-                <a class="nav-link {% if request.url.path == '/testing' %}active{% endif %}" href="{{ url_for('testing') }}"><span aria-hidden="true">◈</span> Тесты стратегий</a>
+                <a class="nav-link {% if request.url.path == '/testing' %}active{% endif %}" href="{{ url_for('testing') }}"><span aria-hidden="true">◈</span> Тесты и Демо</a>
 
                 <div class="nav-group">Система</div>
                 <a class="nav-link {% if request.url.path == '/wallet' %}active{% endif %}" href="{{ url_for('wallet_page') }}"><span aria-hidden="true">◉</span> Кошелёк</a>
-                <a class="nav-link {% if request.url.path == '/settings' %}active{% endif %}" href="{{ url_for('settings') }}"><span aria-hidden="true">✦</span> Профиль и настройки</a>
+                <a class="nav-link {% if request.url.path == '/settings' %}active{% endif %}" href="{{ url_for('settings') }}"><span aria-hidden="true">✦</span> Настройки</a>
                 {% if is_admin %}
-                    <a class="nav-link" href="{{ url_for('admin_panel') }}"><span aria-hidden="true">★</span> Администрирование</a>
+                    <a class="nav-link" href="{{ url_for('admin_panel') }}"><span aria-hidden="true">★</span> Админ</a>
                 {% endif %}
             {% else %}
                 <div class="nav-group">Аккаунт</div>

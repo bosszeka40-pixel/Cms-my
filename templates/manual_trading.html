@@ -1,57 +1,315 @@
 {% extends 'base.html' %}
-
+{% block title %}Ручная торговля — Terminal{% endblock %}
 {% block breadcrumb %}Торговля / Ручная торговля{% endblock %}
 
 {% block content %}
-    <div class="page-head">
-        <div><span class="eyebrow">Ручной режим</span><h1 class="page-title">Ручная торговля</h1><p class="lead">Котировки, заявки и подтверждённая симуляция исполнения.</p></div>
-        <div class="hero-badge"><strong>SIM</strong><span>без реальных ордеров</span></div>
+<div class="terminal-page">
+<div class="container">
+    <!-- Header bar -->
+    <div class="term-header">
+        <div class="term-pair-info">
+            <select id="term-pair" class="term-strategy-select" style="width:auto;min-width:120px;">
+                {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
+            </select>
+            <span class="term-pair-price up" id="term-price">—</span>
+            <span class="term-pair-change up" id="term-change">—</span>
+        </div>
+        <div class="term-stats">
+            <div class="term-stat"><div class="term-stat-label">24h Объём</div><div class="term-stat-value" data-field="vol24h">—</div></div>
+            <div class="term-stat"><div class="term-stat-label">24h Макс</div><div class="term-stat-value" data-field="high24h">—</div></div>
+            <div class="term-stat"><div class="term-stat-label">24h Мин</div><div class="term-stat-value" data-field="low24h">—</div></div>
+            <div class="term-stat"><div class="term-stat-label">Марк</div><div class="term-stat-value" data-field="markPrice">—</div></div>
+        </div>
+        <span class="term-demo-badge">DEMO</span>
     </div>
 
-    <section class="terminal-grid">
-        <div class="card">
-            <h2>Инструмент <span id="market-source" class="status-pill">нет данных</span></h2>
-            <div class="form-grid">
-                <div class="field-group"><label for="market-pair">Пара</label><select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
-                <div class="field-group"><label for="market-exchange">Биржа</label><select id="market-exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
-                <div class="field-group"><label for="market-timeframe">Таймфрейм</label><select id="market-timeframe">{% for timeframe in chart_timeframes %}<option {% if timeframe == '1h' %}selected{% endif %}>{{ timeframe }}</option>{% endfor %}</select></div>
-            </div>
-            <div class="button-row"><button class="btn" id="refresh-market" type="button">Обновить цену</button><button class="btn btn-outline" id="get-signal" type="button">Сигнал</button></div>
-            <div id="ticker" class="market-stats muted">Загрузите текущий инструмент.</div>
-            <div id="signal-result" class="small-note" role="status"></div>
-            <canvas id="price-chart" height="240"></canvas>
-        </div>
-        <div class="card">
-            <h2>Сделка</h2>
-            <form id="manual-trade-form">
-                <div class="form-grid">
-                    <div class="field-group"><label for="manual-side">Направление</label><select id="manual-side"><option value="buy">Купить</option><option value="sell">Продать</option></select></div>
-                    <div class="field-group"><label for="manual-price">Цена</label><input id="manual-price" type="number" min="0" step="any" required></div>
-                    <div class="field-group"><label for="manual-amount">Количество</label><input id="manual-amount" type="number" min="0" step="any" required></div>
-                    <div class="field-group"><label for="manual-balance">Баланс</label><input id="manual-balance" type="number" min="0" step="any" value="100" required></div>
-                </div>
-                <button class="btn" type="submit">Исполнить</button>
-            </form>
-            <div id="manual-result" class="small-note" role="status"></div>
-            <h3>Стакан</h3>
-            <div class="order-book"><div><strong>Bids</strong><div id="bids">—</div></div><div><strong>Asks</strong><div id="asks">—</div></div></div>
-        </div>
-    </section>
+    <!-- Timeframes -->
+    <div class="term-timeframes">
+        {% for tf in ['1m','5m','15m','1h','4h','1d','1w'] %}
+        <button class="term-tf-btn {% if tf == '1h' %}active{% endif %}" data-tf="{{ tf }}">{{ tf }}</button>
+        {% endfor %}
+        <button class="term-tf-btn" data-tf="live">● LIVE</button>
+    </div>
 
-    <section class="grid">
-        <div class="card">
-            <h2>История сделок</h2>
-            <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead><tbody id="trade-history">
-                {% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>
-                {% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}
-            </tbody></table></div>
+    <!-- Main grid -->
+    <div class="term-grid">
+        <!-- Chart + Bottom panels -->
+        <div class="term-chart-area">
+            <div class="term-ohlcv" id="term-ohlcv">
+                <span>O <b>—</b></span><span>H <b>—</b></span><span>L <b>—</b></span><span>C <b>—</b></span><span>Vol —</span>
+            </div>
+            <div class="term-chart-container" id="chart-wrapper">
+                <div id="trading-chart" style="width:100%;height:100%;"></div>
+            </div>
+            <!-- Bottom panels -->
+            <div class="term-bottom">
+                <div class="term-bottom-tabs">
+                    <button class="term-bottom-tab active" data-panel="positions">Позиции <span class="tab-count" id="pos-count">0</span></button>
+                    <button class="term-bottom-tab" data-panel="orders">Ордера <span class="tab-count" id="ord-count">0</span></button>
+                    <button class="term-bottom-tab" data-panel="history">История</button>
+                </div>
+                <div class="term-bottom-content" id="panel-positions">
+                    <div class="term-empty" id="no-positions">Нет открытых позиций</div>
+                    <table class="term-table" id="positions-table" style="display:none;">
+                        <thead><tr><th>Пара</th><th>Направление</th><th>Вход</th><th>Текущая</th><th>PnL</th><th></th></tr></thead>
+                        <tbody id="positions-body"></tbody>
+                    </table>
+                </div>
+                <div class="term-bottom-content" id="panel-orders" style="display:none;">
+                    <div class="term-empty">Нет ожидающих ордеров</div>
+                </div>
+                <div class="term-bottom-content" id="panel-history" style="display:none;">
+                    <table class="term-table">
+                        <thead><tr><th>Время</th><th>Пара</th><th>Направление</th><th>Цена</th><th>Кол-во</th><th>PnL</th></tr></thead>
+                        <tbody id="history-body">
+                            {% for trade in trade_history %}
+                            <tr>
+                                <td>{{ trade.created_at }}</td>
+                                <td>{{ trade.pair }}</td>
+                                <td class="{{ 'up' if trade.pnl > 0 else 'down' }}">{{ trade.mode }}</td>
+                                <td>—</td>
+                                <td>—</td>
+                                <td class="{{ 'up' if trade.pnl > 0 else 'down' }}">{{ '%.4f'|format(trade.pnl) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="term-empty">История пуста</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div class="card">
-            <h2>Баланс</h2>
-            <canvas id="balance-chart" data-trades='{{ trade_history|tojson }}' height="200"></canvas>
-            <h3>Риск</h3>
-            <div id="risk-status">Загружаем...</div>
+
+        <!-- Right panel: Order form -->
+        <div class="term-panel">
+            <div class="term-panel-tabs">
+                <button class="term-panel-tab buy active" data-side="buy">Купить</button>
+                <button class="term-panel-tab sell" data-side="sell">Продать</button>
+            </div>
+            <div class="term-order-form">
+                <div class="term-order-row">
+                    <div class="term-field" style="flex:1;">
+                        <label>Тип ордера</label>
+                        <select id="order-type">
+                            <option value="market">Рыночный</option>
+                            <option value="limit">Лимитный</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="term-order-row" id="limit-price-row" style="display:none;">
+                    <div class="term-field">
+                        <label>Цена</label>
+                        <input id="order-price" type="number" step="any" min="0" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="term-order-row">
+                    <div class="term-field">
+                        <label>Стратегия</label>
+                        <select id="order-strategy">
+                            <option value="manual">Ручная</option>
+                            <option value="pure_harvester">Pure Harvester</option>
+                            <option value="high_frequency_momentum">HFT Momentum</option>
+                            <option value="compound_defender">Compound Defender</option>
+                            <option value="trend_breakout_compound">Trend Breakout</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="term-order-row">
+                    <div class="term-field">
+                        <label>Количество (€)</label>
+                        <input id="order-amount" type="number" step="0.01" min="0.01" value="10" placeholder="10.00">
+                    </div>
+                </div>
+                <div class="term-slider-wrap">
+                    <input type="range" class="term-slider" id="amount-slider" min="0" max="100" value="10">
+                    <div class="term-slider-labels">
+                        <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                    </div>
+                </div>
+                <div class="term-check-row">
+                    <input type="checkbox" id="tpsl-check"> <label for="tpsl-check">Take Profit / Stop Loss</label>
+                </div>
+                <div id="tpsl-fields" style="display:none;">
+                    <div class="term-order-row">
+                        <div class="term-field"><label>TP</label><input id="tp-price" type="number" step="any" placeholder="Take Profit"></div>
+                        <div class="term-field"><label>SL</label><input id="sl-price" type="number" step="any" placeholder="Stop Loss"></div>
+                    </div>
+                </div>
+                <div class="term-order-row" style="margin-top:.5rem;">
+                    <div style="flex:1;">
+                        <button class="term-buy-btn" id="submit-buy" type="button">Купить {{ trading_pairs[0] }}</button>
+                    </div>
+                </div>
+                <div class="term-order-row">
+                    <div style="flex:1;">
+                        <button class="term-sell-btn" id="submit-sell" type="button" style="display:none;">Продать {{ trading_pairs[0] }}</button>
+                    </div>
+                </div>
+                <div id="order-result" style="margin-top:.5rem;font-size:.78rem;"></div>
+            </div>
+            <div class="term-balance-info">
+                <span>Демо баланс: <strong id="demo-balance">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</strong></span>
+                <span>P/L: <strong id="demo-pnl-val" class="{{ 'up' if demo.demo_pnl|default(0) >= 0 else 'down' }}">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</strong></span>
+            </div>
         </div>
-    </section>
+    </div>
+</div>
+</div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='cms_sections.js') }}" defer></script>{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
+<script>
+(() => {
+    const pairEl = document.getElementById('term-pair');
+    const exchange = '{{ trading_exchanges[0] }}';
+    let currentTf = '1h';
+    let currentSide = 'buy';
+    let demoBalance = {{ demo.demo_balance|default(100)|float }};
+    let demoPnl = {{ demo.demo_pnl|default(0)|float }};
+    let positions = [];
+
+    /* Init chart */
+    initTradingChart('trading-chart');
+    loadChartData(pairEl.value, exchange, currentTf);
+    startLivePrice(pairEl.value, exchange);
+
+    /* Timeframes */
+    document.querySelectorAll('.term-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTf = btn.dataset.tf;
+            stopLivePrice();
+            loadChartData(pairEl.value, exchange, currentTf);
+            if (currentTf === 'live') startLivePrice(pairEl.value, exchange);
+        });
+    });
+
+    /* Pair change */
+    pairEl.addEventListener('change', () => {
+        stopLivePrice();
+        loadChartData(pairEl.value, exchange, currentTf);
+        if (currentTf === 'live') startLivePrice(pairEl.value, exchange);
+        document.querySelectorAll('#submit-buy, #submit-sell').forEach(btn => {
+            if (btn.id === 'submit-buy') btn.textContent = 'Купить ' + pairEl.value;
+            else btn.textContent = 'Продать ' + pairEl.value;
+        });
+    });
+
+    /* Buy/Sell tabs */
+    document.querySelectorAll('.term-panel-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            currentSide = tab.dataset.side;
+            document.querySelectorAll('.term-panel-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById('submit-buy').style.display = currentSide === 'buy' ? '' : 'none';
+            document.getElementById('submit-sell').style.display = currentSide === 'sell' ? '' : 'none';
+        });
+    });
+
+    /* Order type */
+    document.getElementById('order-type').addEventListener('change', e => {
+        document.getElementById('limit-price-row').style.display = e.target.value === 'limit' ? '' : 'none';
+    });
+
+    /* TPSL */
+    document.getElementById('tpsl-check').addEventListener('change', e => {
+        document.getElementById('tpsl-fields').style.display = e.target.checked ? '' : 'none';
+    });
+
+    /* Slider */
+    const slider = document.getElementById('amount-slider');
+    slider.addEventListener('input', () => {
+        document.getElementById('order-amount').value = (demoBalance * slider.value / 100).toFixed(2);
+    });
+
+    /* Bottom tabs */
+    document.querySelectorAll('.term-bottom-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.term-bottom-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            ['positions', 'orders', 'history'].forEach(p => {
+                const el = document.getElementById('panel-' + p);
+                if (el) el.style.display = p === tab.dataset.panel ? '' : 'none';
+            });
+        });
+    });
+
+    /* Submit trade */
+    async function submitTrade(side) {
+        const amount = parseFloat(document.getElementById('order-amount').value);
+        if (!amount || amount <= 0) { showResult('Укажите сумму', false); return; }
+
+        const payload = {
+            pair: pairEl.value,
+            strategy: document.getElementById('order-strategy').value,
+            sentiment: 0,
+            price_change: 0,
+        };
+
+        try {
+            const resp = await fetch('/api/demo/trade', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                demoBalance = data.balance;
+                demoPnl = data.pnl;
+                document.getElementById('demo-balance').textContent = demoBalance.toFixed(2) + '€';
+                document.getElementById('demo-pnl-val').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
+                document.getElementById('demo-pnl-val').className = demoPnl >= 0 ? 'up' : 'down';
+                showResult(`✓ ${side === 'buy' ? 'Покупка' : 'Продажа'}: ${data.strategy} | P/L: ${data.pnl.toFixed(4)}€ | Сигнал: ${data.signal}`, true);
+
+                /* Add to positions */
+                const pos = { id: positions.length + 1, pair: pairEl.value, side, amount, entry: data.price || 0, strategy: data.strategy, time: new Date().toLocaleTimeString() };
+                positions.push(pos);
+                renderPositions();
+            } else {
+                showResult('Ошибка: ' + (data.detail || 'неизвестная'), false);
+            }
+        } catch (err) {
+            showResult('Ошибка соединения', false);
+        }
+    }
+
+    function showResult(msg, ok) {
+        const el = document.getElementById('order-result');
+        el.innerHTML = `<span style="color:${ok ? 'var(--term-up)' : 'var(--term-down)'}">${msg}</span>`;
+    }
+
+    function renderPositions() {
+        const body = document.getElementById('positions-body');
+        const empty = document.getElementById('no-positions');
+        const count = document.getElementById('pos-count');
+        count.textContent = positions.length;
+        if (!positions.length) { empty.style.display = ''; body.parentElement.style.display = 'none'; return; }
+        empty.style.display = 'none';
+        body.parentElement.style.display = '';
+        body.innerHTML = positions.map(p => `
+            <tr>
+                <td>${p.pair}</td>
+                <td class="${p.side === 'buy' ? 'up' : 'down'}">${p.side === 'buy' ? 'Лонг' : 'Шорт'}</td>
+                <td>${p.entry.toFixed(2)}</td>
+                <td>—</td>
+                <td>—</td>
+                <td><button class="term-close-btn" data-id="${p.id}">Закрыть</button></td>
+            </tr>
+        `).join('');
+
+        body.querySelectorAll('.term-close-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                positions = positions.filter(p => p.id !== parseInt(btn.dataset.id));
+                renderPositions();
+            });
+        });
+    }
+
+    document.getElementById('submit-buy').addEventListener('click', () => submitTrade('buy'));
+    document.getElementById('submit-sell').addEventListener('click', () => submitTrade('sell'));
+})();
+</script>
+{% endblock %}
