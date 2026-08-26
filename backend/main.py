@@ -377,6 +377,19 @@ def _strategy_catalog(email: str, performance: dict):
         result = performance.get(plugin.name, {})
         price = result.get("price_eur", float(plugin.price))
         owned = purchased.get(plugin.name)
+        # Determine category
+        if plugin.name.startswith("bot_"):
+            category = "Бот-стратегии"
+        elif plugin.name.startswith("user_"):
+            category = "Пользовательские"
+        elif price == 0:
+            category = "Бесплатные"
+        elif price <= 4.0:
+            category = "Платиновые"
+        else:
+            category = "Премиум модули"
+        if result:
+            category = result.get("category", category)
         catalog.append({
             "id": plugin.id,
             "name": plugin.name,
@@ -388,7 +401,7 @@ def _strategy_catalog(email: str, performance: dict):
                 {"days": days, "price_eur": price_for_duration(price, days)}
                 for days in LICENSE_DURATIONS_DAYS
             ] if price > 0 else [],
-            "category": result.get("category", "Нет данных"),
+            "category": category,
             "monthly_return_pct": result.get("monthly_return_pct"),
             "final_balance_eur": result.get("final_balance_eur"),
             "win_rate_pct": result.get("win_rate_pct"),
@@ -1023,6 +1036,29 @@ def public_strategies(request: Request):
 def bot_memory(request: Request):
     _require_user(request)
     return bot.get_memory_summary()
+
+
+@app.post("/api/bot/generate")
+def generate_strategies(request: Request):
+    email = _require_user(request)
+    try:
+        client = _public_exchange("binance")
+        daily = refresh_history(MARKET_DATABASE, client, "binance", "BTC/USDT")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось загрузить данные: {exc}") from exc
+    result = bot.generate_strategies(engine, daily[-180:])
+    engine.record_audit("strategy_generation", str(result.get("published", 0)), email)
+    return result
+
+@app.get("/api/bot/generation-status")
+def generation_status(request: Request):
+    _require_user(request)
+    return bot.strategy_generator.get_status()
+
+@app.post("/api/bot/auto-generate")
+def toggle_auto_generate(request: Request, enabled: bool = True):
+    _require_admin(request)
+    return bot.toggle_auto_generate(enabled)
 
 @app.post("/admin/risk", name="admin_risk_action")
 async def admin_risk_action(request: Request, enabled: str = Form("true")):
