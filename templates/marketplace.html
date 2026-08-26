@@ -7,7 +7,7 @@
         <div>
             <span class="eyebrow">Магазин расширений</span>
             <h1 class="page-title">Маркетплейс</h1>
-            <p class="lead">Стратегии и модули для бота. Покупка, активация и продление — в одном разделе.</p>
+            <p class="lead">Стратегии и модули для бота. Бесплатные, платиновые и премиум. 15 дней бесплатно при первом доступе.</p>
         </div>
         <div class="hero-badge"><strong>{{ '%.2f'|format(wallet.credits) }}</strong><span>CMSC на балансе</span></div>
     </div>
@@ -23,10 +23,16 @@
         </label>
         <div id="marketplace-categories" class="filter-row" aria-label="Категории">
             <button class="filter-btn active" type="button" data-category="all">Все</button>
-            {% set categories = [] %}
+            <button class="filter-btn" type="button" data-category="Бесплатные">Бесплатные</button>
+            <button class="filter-btn" type="button" data-category="Платиновые">Платиновые</button>
+            <button class="filter-btn" type="button" data-category="Премиум модули">Премиум</button>
+            <button class="filter-btn" type="button" data-category="Пользовательские">Мои стратегии</button>
             {% for plugin in plugins %}
-                {% if plugin.category not in categories %}
-                    {% if categories.append(plugin.category) %}{% endif %}
+                {% set ns = namespace(found=false) %}
+                {% for btn in ['Бесплатные','Платиновые','Премиум модули','Пользовательские'] %}
+                    {% if plugin.category == btn %}{% set ns.found = true %}{% endif %}
+                {% endfor %}
+                {% if not ns.found %}
                     <button class="filter-btn" type="button" data-category="{{ plugin.category }}">{{ plugin.category }}</button>
                 {% endif %}
             {% endfor %}
@@ -36,7 +42,7 @@
                 {% if wallet.exchange_provider %}<span class="badge badge-success">Биржа: {{ wallet.exchange_provider }}</span>{% endif %}
                 {% if wallet.provider %}<span class="badge badge-success">Кошелёк: {{ wallet.provider }}</span>{% endif %}
             {% else %}
-                <span class="badge badge-warning">Подключения находятся в профиле</span>
+                <span class="badge badge-warning">Подключения в профиле</span>
                 <a href="{{ url_for('settings') }}" class="btn btn-sm btn-outline">Профиль → Настройки</a>
             {% endif %}
         </div>
@@ -51,19 +57,22 @@
                         <span class="badge badge-success">Активна</span>
                     {% elif plugin.owned %}
                         <span class="badge badge-warning">Куплена</span>
+                    {% elif plugin.available and plugin.price_eur == 0 %}
+                        <span class="badge badge-success">Бесплатно</span>
                     {% else %}
-                        <span class="badge badge-accent">{{ 'Бесплатно' if plugin.available else 'Платно' }}</span>
+                        <span class="badge badge-accent">{{ plugin.category }}</span>
                     {% endif %}
                 </header>
                 <p class="market-description muted">{{ plugin.description }}</p>
                 <dl class="market-metrics">
                     <div><dt>30 дней</dt><dd>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</dd></div>
                     <div><dt>€100 даёт</dt><dd>€{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</dd></div>
+                    <div><dt>Винрейт</dt><dd>{{ '%.1f'|format(plugin.win_rate_pct or 0) }}%</dd></div>
                     <div><dt>Категория</dt><dd>{{ plugin.category }}</dd></div>
                 </dl>
                 <footer class="market-card-footer">
-                    <strong class="price">{% if plugin.price_eur %}€{{ '%.2f'|format(plugin.price_eur) }}<small>/15 дн.</small>{% else %}Бесплатно{% endif %}</strong>
-                    {% if plugin.price_eur %}
+                    {% if plugin.price_eur > 0 %}
+                        <strong class="price">€{{ '%.2f'|format(plugin.price_eur) }}<small>/15 дн.</small></strong>
                         <form method="post" class="license-form">
                             <input type="hidden" name="action" value="buy_plugin">
                             <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
@@ -76,8 +85,10 @@
                         </form>
                     {% elif plugin.available %}
                         <button class="btn btn-outline btn-sm activate-btn" type="button" data-plugin="{{ plugin.name }}" {% if plugin.active %}disabled{% endif %}>
-                            {{ 'Уже активна' if plugin.active else 'Активировать' }}
+                            {{ 'Уже активна' if plugin.active else 'Активировать бесплатно' }}
                         </button>
+                    {% else %}
+                        <strong class="price">€{{ '%.2f'|format(plugin.price_eur) }}</strong>
                     {% endif %}
                 </footer>
                 {% if plugin.access_until and plugin.active %}
@@ -129,6 +140,14 @@
     applyFilters();
   }));
   search.addEventListener('input', applyFilters);
+
+  document.querySelectorAll('.activate-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pluginName = btn.dataset.plugin;
+      const resp = await fetch('/api/strategies/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({plugin_name: pluginName, duration_days: 15})});
+      if (resp.ok) { btn.textContent = 'Уже активна'; btn.disabled = true; }
+    });
+  });
 })();
 </script>
 {% endblock %}

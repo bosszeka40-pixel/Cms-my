@@ -4,7 +4,7 @@
 
 {% block content %}
     <div class="page-head">
-        <div><span class="eyebrow">Система</span><h1 class="page-title">Профиль и настройки</h1><p class="lead">Профиль, подключения биржи и кошелька, оформление — в одном разделе.</p></div>
+        <div><span class="eyebrow">Система</span><h1 class="page-title">Профиль и настройки</h1><p class="lead">Профиль, подключения биржи и кошелька, демо-режим, оформление — в одном разделе.</p></div>
     </div>
     {% if message %}
         <div class="message success">{{ message }}</div>
@@ -21,6 +21,35 @@
             {% if is_admin %}
                 <a class="btn btn-sm btn-outline" href="{{ url_for('admin_panel') }}">★ Админ</a>
             {% endif %}
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-section-title">Демо-режим</div>
+        <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+                <div>
+                    <strong>Торговля на виртуальные средства</strong>
+                    <p class="muted" style="font-size:.82rem;margin:.25rem 0 0;">Тестируйте стратегии без реальных денег. Начальный баланс: 100€.</p>
+                </div>
+                <form method="post" style="display:flex;align-items:center;gap:.75rem;">
+                    <input type="hidden" name="action" value="toggle_demo">
+                    <label class="toggle-switch">
+                        <input type="checkbox" name="demo_active" {{ 'checked' if demo.demo_active else '' }} onchange="this.form.submit()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="badge {{ 'badge-success' if demo.demo_active else 'badge-warning' }}">{{ 'Включён' if demo.demo_active else 'Выключен' }}</span>
+                </form>
+            </div>
+            <div class="stat-grid" style="margin-top:1rem;">
+                <div class="stat-tile"><div class="stat-value">{{ '%.2f'|format(demo.demo_balance) }}€</div><div class="stat-label">Демо баланс</div></div>
+                <div class="stat-tile"><div class="stat-value" style="color:{{ 'var(--success)' if demo.demo_pnl >= 0 else 'var(--danger)' }}">{{ '%.2f'|format(demo.demo_pnl) }}€</div><div class="stat-label">P/L</div></div>
+                <div class="stat-tile"><div class="stat-value">{{ demo.demo_trades_count }}</div><div class="stat-label">Сделок</div></div>
+            </div>
+            <form method="post" style="margin-top:.75rem;">
+                <input type="hidden" name="action" value="reset_demo">
+                <button class="btn btn-outline btn-sm" type="submit">Сбросить баланс до 100€</button>
+            </form>
         </div>
     </div>
 
@@ -133,11 +162,7 @@
                     </button>
                     {% endfor %}
                 </div>
-                <noscript>
-                    <div class="field-group"><label for="theme">Тема</label><select id="theme" name="theme"><option value="light">Светлая</option><option value="dark">Тёмная</option><option value="auto">Авто</option></select></div>
-                    <button class="btn btn-sm" type="submit">Сохранить</button>
-                </noscript>
-</form>
+            </form>
         </div>
     </div>
 

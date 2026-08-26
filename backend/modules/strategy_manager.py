@@ -51,22 +51,21 @@ class StrategyManager:
         if not math.isfinite(fee_rate) or fee_rate < 0 or fee_rate > 0.05:
             raise ValueError("Комиссия должна быть конечной и находиться в диапазоне 0..5%.")
 
-        if strategy == HarvesterStrategy.PURE.value:
-            next_balance, signal = self.module.process_tick(
-                news_sentiment, price_change, current_balance, leverage
-            )
-        elif strategy == HarvesterStrategy.HFT_MOMENTUM.value:
-            next_balance, signal = self.module.process_high_frequency(
-                news_sentiment, price_change, current_balance, leverage
-            )
-        elif strategy == HarvesterStrategy.COMPOUND_DEFENDER.value:
-            next_balance, signal = self.module.process_defender(
-                news_sentiment, price_change, current_balance, leverage
-            )
-        else:
-            next_balance, signal = self.module.process_tick(
-                news_sentiment, price_change, current_balance, leverage
-            )
+        strategy_handlers = {
+            HarvesterStrategy.PURE.value: lambda: self.module.process_tick(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.HFT_MOMENTUM.value: lambda: self.module.process_high_frequency(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.COMPOUND_DEFENDER.value: lambda: self.module.process_defender(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.TREND_BREAKOUT.value: lambda: self.module.process_trend_breakout(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.MULTI_SENTIMENT_SCALPER.value: lambda: self.module.process_multi_sentiment(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.AI_ADAPTIVE.value: lambda: self.module.process_ai_adaptive(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.QUANTUM_GRID.value: lambda: self.module.process_quantum_grid(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.NEURAL_PATTERN.value: lambda: self.module.process_neural_pattern(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.DELTA_NEUTRAL.value: lambda: self.module.process_delta_neutral(news_sentiment, price_change, current_balance, leverage),
+            HarvesterStrategy.VOLATILITY_HARVEST.value: lambda: self.module.process_volatility_harvest(news_sentiment, price_change, current_balance, leverage),
+        }
+
+        handler = strategy_handlers.get(strategy, strategy_handlers[HarvesterStrategy.PURE.value])
+        next_balance, signal = handler()
 
         if not math.isfinite(next_balance):
             raise ValueError("Стратегия вернула некорректный баланс.")

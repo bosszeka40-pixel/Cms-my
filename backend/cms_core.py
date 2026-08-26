@@ -90,6 +90,34 @@ class SiteSetting(Base):
     key = Column(String, primary_key=True)
     value = Column(Text, default="")
 
+
+class DemoSession(Base):
+    __tablename__ = "demo_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    demo_active = Column(Boolean, default=False)
+    demo_balance = Column(Float, default=100.0)
+    demo_pnl = Column(Float, default=0.0)
+    demo_trades_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class StrategyTemplate(Base):
+    __tablename__ = "strategy_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, default="")
+    strategy_type = Column(String, default="pure_harvester")
+    leverage = Column(Float, default=1.5)
+    risk_tolerance = Column(Float, default=0.03)
+    fee_rate = Column(Float, default=0.001)
+    parameters = Column(Text, default="{}")
+    is_public = Column(Boolean, default=False)
+    trial_days = Column(Integer, default=15)
+    price_eur = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
         self.db_name = db_name
@@ -105,6 +133,168 @@ class CMSEngine:
         Base.metadata.create_all(bind=self.engine)
         self.ensure_user_plugin_access_column()
         self.ensure_strategy_plugins()
+        self._ensure_demo_column()
+
+
+    def ensure_demo_session(self, email: str):
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return
+            existing = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not existing:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+                session.commit()
+        finally:
+            session.close()
+
+    def get_demo_session(self, email: str) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0, "demo_pnl": 0.0, "demo_trades_count": 0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+                session.commit()
+                session.refresh(demo)
+            return {
+                "demo_active": demo.demo_active,
+                "demo_balance": demo.demo_balance,
+                "demo_pnl": demo.demo_pnl,
+                "demo_trades_count": demo.demo_trades_count,
+            }
+        finally:
+            session.close()
+
+    def toggle_demo_mode(self, email: str, active: bool) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=active, demo_balance=100.0)
+                session.add(demo)
+            else:
+                demo.demo_active = active
+            session.commit()
+            session.refresh(demo)
+            return {"demo_active": demo.demo_active, "demo_balance": demo.demo_balance}
+        finally:
+            session.close()
+
+    def update_demo_balance(self, email: str, pnl: float) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+            demo.demo_balance = max(0.0, demo.demo_balance + pnl)
+            demo.demo_pnl = demo.demo_pnl + pnl
+            demo.demo_trades_count = demo.demo_trades_count + 1
+            session.commit()
+            session.refresh(demo)
+            return {
+                "demo_active": demo.demo_active,
+                "demo_balance": demo.demo_balance,
+                "demo_pnl": demo.demo_pnl,
+                "demo_trades_count": demo.demo_trades_count,
+            }
+        finally:
+            session.close()
+
+    def reset_demo_balance(self, email: str) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+            else:
+                demo.demo_balance = 100.0
+                demo.demo_pnl = 0.0
+                demo.demo_trades_count = 0
+            session.commit()
+            session.refresh(demo)
+            return {"demo_active": demo.demo_active, "demo_balance": demo.demo_balance}
+        finally:
+            session.close()
+
+    def create_strategy(self, email: str, name: str, description: str, strategy_type: str,
+                       leverage: float = 1.5, risk_tolerance: float = 0.03, fee_rate: float = 0.001,
+                       is_public: bool = False, price_eur: float = 0.0) -> dict | None:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return None
+            template = StrategyTemplate(
+                user_id=user.id, name=name, description=description,
+                strategy_type=strategy_type, leverage=leverage,
+                risk_tolerance=risk_tolerance, fee_rate=fee_rate,
+                is_public=is_public, price_eur=price_eur,
+            )
+            session.add(template)
+            session.commit()
+            session.refresh(template)
+            if is_public:
+                plugin_name = f"user_{user.id}_{template.id}"
+                existing = session.query(Plugin).filter(Plugin.name == plugin_name).first()
+                if not existing:
+                    session.add(Plugin(name=plugin_name, price=price_eur, description=f"{name}: {description}"))
+                    session.commit()
+            return {"id": template.id, "name": name, "strategy_type": strategy_type, "is_public": is_public}
+        finally:
+            session.close()
+
+    def list_user_strategies(self, email: str) -> list:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return []
+            templates = session.query(StrategyTemplate).filter(StrategyTemplate.user_id == user.id).all()
+            return [
+                {"id": t.id, "name": t.name, "description": t.description, "strategy_type": t.strategy_type,
+                 "leverage": t.leverage, "risk_tolerance": t.risk_tolerance, "fee_rate": t.fee_rate,
+                 "is_public": t.is_public, "price_eur": t.price_eur, "trial_days": t.trial_days,
+                 "created_at": t.created_at.isoformat()}
+                for t in templates
+            ]
+        finally:
+            session.close()
+
+    def list_public_strategies(self) -> list:
+        session = self.SessionLocal()
+        try:
+            templates = session.query(StrategyTemplate).filter(StrategyTemplate.is_public == True).all()
+            return [
+                {"id": t.id, "name": t.name, "description": t.description, "strategy_type": t.strategy_type,
+                 "leverage": t.leverage, "price_eur": t.price_eur, "trial_days": t.trial_days}
+                for t in templates
+            ]
+        finally:
+            session.close()
+
+    def _ensure_demo_column(self):
+        with self.engine.begin() as connection:
+            try:
+                connection.exec_driver_sql("PRAGMA table_info(demo_sessions)")
+            except Exception:
+                pass
 
     def ensure_user_plugin_access_column(self):
         with self.engine.begin() as connection:
@@ -213,7 +403,18 @@ class CMSEngine:
             session.close()
 
     def ensure_strategy_plugins(self):
-        defaults = [("pure_harvester", 0.0, "Базовая стратегия сбора прибыли."), ("high_frequency_momentum", 0.0, "Моментум-стратегия для тестового режима."), ("compound_defender", 0.0, "Защитная стратегия сложного процента.")]
+        defaults = [
+            ("pure_harvester", 0.0, "Базовая стратегия сбора прибыли. Идеально для начала."),
+            ("high_frequency_momentum", 0.0, "Моментум-стратегия для быстрых сделок."),
+            ("compound_defender", 0.0, "Защитная стратегия сложного процента."),
+            ("trend_breakout_compound", 2.5, "Прорыв тренда с компаундированием. Платиновая стратегия."),
+            ("multi_sentiment_scalper", 4.0, "Мульти-сентимент скальпинг. Платиновая стратегия."),
+            ("ai_adaptive_momentum", 7.5, "ИИ-адаптивный моментум. Модуль с обучением на рынке."),
+            ("quantum_grid_trader", 12.0, "Квантовый сеточный трейдер. Премиум модуль."),
+            ("neural_pattern_recognition", 15.0, "Нейросетевой анализ паттернов. Премиум модуль."),
+            ("delta_neutral_hedger", 10.0, "Дельта-нейтральный хеджер. Институциональный модуль."),
+            ("volatility_harvest", 8.0, "Сбор волатильности. Платиновая стратегия."),
+        ]
         session = self.SessionLocal()
         try:
             existing = {plugin.name for plugin in session.query(Plugin).all()}

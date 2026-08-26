@@ -1,48 +1,112 @@
 {% extends 'base.html' %}
 
-{% block breadcrumb %}Проверка / Тесты стратегий{% endblock %}
+{% block breadcrumb %}Торговля / Тесты{% endblock %}
 
 {% block content %}
     <div class="page-head">
-        <div><span class="eyebrow">Безопасная проверка</span><h1 class="page-title">Тесты стратегий</h1><p class="lead">Быстрый тест, исторический backtest, баланс и журнал сделок.</p></div>
-        <div class="hero-badge"><strong>365d</strong><span>backtest</span></div>
+        <div>
+            <span class="eyebrow">Проверка</span>
+            <h1 class="page-title">Тесты стратегий</h1>
+            <p class="lead">Тестируйте стратегии на демо-средствах. Результаты сохраняются в память бота.</p>
+        </div>
+        <div class="hero-badge"><strong>{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</strong><span>демо баланс</span></div>
     </div>
 
-    <section class="terminal-grid">
-        <div class="card">
-            <h2>Тест сделки</h2>
-            <form id="trade-test-form">
-                <div class="form-grid">
-                    <div class="field-group"><label for="pair">Пара</label><select id="pair" name="pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
-                    <div class="field-group"><label for="exchange">Биржа</label><select id="exchange" name="exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
-                    <div class="field-group"><label for="news_sentiment">Сентимент</label><input type="number" step="0.01" id="news_sentiment" name="news_sentiment" value="0.0"></div>
-                    <div class="field-group"><label for="price_change">Изменение цены (%)</label><input type="number" step="0.01" id="price_change" name="price_change" value="0.0"></div>
-                    <div class="field-group"><label for="current_balance">Баланс</label><input type="number" step="0.01" min="0" id="current_balance" name="current_balance" value="100.0"></div>
-                </div>
-                <button class="btn" id="test-submit" type="submit">Запустить тест</button>
-            </form>
-            <div class="card result-card" id="trade-result" hidden></div>
-        </div>
-        <div class="card">
-            <h2>Backtest</h2>
-            <p class="muted">Использует сохранённую историю дневных свечей за год.</p>
-            <button class="btn" id="run-backtest" type="button">Запустить 365 дней</button>
-            <div id="backtest-result" class="table-wrap"></div>
-        </div>
-    </section>
+    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
 
     <section class="grid">
         <div class="card">
-            <h2>Кривая баланса</h2>
-            <canvas id="balance-chart" data-trades='{{ trade_history|tojson }}' height="220"></canvas>
+            <h2>Демо-торговля</h2>
+            <p class="muted" style="font-size:.82rem;">Отправьте тестовую сделку на виртуальные средства.</p>
+            <form id="demo-trade-form" onsubmit="return demoTrade(event)">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label for="demo-pair">Пара</label>
+                        <select id="demo-pair">
+                            {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label for="demo-strategy">Стратегия</label>
+                        <select id="demo-strategy">
+                            <option value="pure_harvester">Pure Harvester</option>
+                            <option value="high_frequency_momentum">HFT Momentum</option>
+                            <option value="compound_defender">Compound Defender</option>
+                            <option value="trend_breakout_compound">Trend Breakout</option>
+                            <option value="multi_sentiment_scalper">Multi Sentiment</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label for="demo-sentiment">Сентимент (-1..1)</label>
+                        <input id="demo-sentiment" type="number" step="0.1" min="-1" max="1" value="0.5">
+                    </div>
+                    <div class="field-group">
+                        <label for="demo-change">Изменение цены %</label>
+                        <input id="demo-change" type="number" step="0.1" min="-10" max="10" value="1.0">
+                    </div>
+                </div>
+                <button class="btn" type="submit">Отправить сделку</button>
+            </form>
+            <div id="demo-result" class="small-note" style="margin-top:.75rem;"></div>
         </div>
         <div class="card">
-            <h2>История</h2>
-            <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead><tbody id="trade-history">
-                {% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>
-                {% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}
-            </tbody></table></div>
+            <h2>Статус демо</h2>
+            <div class="stat-grid">
+                <div class="stat-tile"><div class="stat-value" id="demo-bal">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div><div class="stat-label">Баланс</div></div>
+                <div class="stat-tile"><div class="stat-value" id="demo-pnl">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</div><div class="stat-label">P/L</div></div>
+                <div class="stat-tile"><div class="stat-value" id="demo-trades">{{ demo.demo_trades_count|default(0) }}</div><div class="stat-label">Сделок</div></div>
+            </div>
+            <div class="button-row" style="margin-top:.75rem;">
+                <button class="btn btn-outline btn-sm" onclick="resetDemo()">Сбросить баланс</button>
+            </div>
         </div>
     </section>
+
+    <section class="card" style="margin-top:1rem;">
+        <h2>Память бота</h2>
+        <p class="muted" style="font-size:.82rem;">Бот запоминает все сделки и учится на результатах.</p>
+        <div class="stat-grid">
+            <div><span class="stat-value">{{ bot_memory.total_trades|default(0) }}</span><div class="stat-label">Всего сделок</div></div>
+            <div><span class="stat-value">{{ '%.4f'|format(bot_memory.avg_pnl|default(0)) }}</span><div class="stat-label">Средний P/L</div></div>
+            <div><span class="stat-value">{{ bot_memory.win_rate|default(0) }}%</span><div class="stat-label">Винрейт</div></div>
+        </div>
+        {% if bot_memory.strategies_used %}
+            <p class="small-note muted" style="margin-top:.5rem;">Использованные стратегии: {{ bot_memory.strategies_used|join(', ') }}</p>
+        {% endif %}
+        {% if bot_memory.best_trade %}
+            <p class="small-note muted">Лучшая сделка: {{ bot_memory.best_trade.strategy }} — P/L {{ '%.4f'|format(bot_memory.best_trade.pnl) }}</p>
+        {% endif %}
+    </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='cms_sections.js') }}" defer></script>{% endblock %}
+
+{% block scripts %}
+<script>
+async function demoTrade(e) {
+    e.preventDefault();
+    const payload = {
+        pair: document.getElementById('demo-pair').value,
+        strategy: document.getElementById('demo-strategy').value,
+        sentiment: parseFloat(document.getElementById('demo-sentiment').value),
+        price_change: parseFloat(document.getElementById('demo-change').value),
+    };
+    const resp = await fetch('/api/demo/trade', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const data = await resp.json();
+    const el = document.getElementById('demo-result');
+    if (resp.ok) {
+        el.innerHTML = '<p style="color:var(--success);">Сделка: ' + data.strategy + ' | P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€ | Сигнал: ' + data.signal + '</p>';
+        document.getElementById('demo-bal').textContent = data.balance.toFixed(2) + '€';
+        document.getElementById('demo-pnl').textContent = ((parseFloat(document.getElementById('demo-pnl').textContent) || 0) + data.pnl).toFixed(2) + '€';
+        document.getElementById('demo-trades').textContent = parseInt(document.getElementById('demo-trades').textContent || 0) + 1;
+    } else {
+        el.innerHTML = '<p style="color:var(--danger);">Ошибка: ' + (data.detail || 'неизвестная') + '</p>';
+    }
+}
+
+async function resetDemo() {
+    const resp = await fetch('/api/demo/toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({active: true})});
+    if (resp.ok) { location.reload(); }
+}
+</script>
+{% endblock %}

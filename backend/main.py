@@ -402,6 +402,26 @@ def _strategy_catalog(email: str, performance: dict):
 class PluginActionPayload(BaseModel):
     plugin_name: str
     duration_days: int = 15
+class StrategyCreatePayload(BaseModel):
+    name: str
+    description: str = ""
+    strategy_type: str = "pure_harvester"
+    leverage: float = 1.5
+    risk_tolerance: float = 0.03
+    fee_rate: float = 0.001
+    is_public: bool = False
+    price_eur: float = 0.0
+
+class DemoTogglePayload(BaseModel):
+    active: bool = True
+
+class DemoTradePayload(BaseModel):
+    pair: str = "BTC/USDT"
+    strategy: str = "pure_harvester"
+    sentiment: float = 0.5
+    price_change: float = 1.0
+
+
 
 @app.get("/", name="index")
 async def serve_root(request: Request):
@@ -530,6 +550,7 @@ async def dashboard(request: Request):
             "selected_theme": request.session.get("theme", "light"),
             "message": message,
             "memories": engine.recent_memories(user_email, 5),
+            "demo": engine.get_demo_session(user_email),
         },
     )
 
@@ -614,6 +635,14 @@ async def settings_page(request: Request):
                 message = "Тема оформления сохранена."
             else:
                 message = "Выберите доступную тему оформления."
+        elif action == "toggle_demo":
+            active = form.get("demo_active") == "on"
+            engine.toggle_demo_mode(user_email, active)
+            engine.ensure_demo_session(user_email)
+            message = "Демо-режим включён." if active else "Демо-режим отключён."
+        elif action == "reset_demo":
+            engine.reset_demo_balance(user_email)
+            message = "Демо-баланс сброшен до 100€."
         else:
             message, _ = _connection_action(user_email, str(action), form)
     user = engine.get_user(user_email)
@@ -633,6 +662,7 @@ async def settings_page(request: Request):
             "wallet": wallet,
             "exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
             "wallets": list(WALLET_PROVIDERS),
+            "demo": engine.get_demo_session(user_email),
         },
     )
 
@@ -686,6 +716,7 @@ async def marketplace(request: Request):
     )
 
 def _trading_context(user_email: str, message: str | None = None) -> dict:
+    engine.ensure_demo_session(user_email)
     return {
         "user_id": user_email,
         "message": message,
@@ -693,6 +724,8 @@ def _trading_context(user_email: str, message: str | None = None) -> dict:
         "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
         "chart_timeframes": ["1m", "5m", "15m", "1h", "1d"],
+        "demo": engine.get_demo_session(user_email),
+        "bot_memory": bot.get_memory_summary(),
     }
 
 
@@ -718,6 +751,7 @@ async def bot_management(request: Request):
                 risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
                 fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
                 save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
+                bot.set_strategy(strategy)
                 message = "Настройки стратегии сохранены."
             except (TypeError, ValueError):
                 message = "Проверьте значения левериджа, риска и комиссии."
@@ -933,6 +967,62 @@ async def admin_panel(request: Request):
             **social_login_context(),
         },
     )
+
+
+@app.post("/api/demo/trade")
+def demo_trade(payload: DemoTradePayload, request: Request):
+    email = _require_user(request)
+    engine.ensure_demo_session(email)
+    demo = engine.get_demo_session(email)
+    if not demo.get("demo_active"):
+        raise HTTPException(status_code=400, detail="Демо-режим отключён.")
+    try:
+        strategy_manager.config["strategy"] = payload.strategy
+        result = strategy_manager.execute(payload.sentiment, payload.price_change, demo["demo_balance"])
+        pnl = result["pnl"]
+        updated = engine.update_demo_balance(email, pnl)
+        engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy}", email)
+        return {"pnl": round(pnl, 4), "balance": round(updated["demo_balance"], 2), "signal": result["signal"], "strategy": payload.strategy}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@app.get("/api/demo/status")
+def demo_status(request: Request):
+    email = _require_user(request)
+    engine.ensure_demo_session(email)
+    return engine.get_demo_session(email)
+
+@app.post("/api/demo/toggle")
+def demo_toggle(payload: DemoTogglePayload, request: Request):
+    email = _require_user(request)
+    engine.ensure_demo_session(email)
+    return engine.toggle_demo_mode(email, payload.active)
+
+@app.post("/api/strategies/create")
+def create_strategy(payload: StrategyCreatePayload, request: Request):
+    email = _require_user(request)
+    result = engine.create_strategy(
+        email, payload.name, payload.description, payload.strategy_type,
+        payload.leverage, payload.risk_tolerance, payload.fee_rate,
+        payload.is_public, payload.price_eur,
+    )
+    if not result:
+        raise HTTPException(status_code=400, detail="Не удалось создать стратегию.")
+    return result
+
+@app.get("/api/strategies/user")
+def user_strategies(request: Request):
+    email = _require_user(request)
+    return engine.list_user_strategies(email)
+
+@app.get("/api/strategies/public")
+def public_strategies(request: Request):
+    return engine.list_public_strategies()
+
+@app.get("/api/bot/memory")
+def bot_memory(request: Request):
+    _require_user(request)
+    return bot.get_memory_summary()
 
 @app.post("/admin/risk", name="admin_risk_action")
 async def admin_risk_action(request: Request, enabled: str = Form("true")):

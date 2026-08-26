@@ -14,16 +14,16 @@
             <div class="stat-label">CMSC баланс</div>
         </div>
         <div class="card stat-tile">
+            <div class="stat-value" style="color:{{ 'var(--success)' if demo.demo_pnl|default(0) >= 0 else 'var(--danger)' }}">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div>
+            <div class="stat-label">Демо баланс</div>
+        </div>
+        <div class="card stat-tile">
             <div class="stat-value">{{ memories|length }}</div>
             <div class="stat-label">Тестов</div>
         </div>
         <div class="card stat-tile">
             <div class="stat-value" style="font-size:.9rem;padding-top:.4rem;">{% if wallet.exchange_provider %}✓{% else %}—{% endif %}</div>
             <div class="stat-label">{{ wallet.exchange_provider or 'Биржа' }}</div>
-        </div>
-        <div class="card stat-tile">
-            <div class="stat-value" style="font-size:.9rem;padding-top:.4rem;">{% if wallet.provider %}✓{% else %}—{% endif %}</div>
-            <div class="stat-label">{{ wallet.provider or 'Кошелёк' }}</div>
         </div>
     </div>
 
@@ -45,6 +45,11 @@
                 <a class="btn btn-secondary btn-sm" href="{{ url_for('bot_management') }}" style="width:100%;">⚙ Управление ботом</a>
                 <a class="btn btn-secondary btn-sm" href="{{ url_for('wallet_page') }}" style="width:100%;">▤ Кошелёк</a>
                 <a class="btn btn-outline btn-sm" href="{{ url_for('settings') }}" style="width:100%;">✦ Настройки и подключения</a>
+            </div>
+            <div style="margin-top:.75rem;">
+                <strong style="font-size:.85rem;">Демо-режим</strong>
+                <p class="muted" style="font-size:.8rem;">Баланс: {{ '%.2f'|format(demo.demo_balance|default(100)) }}€ | P/L: {{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</p>
+                <a class="btn btn-sm" href="{{ url_for('testing') }}" style="width:100%;">Тестировать стратегии</a>
             </div>
         </div>
         <div class="card" style="grid-column:1/-1;">
