@@ -44,7 +44,7 @@ app.add_middleware(
     max_age=3600,
     https_only=os.getenv("SESSION_HTTPS_ONLY", "false").lower() == "true",
 )
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "frontend")), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 app.include_router(admin_router)
 
 @app.get("/health", name="health")
@@ -534,9 +534,11 @@ async def dashboard(request: Request):
             "balance": balance,
             "wallet": engine.get_or_create_wallet(user_email),
             "user_id": user_email,
-            "theme": request.session.get("theme", "light"),
-            "selected_theme": request.session.get("theme", "light"),
+            "is_admin": bool(user and user.role == "admin"),
+            "theme": request.session.get("theme", "dark"),
+            "selected_theme": request.session.get("theme", "dark"),
             "message": message,
+            "bot_active": bot.active,
             "memories": engine.recent_memories(user_email, 5),
             "demo": engine.get_demo_session(user_email)},
     )
@@ -641,7 +643,7 @@ async def settings_page(request: Request):
                         "user_id": user_email,
             "username": username,
             "email": user_email,
-            "selected_theme": request.session.get("theme", "light"),
+            "selected_theme": request.session.get("theme", "dark"),
             "message": message,
             "is_admin": is_admin,
             "wallet": wallet,
@@ -698,8 +700,13 @@ async def marketplace(request: Request):
 
 def _trading_context(user_email: str, message: str | None = None) -> dict:
     engine.ensure_demo_session(user_email)
+    db_user = engine.get_user(user_email)
+    username = db_user.email if db_user else user_email
     return {
         "user_id": user_email,
+        "username": username,
+        "is_admin": bool(db_user and db_user.role == "admin"),
+        "theme": "dark",
         "message": message,
         "trade_history": engine.list_trades(user_email, 20),
         "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
@@ -775,14 +782,14 @@ async def demo_page(request: Request):
     ctx["bot_status"] = bot.status()
     return templates.TemplateResponse(request, "demo.html", ctx)
 
-@app.get("/testing", name="testing")
+@app.api_route("/testing", methods=["GET", "POST"], name="testing_page")
 async def testing_page(request: Request):
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
     ctx = _trading_context(user_email)
     ctx["bot_status"] = bot.status()
-    return templates.TemplateResponse(request, "strategies.html", ctx)
+    return templates.TemplateResponse(request, "testing.html", ctx)
 
 @app.api_route("/wallet", methods=["GET", "POST"], name="wallet_page")
 async def wallet_page(request: Request):
@@ -1427,3 +1434,209 @@ def set_kill_switch(payload: KillSwitchPayload, request: Request):
     risk_manager.set_kill_switch(payload.enabled)
     engine.record_audit("kill_switch", str(payload.enabled), email)
     return risk_manager.status()
+
+
+# ─── Недостающие API (fix 404 "file not found") ───────────────────
+
+@app.get("/api/wallet/balance")
+def api_wallet_balance(request: Request):
+    email = _require_user(request)
+    wallet = engine.get_or_create_wallet(email)
+    return {"balance": wallet.get("balance", 0), "currency": "EUR", "provider": wallet.get("provider", ""), "address": wallet.get("address", "")}
+
+@app.post("/api/wallet/connect")
+def api_wallet_connect(request: Request, provider: str = Form(...), address: str = Form(...)):
+    email = _require_user(request)
+    if provider not in WALLET_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Invalid provider")
+    engine.update_wallet(email, wallet_provider=provider, wallet_address=address)
+    engine.record_audit("wallet_connected", provider, email)
+    return {"ok": True, "provider": provider}
+
+@app.get("/api/settings")
+def api_get_settings(request: Request):
+    email = _require_user(request)
+    db_user = engine.get_user(email)
+    site_settings = engine.get_site_settings()
+    theme = getattr(db_user, "theme", "light") if db_user else "light"
+    username = getattr(db_user, "username", "") if db_user else ""
+    return {"theme": theme, "email": email, "username": username, "site_settings": site_settings}
+
+@app.get("/api/profile")
+def api_profile(request: Request):
+    email = _require_user(request)
+    db_user = engine.get_user(email)
+    wallet = engine.get_or_create_wallet(email)
+    username = getattr(db_user, "username", "") if db_user else ""
+    return {"username": username, "email": email, "wallet": wallet}
+
+@app.get("/api/exchanges")
+def api_exchanges():
+    return {"exchanges": [{"id": e, "name": e.capitalize()} for e in SUPPORTED_MARKET_EXCHANGES]}
+
+@app.get("/api/market/trending")
+def api_market_trending():
+    try:
+        trending = _strategy_performance()
+        return {"trending": trending}
+    except Exception:
+        return {"trending": []}
+
+@app.get("/api/demo/balance")
+def api_demo_balance(request: Request):
+    user = _require_user(request)
+    return {"balance": 100.0, "currency": "EUR", "trades": []}
+
+@app.get("/api/demo/history")
+def api_demo_history(request: Request):
+    user = _require_user(request)
+    return {"trades": []}
+
+@app.get("/api/bot/config")
+def api_bot_config(request: Request):
+    _require_user(request)
+    return {"strategy": strategy_manager.current_strategy(), "config": strategy_manager.config}
+
+@app.get("/api/admin/stats")
+def api_admin_stats(request: Request):
+    _require_admin(request)
+    return {"users": 1, "strategies": len(strategy_manager.list_strategies()) if hasattr(strategy_manager, 'list_strategies') else 0, "status": "ok"}
+
+@app.get("/api/admin/settings")
+def api_admin_get_settings(request: Request):
+    _require_admin(request)
+    return engine.get_site_settings()
+
+@app.get("/api/notifications")
+def api_notifications(request: Request):
+    _require_user(request)
+    return {"notifications": []}
+
+@app.get("/api/market/listings")
+def api_market_listings(request: Request):
+    _require_user(request)
+    try:
+        catalog = _strategy_catalog(_require_user(request), _strategy_performance())
+        return {"listings": catalog}
+    except Exception:
+        return {"listings": []}
+
+@app.get("/api/feedback")
+def api_feedback(request: Request):
+    _require_user(request)
+    return {"feedback": []}
+
+@app.post("/api/feedback")
+def api_submit_feedback(request: Request, message: str = Form(...)):
+    user = _require_user(request)
+    engine.record_audit("feedback", message, email)
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Copy Trading — копирование стратегий трейдеров (как Pionex)
+# ═══════════════════════════════════════════════════════════════
+
+_copy_trading_state = {}  # email -> {copies: [], settings: {}}
+
+def _get_traders_list():
+    """Генерируем список трейдеров из bot memory и published strategies."""
+    traders = []
+    bot_status = bot.status()
+    gen_status = bot.strategy_generator.get_status()
+    log = gen_status.get("recent_log", [])
+
+    builtin = [
+        {"name": "Daily Compound Bot", "strategy": "pure_harvester", "return_pct": 0, "win_rate": 50, "trades": 0, "copied": False},
+        {"name": "HFT Momentum Pro", "strategy": "high_frequency_momentum", "return_pct": 0, "win_rate": 50, "trades": 0, "copied": False},
+        {"name": "Compound Defender", "strategy": "compound_defender", "return_pct": 0, "win_rate": 50, "trades": 0, "copied": False},
+    ]
+
+    for entry in log:
+        if entry.get("action") == "published":
+            builtin.append({
+                "name": entry.get("name", "Auto Strategy"),
+                "strategy": "auto_generated",
+                "return_pct": entry.get("return", 0),
+                "win_rate": 50,
+                "trades": 0,
+                "copied": False,
+            })
+
+    if bot_status.get("trade_count", 0) > 0:
+        builtin[0]["return_pct"] = round(bot_status.get("total_pnl", 0), 2)
+        builtin[0]["win_rate"] = bot_status.get("win_rate", 0)
+        builtin[0]["trades"] = bot_status.get("trade_count", 0)
+
+    return builtin
+
+
+@app.api_route("/copy-trading", methods=["GET", "POST"], name="copy_trading_page")
+async def copy_trading_page(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+
+    state = _copy_trading_state.get(user_email, {"copies": [], "settings": {}})
+    traders = _get_traders_list()
+    for t in traders:
+        t["copied"] = t["name"] in state.get("copies", [])
+
+    copying_count = sum(1 for t in traders if t["copied"])
+    returns = [t["return_pct"] for t in traders if t["return_pct"]]
+    avg_return = sum(returns) / len(returns) if returns else 0
+
+    return templates.TemplateResponse(request, "copy_trading.html", {
+        "user_id": user_email,
+        "username": (engine.get_user(user_email).email if engine.get_user(user_email) else user_email),
+        "theme": request.session.get("theme", "dark"),
+        "traders": traders,
+        "avg_return": avg_return,
+        "copying_count": copying_count,
+    })
+
+
+class CopyTogglePayload(BaseModel):
+    trader: str
+
+
+@app.post("/api/copy-trading/toggle")
+def copy_toggle(payload: CopyTogglePayload, request: Request):
+    email = _require_user(request)
+    state = _copy_trading_state.setdefault(email, {"copies": [], "settings": {}})
+    if payload.trader in state["copies"]:
+        state["copies"].remove(payload.trader)
+    else:
+        state["copies"].append(payload.trader)
+    engine.record_audit("copy_toggle", f"trader={payload.trader}", email)
+    return {"ok": True, "copies": state["copies"]}
+
+
+class CopySettingsPayload(BaseModel):
+    amount: float = 10.0
+    max_loss: float = 5.0
+    mode: str = "demo"
+    strategy: str = "auto"
+
+
+@app.post("/api/copy-trading/settings")
+def copy_settings(payload: CopySettingsPayload, request: Request):
+    email = _require_user(request)
+    state = _copy_trading_state.setdefault(email, {"copies": [], "settings": {}})
+    state["settings"] = payload.model_dump()
+    engine.record_audit("copy_settings", str(state["settings"]), email)
+    return {"ok": True, "settings": state["settings"]}
+
+
+@app.post("/api/copy-trading/reset")
+def copy_reset(request: Request):
+    email = _require_user(request)
+    _copy_trading_state[email] = {"copies": [], "settings": {}}
+    engine.record_audit("copy_reset", "all cleared", email)
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Testing page — тесты стратегий на реальных данных (live)
+# ═══════════════════════════════════════════════════════════════
+

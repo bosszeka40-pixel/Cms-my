@@ -1,297 +1,161 @@
 {% extends 'base.html' %}
-{% block title %}Тесты стратегий — Terminal{% endblock %}
-{% block breadcrumb %}Торговля / Тесты и Демо{% endblock %}
+{% block title %}Тесты стратегий — CMS Trading{% endblock %}
+{% block breadcrumb %}Тестирование / Стратегии{% endblock %}
 
 {% block content %}
-<div class="terminal-page">
-<div class="container">
-    <!-- Header -->
-    <div class="term-header">
-        <div class="term-pair-info">
-            <select id="test-pair" class="term-strategy-select" style="width:auto;min-width:120px;">
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Backtesting</span>
+        <h1 class="page-title">Тестирование стратегий</h1>
+        <p class="lead">Тесты на реальных данных live. Без знания будущего — только прошлые свечи.</p>
+    </div>
+    <span class="term-demo-badge">DEMO MODE</span>
+</div>
+
+<!-- Config -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>⚙️ Настройки теста</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;">
+        <div class="field-group">
+            <label>Пара</label>
+            <select id="test-pair">
                 {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
             </select>
-            <span class="term-pair-price up" id="test-price">—</span>
-            <span class="term-pair-change up" id="test-change">—</span>
         </div>
-        <div class="term-stats">
-            <div class="term-stat"><div class="term-stat-label">Демо баланс</div><div class="term-stat-value" id="test-bal">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div></div>
-            <div class="term-stat"><div class="term-stat-label">P/L</div><div class="term-stat-value" id="test-pnl">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</div></div>
-            <div class="term-stat"><div class="term-stat-label">Сделок</div><div class="term-stat-value" id="test-trades">{{ demo.demo_trades_count|default(0) }}</div></div>
+        <div class="field-group">
+            <label>Биржа</label>
+            <select id="test-exchange">
+                {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
+            </select>
         </div>
-        <span class="term-demo-badge">LIVE DATA</span>
+        <div class="field-group">
+            <label>Начальный баланс (€)</label>
+            <input type="number" id="test-balance" value="100" min="10" max="10000">
+        </div>
+        <div class="field-group">
+            <label>Стратегия</label>
+            <select id="test-strategy">
+                <option value="all">Все стратегии</option>
+                <option value="pure_harvester">Pure Harvester</option>
+                <option value="high_frequency_momentum">HFT Momentum</option>
+                <option value="compound_defender">Compound Defender</option>
+                <option value="trend_breakout_compound">Trend Breakout</option>
+                <option value="multi_sentiment_scalper">Multi Sentiment</option>
+                <option value="ai_adaptive_momentum">AI Adaptive</option>
+                <option value="quantum_grid_trader">Quantum Grid</option>
+                <option value="neural_pattern_recognition">Neural Pattern</option>
+                <option value="delta_neutral_hedger">Delta Neutral</option>
+                <option value="volatility_harvest">Volatility Harvest</option>
+            </select>
+        </div>
     </div>
-
-    <!-- Timeframes for chart -->
-    <div class="term-timeframes">
-        {% for tf in ['1m','5m','15m','1h','4h','1d'] %}
-        <button class="term-tf-btn {% if tf == '1h' %}active{% endif %}" data-tf="{{ tf }}">{{ tf }}</button>
-        {% endfor %}
-    </div>
-
-    <!-- Two-column layout -->
-    <div style="display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 150px);">
-        <!-- Left: Chart + Backtest -->
-        <div style="border-right:1px solid var(--term-border);display:flex;flex-direction:column;">
-            <div class="term-ohlcv" id="test-ohlcv">
-                <span>O <b>—</b></span><span>H <b>—</b></span><span>L <b>—</b></span><span>C <b>—</b></span><span>Vol —</span>
-            </div>
-            <div style="flex:1;min-height:350px;position:relative;">
-                <div id="test-chart" style="width:100%;height:100%;"></div>
-            </div>
-
-            <!-- Backtest section -->
-            <div style="border-top:1px solid var(--term-border);padding:.75rem;">
-                <div class="term-section-title" style="padding:0 0 .5rem 0;">Backtest стратегий</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:end;">
-                    <div class="term-field">
-                        <label>Стратегия</label>
-                        <select id="bt-strategy" class="term-strategy-select">
-                            <option value="pure_harvester">Pure Harvester</option>
-                            <option value="high_frequency_momentum">HFT Momentum</option>
-                            <option value="compound_defender">Compound Defender</option>
-                            <option value="trend_breakout_compound">Trend Breakout</option>
-                            <option value="multi_sentiment_scalper">Multi Sentiment</option>
-                        </select>
-                    </div>
-                    <div class="term-field">
-                        <label>Начальный баланс €</label>
-                        <input id="bt-balance" type="number" value="100" step="1" min="1">
-                    </div>
-                    <div class="term-field">
-                        <label>Сентимент</label>
-                        <input id="bt-sentiment" type="number" value="0.5" step="0.1" min="-1" max="1">
-                    </div>
-                    <button class="term-buy-btn" id="run-backtest" style="width:auto;padding:.55rem 1rem;">Запустить</button>
-                </div>
-                <div id="bt-result" style="margin-top:.5rem;"></div>
-                <div class="term-results-grid" id="bt-results" style="display:none;padding:.5rem 0;"></div>
-            </div>
-        </div>
-
-        <!-- Right: Demo trading + Bot activity -->
-        <div style="display:flex;flex-direction:column;">
-            <!-- Demo Trading -->
-            <div style="border-bottom:1px solid var(--term-border);">
-                <div class="term-section-title">Демо-торговля (Live)</div>
-                <div style="padding:.75rem;">
-                    <form id="demo-trade-form">
-                        <div class="term-order-row">
-                            <div class="term-field">
-                                <label>Стратегия</label>
-                                <select id="demo-strategy" class="term-strategy-select">
-                                    <option value="pure_harvester">Pure Harvester</option>
-                                    <option value="high_frequency_momentum">HFT Momentum</option>
-                                    <option value="compound_defender">Compound Defender</option>
-                                    <option value="trend_breakout_compound">Trend Breakout</option>
-                                    <option value="multi_sentiment_scalper">Multi Sentiment</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="term-order-row">
-                            <div class="term-field">
-                                <label>Изм. цены %</label>
-                                <input id="demo-change" type="number" value="1.0" step="0.1" min="-10" max="10">
-                            </div>
-                            <div class="term-field">
-                                <label>Сентимент</label>
-                                <input id="demo-sentiment" type="number" value="0.5" step="0.1" min="-1" max="1">
-                            </div>
-                        </div>
-                        <button class="term-buy-btn" type="submit" style="width:100%;">Отправить сделку</button>
-                    </form>
-                    <div id="demo-result" style="margin-top:.5rem;font-size:.78rem;"></div>
-                    <div style="margin-top:.5rem;">
-                        <button class="term-sell-btn" id="reset-demo" style="width:100%;padding:.45rem;font-size:.78rem;">Сбросить баланс до 100€</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Bot activity -->
-            <div style="border-bottom:1px solid var(--term-border);">
-                <div class="term-section-title">Активность бота</div>
-                <div style="padding:.75rem;">
-                    <div class="term-results-grid" style="padding:0;">
-                        <div class="term-result-card">
-                            <div class="value">{{ bot_memory.total_trades|default(0) }}</div>
-                            <div class="label">Всего сделок</div>
-                        </div>
-                        <div class="term-result-card">
-                            <div class="value">{{ bot_memory.win_rate|default(0) }}%</div>
-                            <div class="label">Винрейт</div>
-                        </div>
-                        <div class="term-result-card">
-                            <div class="value">{{ '%.4f'|format(bot_memory.avg_pnl|default(0)) }}</div>
-                            <div class="label">Средний P/L</div>
-                        </div>
-                    </div>
-                    {% if bot_memory.strategies_used %}
-                    <p style="font-size:.72rem;color:var(--term-muted);margin-top:.5rem;">Стратегии: {{ bot_memory.strategies_used|join(', ') }}</p>
-                    {% endif %}
-                    {% if bot_memory.best_trade %}
-                    <p style="font-size:.72rem;color:var(--term-up);margin-top:.25rem;">Лучшая: {{ bot_memory.best_trade.strategy }} — P/L {{ '%.4f'|format(bot_memory.best_trade.pnl) }}</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Demo history -->
-            <div style="flex:1;overflow-y:auto;">
-                <div class="term-section-title">История демо-сделок</div>
-                <table class="term-table">
-                    <thead><tr><th>Время</th><th>Стратегия</th><th>Сигнал</th><th>P/L</th></tr></thead>
-                    <tbody id="demo-history-body">
-                        <tr><td colspan="4" class="term-empty">Сделок пока нет</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+    <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn btn-success" id="run-backtest" onclick="runBacktest()">🔬 Запустить тест</button>
+        <button class="btn btn-outline" id="run-hft-test" onclick="runHFTTest()">⚡ HFT тест</button>
+        <span id="test-status" style="padding:.5rem;font-size:.82rem;color:var(--text-muted);"></span>
     </div>
 </div>
+
+<!-- Results -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📊 Результаты</h2>
+    <div id="test-results" class="term-results-grid" style="min-height:60px;">
+        <div class="term-empty">Нажмите «Запустить тест» для запуска backtesting</div>
+    </div>
+</div>
+
+<!-- Chart -->
+<div class="card">
+    <h2>📈 График результатов</h2>
+    <div id="test-chart" style="width:100%;height:300px;"></div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
 <script>
-(() => {
-    const pairEl = document.getElementById('test-pair');
-    const exchange = '{{ trading_exchanges[0] }}';
-    let currentTf = '1h';
-    let demoBalance = {{ demo.demo_balance|default(100)|float }};
-    let demoPnl = {{ demo.demo_pnl|default(0)|float }};
-    let demoHistory = [];
+async function runBacktest() {
+    const statusEl = document.getElementById('test-status');
+    const resultsEl = document.getElementById('test-results');
+    const btn = document.getElementById('run-backtest');
+    btn.disabled = true;
+    statusEl.textContent = '⏳ Загрузка рыночных данных и тестирование...';
+    resultsEl.innerHTML = '';
 
-    /* Init chart */
-    initTradingChart('test-chart');
-    loadTestData();
-
-    async function loadTestData() {
-        try {
-            const resp = await fetch(`/api/market/data?pair=${encodeURIComponent(pairEl.value)}&exchange=${encodeURIComponent(exchange)}`);
-            const data = await resp.json();
-            if (data.ticker) {
-                const p = data.ticker.last || 0;
-                const c = data.ticker.change || 0;
-                document.getElementById('test-price').textContent = p.toFixed(2);
-                document.getElementById('test-price').className = 'term-pair-price ' + (c >= 0 ? 'up' : 'down');
-                document.getElementById('test-change').textContent = (c >= 0 ? '+' : '') + c.toFixed(2) + '%';
-                document.getElementById('test-change').className = 'term-pair-change ' + (c >= 0 ? 'up' : 'down');
-            }
-        } catch (_) {}
-        loadChartData(pairEl.value, exchange, currentTf);
-    }
-
-    /* Timeframes */
-    document.querySelectorAll('.term-tf-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentTf = btn.dataset.tf;
-            loadChartData(pairEl.value, exchange, currentTf);
+    try {
+        const resp = await fetch('/api/bot/backtest', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                pair: document.getElementById('test-pair').value,
+                exchange: document.getElementById('test-exchange').value,
+                initial_balance: parseFloat(document.getElementById('test-balance').value) || 100
+            })
         });
-    });
-
-    /* Pair change */
-    pairEl.addEventListener('change', loadTestData);
-
-    /* Backtest */
-    document.getElementById('run-backtest').addEventListener('click', async () => {
-        const strategy = document.getElementById('bt-strategy').value;
-        const balance = parseFloat(document.getElementById('bt-balance').value) || 100;
-        const sentiment = parseFloat(document.getElementById('bt-sentiment').value) || 0;
-        const resultEl = document.getElementById('bt-result');
-        const resultsEl = document.getElementById('bt-results');
-        resultEl.innerHTML = '<span style="color:var(--term-accent);">Запуск...</span>';
-
-        try {
-            const resp = await fetch('/api/bot/backtest', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ pair: pairEl.value, exchange, initial_balance: balance })
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                resultEl.innerHTML = `<span style="color:var(--term-up);">✓ Backtest завершён</span>`;
-                resultsEl.style.display = '';
-                const results = data.results || [];
-                resultsEl.innerHTML = results.map(r => `
-                    <div class="term-result-card">
-                        <div style="font-size:.72rem;color:var(--term-accent);margin-bottom:.25rem;">${r.strategy}</div>
-                        <div class="value ${r.pnl >= 0 ? 'up' : 'down'}">${r.pnl >= 0 ? '+' : ''}${(r.pnl || 0).toFixed(2)}€</div>
-                        <div class="label">P/L (${(r.roi || 0).toFixed(1)}%)</div>
-                        <div style="font-size:.68rem;color:var(--term-muted);margin-top:.25rem;">${r.trades || 0} сделок · ${r.wins || 0} побед · Финал: ${(r.final_balance || 0).toFixed(2)}€</div>
-                    </div>
-                `).join('') || '<div class="term-empty">Нет данных</div>';
-            } else {
-                resultEl.innerHTML = `<span style="color:var(--term-down);">Ошибка: ${data.detail || 'неизвестная'}</span>`;
-            }
-        } catch (err) {
-            resultEl.innerHTML = `<span style="color:var(--term-down);">Ошибка соединения</span>`;
+        const data = await resp.json();
+        if (resp.ok && data.results) {
+            resultsEl.innerHTML = data.results.map(r => `
+                <div class="term-result-card">
+                    <div style="font-size:.72rem;color:var(--accent);margin-bottom:.25rem;font-weight:600;">${r.strategy}</div>
+                    <div class="value ${(r.pnl||0)>=0?'up':'down'}" style="color:${(r.pnl||0)>=0?'var(--success)':'var(--danger)'};">${(r.pnl||0)>=0?'+':''}${(r.pnl||0).toFixed(2)}€</div>
+                    <div class="label">P/L (${(r.roi||0).toFixed(1)}%)</div>
+                    <div style="font-size:.68rem;color:var(--text-muted);margin-top:.25rem;">${r.trades||0} сделок · ${r.wins||0} побед · Финал: ${(r.final_balance||0).toFixed(2)}€</div>
+                </div>
+            `).join('') || '<div class="term-empty">Нет данных</div>';
+            statusEl.textContent = '✅ Тест завершён';
+        } else {
+            statusEl.textContent = '❌ ' + (data.detail || 'Ошибка');
+            resultsEl.innerHTML = `<div class="term-empty">${data.detail || 'Ошибка теста'}</div>`;
         }
-    });
-
-    /* Demo trade */
-    document.getElementById('demo-trade-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const payload = {
-            pair: pairEl.value,
-            strategy: document.getElementById('demo-strategy').value,
-            sentiment: parseFloat(document.getElementById('demo-sentiment').value),
-            price_change: parseFloat(document.getElementById('demo-change').value),
-        };
-        const resultEl = document.getElementById('demo-result');
-
-        try {
-            const resp = await fetch('/api/demo/trade', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                demoBalance = data.balance;
-                demoPnl = (demoPnl || 0) + data.pnl;
-                document.getElementById('test-bal').textContent = data.balance.toFixed(2) + '€';
-                document.getElementById('test-pnl').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
-                document.getElementById('test-pnl').className = 'term-stat-value ' + (demoPnl >= 0 ? 'up' : 'down');
-                document.getElementById('test-trades').textContent = parseInt(document.getElementById('test-trades').textContent || 0) + 1;
-                resultEl.innerHTML = `<span style="color:var(--term-up);">✓ ${data.strategy} | P/L: ${data.pnl.toFixed(4)}€ | Баланс: ${data.balance.toFixed(2)}€ | Сигнал: ${data.signal}</span>`;
-
-                demoHistory.unshift({ time: new Date().toLocaleTimeString(), strategy: data.strategy, signal: data.signal, pnl: data.pnl });
-                renderDemoHistory();
-            } else {
-                resultEl.innerHTML = `<span style="color:var(--term-down);">Ошибка: ${data.detail || 'неизвестная'}</span>`;
-            }
-        } catch (_) {
-            resultEl.innerHTML = `<span style="color:var(--term-down);">Ошибка соединения</span>`;
-        }
-    });
-
-    function renderDemoHistory() {
-        const body = document.getElementById('demo-history-body');
-        if (!demoHistory.length) return;
-        body.innerHTML = demoHistory.slice(0, 20).map(h => `
-            <tr>
-                <td>${h.time}</td>
-                <td>${h.strategy}</td>
-                <td>${h.signal}</td>
-                <td class="${h.pnl >= 0 ? 'up' : 'down'}">${h.pnl >= 0 ? '+' : ''}${h.pnl.toFixed(4)}€</td>
-            </tr>
-        `).join('');
+    } catch(e) {
+        statusEl.textContent = '❌ Ошибка соединения';
+        resultsEl.innerHTML = `<div class="term-empty">Ошибка: ${e.message}</div>`;
     }
+    btn.disabled = false;
+}
 
-    /* Reset demo */
-    document.getElementById('reset-demo').addEventListener('click', async () => {
-        try {
-            await fetch('/api/demo/toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({active: true})});
-            demoBalance = 100; demoPnl = 0; demoHistory = [];
-            document.getElementById('test-bal').textContent = '100.00€';
-            document.getElementById('test-pnl').textContent = '0.00€';
-            document.getElementById('test-trades').textContent = '0';
-            document.getElementById('demo-history-body').innerHTML = '<tr><td colspan="4" class="term-empty">Сделок пока нет</td></tr>';
-        } catch (_) {}
-    });
-})();
+async function runHFTTest() {
+    const statusEl = document.getElementById('test-status');
+    const resultsEl = document.getElementById('test-results');
+    const btn = document.getElementById('run-hft-test');
+    btn.disabled = true;
+    statusEl.textContent = '⏳ HFT тест на live данных...';
+
+    try {
+        const pair = document.getElementById('test-pair').value;
+        const resp = await fetch('/api/market/history?pair=' + encodeURIComponent(pair) + '&exchange=' + document.getElementById('test-exchange').value + '&timeframe=1h&limit=200');
+        const data = await resp.json();
+        if (resp.ok && data.candles) {
+            const prices = data.candles.map(c => c.close);
+            const aiStream = prices.map(() => Math.random());
+            const simResp = await fetch('/api/bot/simulate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({market_data: prices, ai_stream: aiStream})
+            });
+            const simData = await simResp.json();
+            if (simResp.ok) {
+                resultsEl.innerHTML = `
+                    <div class="term-result-card">
+                        <div style="font-size:.72rem;color:var(--accent);">HFT Brain</div>
+                        <div class="value" style="color:${simData.capital>=100?'var(--success)':'var(--danger)'};">${simData.capital.toFixed(2)}€</div>
+                        <div class="label">Финальный капитал</div>
+                    </div>
+                    <div class="term-result-card">
+                        <div class="value">${simData.trades}</div>
+                        <div class="label">Сделок</div>
+                    </div>
+                `;
+                statusEl.textContent = '✅ HFT тест завершён';
+            } else {
+                statusEl.textContent = '❌ ' + (simData.detail || 'Ошибка');
+            }
+        } else {
+            statusEl.textContent = '❌ Нет рыночных данных';
+        }
+    } catch(e) {
+        statusEl.textContent = '❌ Ошибка: ' + e.message;
+    }
+    btn.disabled = false;
+}
 </script>
 {% endblock %}

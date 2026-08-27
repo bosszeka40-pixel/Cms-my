@@ -1,40 +1,46 @@
-{% extends 'base.html' %}
-
-{% block content %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMS Trading Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="dark">
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;">
+    <span style="font-size:4rem;">₿</span>
+    <h1 style="font-size:2.5rem;font-weight:700;margin:1rem 0 .5rem;">CMS Trading Platform</h1>
+    <p style="font-size:1.1rem;color:var(--text-secondary);max-width:500px;margin-bottom:2rem;">Профессиональная платформа для автоматической торговли с AI-ботами, копитрейдингом и маркетплейсом стратегий.</p>
     {% if user_id %}
-        <div class="hero">
-            <div>
-                <span class="eyebrow">Личный кабинет</span>
-                <h1 class="page-title">Здравствуйте, {{ username or 'Пользователь' }}</h1>
-                <p class="lead">Все торговые режимы и настройки CMS собраны в одном понятном интерфейсе.</p>
-            </div>
-            <div class="hero-badge"><strong>CMS</strong><span>V12</span></div>
-        </div>
-        <section class="feature-grid">
-            <a class="card feature-card" href="{{ url_for('dashboard') }}"><h2>Дашборд</h2><p class="muted">Статистика, ИИ-ассистент и быстрые действия.</p></a>
-            <a class="card feature-card" href="{{ url_for('bot_management') }}"><h2>Бот</h2><p class="muted">Запуск, стратегия, рынок и риск-контроль.</p></a>
-            <a class="card feature-card" href="{{ url_for('manual_trading') }}"><h2>Ручная торговля</h2><p class="muted">Котировки и контролируемое исполнение сделок.</p></a>
-            <a class="card feature-card" href="{{ url_for('testing') }}"><h2>Тесты</h2><p class="muted">Симуляция сделки и исторический backtest.</p></a>
-        </section>
-        <section class="grid">
-            <a class="card feature-card" href="{{ url_for('marketplace') }}"><h2>Маркетплейс</h2><p class="muted">Стратегии, производительность и подписки.</p></a>
-            <a class="card feature-card" href="{{ url_for('wallet_page') }}"><h2>Кошелёк</h2><p class="muted">Баланс CMSC и реферальная программа.</p></a>
-            <a class="card feature-card" href="{{ url_for('settings') }}"><h2>Настройки</h2><p class="muted">Профиль, подключения и тема оформления.</p></a>
-        </section>
+        <a class="btn" href="{{ url_for('dashboard') }}" style="font-size:1rem;padding:.75rem 2rem;">Перейти в кабинет</a>
     {% else %}
-        <div class="hero">
-            <div>
-                <span class="eyebrow">CMS Trading Control</span>
-                <h1 class="page-title">Торговая CMS без путаницы</h1>
-                <p class="lead">Отдельные разделы для бота, ручных сделок и тестов. Подключения — в профиле, маркетплейс — только для стратегий.</p>
-            </div>
-            <div class="hero-badge"><strong>SAFE</strong><span>sandbox first</span></div>
+        <div style="display:flex;gap:1rem;">
+            <a class="btn" href="{{ url_for('login') }}" style="font-size:1rem;padding:.75rem 2rem;">Войти</a>
+            <a class="btn btn-outline" href="{{ url_for('register') }}" style="font-size:1rem;padding:.75rem 2rem;">Регистрация</a>
         </div>
-        <section class="feature-grid">
-            <article class="card"><h2>Чёткая структура</h2><p class="muted">Каждый режим находится на своей странице и не мешает остальным.</p></article>
-            <article class="card"><h2>Безопасность</h2><p class="muted">Секреты не сохраняются в открытом виде, по умолчанию доступен sandbox.</p></article>
-            <article class="card"><h2>Единый стиль</h2><p class="muted">Светлая, тёмная и автоматическая темы применяются ко всем страницам.</p></article>
-        </section>
-        <div class="button-row"><a class="btn" href="{{ url_for('login') }}">Войти</a><a class="btn btn-outline" href="{{ url_for('register') }}">Регистрация</a></div>
     {% endif %}
-{% endblock %}
+    <div style="margin-top:3rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;max-width:800px;width:100%;">
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">🤖</div>
+            <h3 style="font-size:.9rem;">AI Бот</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Автоматическая торговля с генерацией стратегий</p>
+        </div>
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">👥</div>
+            <h3 style="font-size:.9rem;">Копитрейдинг</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Копируйте стратегии успешных трейдеров</p>
+        </div>
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">🏪</div>
+            <h3 style="font-size:.9rem;">Маркетплейс</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Стратегии и модули с 15 днями бесплатно</p>
+        </div>
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">📈</div>
+            <h3 style="font-size:.9rem;">Live Терминал</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Торговля на реальных данных в реальном времени</p>
+        </div>
+    </div>
+</div>
+</body>
+</html>

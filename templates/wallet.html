@@ -1,52 +1,44 @@
 {% extends 'base.html' %}
-
-{% block breadcrumb %}Система / Кошелёк{% endblock %}
+{% block title %}Кошелёк — CMS Trading{% endblock %}
+{% block breadcrumb %}Кошелёк{% endblock %}
 
 {% block content %}
-    <div class="page-head"><div><span class="eyebrow">Система</span><h1 class="page-title">Кошелёк</h1><p class="lead">Баланс, покупка CMSC и реферальная программа.</p></div></div>
-    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Финансы</span>
+        <h1 class="page-title">Кошелёк</h1>
+        <p class="lead">Управление CMSC балансом и платежами.</p>
+    </div>
+    <div class="hero-badge"><strong>{{ '%.2f'|format(wallet.credits) }}</strong><span>CMSC</span></div>
+</div>
 
-    <div class="stat-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:18px;">
-        <div class="card stat-tile">
-            <div class="stat-value">{{ '%.2f'|format(wallet.credits) }}</div>
-            <div class="stat-label">CMSC</div>
-        </div>
-        <div class="card stat-tile">
-            <div class="stat-value" style="font-size:.95rem;padding-top:.4rem;">{{ wallet.provider or '—' }}</div>
-            <div class="stat-label">Кошелёк</div>
-        </div>
-        <div class="card stat-tile">
-            <div class="stat-value" style="font-size:.95rem;padding-top:.4rem;">{{ wallet.exchange_provider or '—' }}</div>
-            <div class="stat-label">Биржа</div>
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<div class="grid">
+    <div class="card">
+        <h2>💰 Баланс</h2>
+        <div style="text-align:center;padding:1.5rem;">
+            <div style="font-size:2rem;font-weight:700;color:var(--primary);">{{ '%.2f'|format(wallet.credits) }}</div>
+            <div style="font-size:.82rem;color:var(--text-secondary);">CMS Credits (CMSC)</div>
         </div>
     </div>
-
     <div class="card">
-        <h2>Купить CMSC</h2>
-        <p class="muted" style="font-size:.82rem;margin-bottom:.75rem;">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный курс.</p>
+        <h2>💳 Пополнение</h2>
+        <p class="muted" style="font-size:.82rem;margin-bottom:1rem;">Платёжный шлюз ещё не подключён. Обратитесь в поддержку.</p>
         <form method="post">
             <input type="hidden" name="action" value="buy_credits">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;">
-                <div class="field-group">
-                    <label for="amount">Количество</label>
-                    <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
-                </div>
-                <div class="field-group">
-                    <label for="currency">Валюта</label>
-                    <select id="currency" name="currency">
-                        {% for currency in payment_currencies %}
-                            <option value="{{ currency }}">{{ currency }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+            <div class="field-group">
+                <label>Количество CMSC</label>
+                <input type="number" name="amount" value="100" min="1">
             </div>
-            <button type="submit" class="btn">Купить CMSC</button>
+            <div class="field-group">
+                <label>Валюта оплаты</label>
+                <select name="currency">
+                    {% for c in payment_currencies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-block" type="submit" disabled>Пополнить (скоро)</button>
         </form>
     </div>
-
-    <div class="card" style="margin-top:1rem;">
-        <h2>Реферальная программа</h2>
-        <p>Ваш код: <code style="background:var(--bg-tertiary);padding:.2rem .5rem;border-radius:4px;font-size:.9em;">{{ user_email|replace('@', '-') }}</code></p>
-        <p class="muted" style="font-size:.85rem;">Приглашайте пользователей и получайте CMSC-бонусы.</p>
-    </div>
+</div>
 {% endblock %}

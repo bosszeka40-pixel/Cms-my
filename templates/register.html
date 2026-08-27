@@ -1,55 +1,61 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация — CMS Trading</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="dark">
+<div class="auth-page">
+    <div class="card">
+        <div style="text-align:center;margin-bottom:1.5rem;">
+            <span style="font-size:2rem;">₿</span>
+            <h1>Регистрация</h1>
+            <p class="muted" style="font-size:.82rem;">Создайте аккаунт для торговли</p>
+        </div>
 
-{% block content %}
-    <h1 class="page-title">Создание аккаунта Super CMS V12</h1>
-    <p class="lead">Зарегистрируйтесь, чтобы управлять ботом, плагинами и AI-модулем.</p>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
-    <form method="post">
-        <div class="field-group">
-            <label for="username">Имя пользователя</label>
-            <input type="text" id="username" name="username" placeholder="Уникальный логин" required>
-        </div>
-        <div class="field-group">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" placeholder="example@mail.com" required>
-        </div>
-        <div class="field-group">
-            <label for="password">Пароль</label>
-            <input type="password" id="password" name="password" placeholder="Введите пароль" required>
-        </div>
-        <div class="field-group">
-            <label for="confirm_password">Подтверждение пароля</label>
-            <input type="password" id="confirm_password" name="confirm_password" placeholder="Повторите пароль" required>
-        </div>
-        <div style="margin-bottom: 20px;">
-            <label><input type="checkbox" name="terms" required> Я согласен с условиями использования и политикой конфиденциальности</label>
-        </div>
-        <button type="submit" class="btn">Зарегистрироваться</button>
-    </form>
-    <p style="margin-top: 20px;">Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a></p>
-    <div class="small-note">или войти через</div>
-    <div class="social-btns">
-        {% if google_configured %}
+        {% if message %}<div class="message error">{{ message }}</div>{% endif %}
+
+        <form method="post" action="{{ url_for('register') }}">
+            <div class="field-group">
+                <label>Имя</label>
+                <input type="text" name="username" required placeholder="Ваше имя">
+            </div>
+            <div class="field-group">
+                <label>Email</label>
+                <input type="email" name="email" required placeholder="your@email.com" autocomplete="email">
+            </div>
+            <div class="field-group">
+                <label>Пароль</label>
+                <input type="password" name="password" required placeholder="Минимум 6 символов" autocomplete="new-password">
+            </div>
+            <div class="field-group">
+                <label>Подтверждение пароля</label>
+                <input type="password" name="confirm_password" required placeholder="Повторите пароль" autocomplete="new-password">
+            </div>
+            <button class="btn btn-success btn-block" type="submit" style="margin-top:.5rem;">Создать аккаунт</button>
+        </form>
+
+        <div class="divider">или</div>
+
+        <div class="social-btns">
+            {% if google_configured %}
             <a class="social-btn google" href="{{ url_for('social_login', provider='google') }}">Google</a>
-        {% else %}
-            <span class="social-btn google disabled" title="Google login не настроен на сервере (GOOGLE_CLIENT_ID/SECRET)">Google</span>
-        {% endif %}
-        {% if github_configured %}
+            {% else %}
+            <span class="social-btn google disabled">Google</span>
+            {% endif %}
+            {% if github_configured %}
             <a class="social-btn github" href="{{ url_for('social_login', provider='github') }}">GitHub</a>
-        {% else %}
-            <span class="social-btn github disabled" title="GitHub login не настроен на сервере (GITHUB_CLIENT_ID/SECRET)">GitHub</span>
-        {% endif %}
-        {% if telegram_configured %}
-            <span id="telegram-login-widget"></span>
-            <script async src="https://telegram.org/js/telegram-widget.js?22"
-                data-telegram-login="{{ telegram_bot_username }}"
-                data-size="large"
-                data-auth-url="{{ url_for('telegram_callback') }}"
-                data-request-access="write"></script>
-        {% else %}
-            <span class="social-btn telegram disabled" title="Telegram login не настроен на сервере (TELEGRAM_BOT_TOKEN/TELEGRAM_BOT_USERNAME)">Telegram</span>
-        {% endif %}
+            {% else %}
+            <span class="social-btn github disabled">GitHub</span>
+            {% endif %}
+        </div>
+
+        <div class="link-row" style="margin-top:1rem;text-align:center;font-size:.82rem;">
+            Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a>
+        </div>
     </div>
-{% endblock %}
+</div>
+</body>
+</html>

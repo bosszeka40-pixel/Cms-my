@@ -1,55 +1,61 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — CMS Trading</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="dark">
+<div class="auth-page">
+    <div class="card">
+        <div style="text-align:center;margin-bottom:1.5rem;">
+            <span style="font-size:2rem;">₿</span>
+            <h1>Вход в CMS Trading</h1>
+            <p class="muted" style="font-size:.82rem;">Профессиональная торговая платформа</p>
+        </div>
 
-{% block content %}
-    <h1 class="page-title">Вход в Super CMS</h1>
-    <p class="lead">Введите свои учетные данные, чтобы получить доступ к панели управления ботом и настройкам.</p>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
-    <form method="post">
-        <div class="field-group">
-            <label for="username">Email или Имя пользователя</label>
-            <input type="text" id="username" name="username" placeholder="Введите email или username" required>
-        </div>
-        <div class="field-group">
-            <label for="password">Пароль</label>
-            <input type="password" id="password" name="password" placeholder="Введите пароль" required>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 20px;">
-            <label><input type="checkbox" name="remember"> Запомнить меня</label>
-            <a class="footer-link" href="{{ url_for('forgot_password') }}">Забыли пароль?</a>
-        </div>
-        <button type="submit" class="btn">Войти</button>
-    </form>
-    <p style="margin-top: 20px;">Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a></p>
-    {% if dev_admin_bypass_enabled %}
-    <form method="post" action="{{ url_for('dev_admin_bypass') }}" style="margin-top: 10px;">
-        <button type="submit" class="btn" style="background:#c0392b;">⚠ Временно: войти как админ (без пароля)</button>
-    </form>
-    <p class="small-note">Временная кнопка для разработки. Удалить перед продакшн-релизом.</p>
-    {% endif %}
-    <div class="small-note">или войти через</div>
-    <div class="social-btns">
-        {% if google_configured %}
+        {% if message %}<div class="message error">{{ message }}</div>{% endif %}
+
+        <form method="post" action="{{ url_for('login') }}">
+            <div class="field-group">
+                <label>Email</label>
+                <input type="email" name="username" required placeholder="your@email.com" autocomplete="email">
+            </div>
+            <div class="field-group">
+                <label>Пароль</label>
+                <input type="password" name="password" required placeholder="••••••••" autocomplete="current-password">
+            </div>
+            <button class="btn btn-block" type="submit" style="margin-top:.5rem;">Войти</button>
+        </form>
+
+        {% if dev_admin_bypass_enabled %}
+        <form method="post" action="{{ url_for('dev_admin_bypass') }}" style="margin-top:.75rem;">
+            <button class="btn btn-outline btn-block" type="submit">🔑 Dev Admin Bypass</button>
+        </form>
+        {% endif %}
+
+        <div class="divider">или</div>
+
+        <div class="social-btns">
+            {% if google_configured %}
             <a class="social-btn google" href="{{ url_for('social_login', provider='google') }}">Google</a>
-        {% else %}
-            <span class="social-btn google disabled" title="Google login не настроен на сервере (GOOGLE_CLIENT_ID/SECRET)">Google</span>
-        {% endif %}
-        {% if github_configured %}
+            {% else %}
+            <span class="social-btn google disabled">Google</span>
+            {% endif %}
+            {% if github_configured %}
             <a class="social-btn github" href="{{ url_for('social_login', provider='github') }}">GitHub</a>
-        {% else %}
-            <span class="social-btn github disabled" title="GitHub login не настроен на сервере (GITHUB_CLIENT_ID/SECRET)">GitHub</span>
-        {% endif %}
-        {% if telegram_configured %}
-            <span id="telegram-login-widget"></span>
-            <script async src="https://telegram.org/js/telegram-widget.js?22"
-                data-telegram-login="{{ telegram_bot_username }}"
-                data-size="large"
-                data-auth-url="{{ url_for('telegram_callback') }}"
-                data-request-access="write"></script>
-        {% else %}
-            <span class="social-btn telegram disabled" title="Telegram login не настроен на сервере (TELEGRAM_BOT_TOKEN/TELEGRAM_BOT_USERNAME)">Telegram</span>
-        {% endif %}
-    </div>
-{% endblock %}
+            {% else %}
+            <span class="social-btn github disabled">GitHub</span>
+            {% endif %}
+        </div>
 
+        <div class="link-row" style="margin-top:1rem;text-align:center;font-size:.82rem;">
+            <a href="{{ url_for('forgot_password') }}">Забыли пароль?</a>
+            <span class="text-muted"> · </span>
+            <a href="{{ url_for('register') }}">Регистрация</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>
