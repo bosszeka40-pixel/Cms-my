@@ -1,223 +1,303 @@
 {% extends 'base.html' %}
-
+{% block title %}Управление ботом — CMS Trading{% endblock %}
 {% block breadcrumb %}Торговля / Бот{% endblock %}
 
 {% block content %}
-    <div class="page-head">
-        <div>
-            <span class="eyebrow">Автоматизация</span>
-            <h1 class="page-title">Управление ботом</h1>
-            <p class="lead">Стратегия, запуск, рыночные данные, контроль риска и авто-генерация.</p>
-        </div>
-        <div class="hero-badge"><strong>{{ 'ON' if bot_status.active else 'OFF' }}</strong><span>статус бота</span></div>
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Автоматизация</span>
+        <h1 class="page-title">Управление ботом</h1>
+        <p class="lead">Стратегия, запуск, параметры, AI и авто-генерация.</p>
     </div>
-
-    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
-
-    <!-- Bot status + Activity -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
-        <div class="card">
-            <h2>Статус бота</h2>
-            <div class="stat-grid">
-                <div><span class="stat-value" id="bot-active">{{ 'запущен' if bot_status.active else 'остановлен' }}</span><div class="stat-label">Активность</div></div>
-                <div><span class="stat-value" id="bot-runs">{{ bot_status.runs }}</span><div class="stat-label">События</div></div>
-                <div><span class="stat-value">{{ bot_status.trade_count|default(0) }}</span><div class="stat-label">Сделок</div></div>
-                <div><span class="stat-value">{{ bot_status.win_rate|default(0) }}%</span><div class="stat-label">Винрейт</div></div>
-                <div><span class="stat-value">{{ '%.4f'|format(bot_status.total_pnl|default(0)) }}</span><div class="stat-label">P/L</div></div>
-                <div><span class="stat-value">{{ '%.2f'|format(bot_status.current_balance|default(100)) }}€</span><div class="stat-label">Баланс</div></div>
-            </div>
-            <div class="button-row">
-                <form id="start-form" method="post" style="display:none;"><input type="hidden" name="action" value="start_bot"></form>
-                <form id="stop-form" method="post" style="display:none;"><input type="hidden" name="action" value="stop_bot"></form>
-                <button class="btn" onclick="document.getElementById('start-form').submit()">Запустить</button>
-                <button class="btn btn-danger" onclick="document.getElementById('stop-form').submit()">Остановить</button>
-            </div>
-        </div>
-        <div class="card">
-            <h2>Журнал активности</h2>
-            <div id="bot-activity-log" style="max-height:300px;overflow-y:auto;font-size:.82rem;">
-                {% if bot_status.activity_log %}
-                    {% for event in bot_status.activity_log %}
-                    <div style="padding:.5rem;border-bottom:1px solid var(--border);">
-                        <div style="font-size:.72rem;color:var(--muted);">{{ event.time[:19]|replace('T',' ') if event.time else '—' }}</div>
-                        <div style="font-weight:600;">{{ event.event or '—' }}</div>
-                        <div style="color:var(--muted);">{{ event.detail or '' }}</div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="term-empty">Бот не активен. Нажмите «Запустить».</div>
-                {% endif %}
-            </div>
-            <div style="padding:.5rem;text-align:center;">
-                <button class="btn btn-outline btn-sm" onclick="refreshActivity()" type="button">Обновить</button>
-            </div>
-        </div>
+    <div class="hero-badge" style="{% if bot_status.active %}border-color:var(--success){% endif %}">
+        <strong style="color:{% if bot_status.active %}var(--success){% else %}var(--text-muted){% endif %};">{{ 'ON' if bot_status.active else 'OFF' }}</strong>
+        <span>статус</span>
     </div>
+</div>
 
-    <!-- Strategy + Config -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
-        <div class="card">
-            <h2>Стратегия</h2>
-            <form method="post" id="strategy-form">
-                <input type="hidden" name="action" value="save_strategy">
-                <div class="field-group"><label for="strategy">Стратегия</label>
-                    <select id="strategy" name="strategy">
-                        <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester — Бесплатно</option>
-                        <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum — Бесплатно</option>
-                        <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender — Бесплатно</option>
-                        <option value="trend_breakout_compound" {% if current_strategy == 'trend_breakout_compound' %}selected{% endif %}>Trend Breakout — Бесплатно</option>
-                        <option value="multi_sentiment_scalper" {% if current_strategy == 'multi_sentiment_scalper' %}selected{% endif %}>Multi Sentiment — Бесплатно</option>
-                        <option value="neural_pattern_recognizer" {% if current_strategy == 'neural_pattern_recognizer' %}selected{% endif %}>Neural Pattern — Платиновая</option>
-                        <option value="delta_neutral_hedger" {% if current_strategy == 'delta_neutral_hedger' %}selected{% endif %}>Delta Neutral — Платиновая</option>
-                        <option value="volatility_harvest" {% if current_strategy == 'volatility_harvest' %}selected{% endif %}>Volatility Harvest — Премиум</option>
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<!-- Bot Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:1rem;">
+    <div class="card stat-tile">
+        <div class="stat-value" style="font-size:.9rem;">{{ '🟢' if bot_status.active else '🔴' }}</div>
+        <div class="stat-label">Статус</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ bot_status.trade_count|default(0) }}</div>
+        <div class="stat-label">Сделок</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ bot_status.win_rate|default(0) }}%</div>
+        <div class="stat-label">Винрейт</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value" style="color:{% if bot_status.total_pnl|default(0) > 0 %}var(--success){% elif bot_status.total_pnl|default(0) < 0 %}var(--danger){% endif %};">{{ '%.4f'|format(bot_status.total_pnl|default(0)) }}€</div>
+        <div class="stat-label">P/L</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ '%.2f'|format(bot_status.current_balance|default(100)) }}€</div>
+        <div class="stat-label">Баланс</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ bot_status.strategies_generated|default(0) }}</div>
+        <div class="stat-label">Сгенерировано</div>
+    </div>
+</div>
+
+<!-- Start/Stop -->
+<div class="card" style="margin-bottom:1rem;">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-success" onclick="botAction('start')">▶ Запустить</button>
+        <button class="btn btn-danger" onclick="botAction('stop')">⏹ Остановить</button>
+        <button class="btn btn-outline" onclick="location.reload()">🔄 Обновить</button>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-left:.5rem;">Текущая стратегия: <strong style="color:var(--primary);">{{ current_strategy }}</strong></span>
+    </div>
+</div>
+
+<!-- Strategy + Parameters -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📊 Выбор стратегии и параметры</h2>
+    <form method="post" id="strategy-form">
+        <input type="hidden" name="action" value="save_strategy">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Стратегия</label>
+                <select id="strategy-select" name="strategy" onchange="showStrategyParams(this.value)">
+                    <optgroup label="Базовые">
+                        <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                        <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
+                        <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
+                    </optgroup>
+                    <optgroup label="Продвинутые">
+                        <option value="trend_breakout_compound" {% if current_strategy == 'trend_breakout_compound' %}selected{% endif %}>Trend Breakout</option>
+                        <option value="multi_sentiment_scalper" {% if current_strategy == 'multi_sentiment_scalper' %}selected{% endif %}>Multi Sentiment Scalper</option>
+                        <option value="ai_adaptive_momentum" {% if current_strategy == 'ai_adaptive_momentum' %}selected{% endif %}>AI Adaptive Momentum</option>
+                    </optgroup>
+                    <optgroup label="Экспертные">
+                        <option value="quantum_grid_trader" {% if current_strategy == 'quantum_grid_trader' %}selected{% endif %}>Quantum Grid Trader</option>
+                        <option value="neural_pattern_recognition" {% if current_strategy == 'neural_pattern_recognition' %}selected{% endif %}>Neural Pattern Recognition</option>
+                        <option value="delta_neutral_hedger" {% if current_strategy == 'delta_neutral_hedger' %}selected{% endif %}>Delta Neutral Hedger</option>
+                        <option value="volatility_harvest" {% if current_strategy == 'volatility_harvest' %}selected{% endif %}>Volatility Harvest</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Режим бота</label>
+                <select name="bot_mode" id="bot-mode">
+                    <option value="strategy">Вы стратегию — бот следует</option>
+                    <option value="full_auto">Full Auto — бот сам меняет стратегии</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Signal Source Settings -->
+        <div style="margin:1rem 0;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <h4 style="margin:0 0 .5rem 0;font-size:.9rem;">Настройки сигналов<span data-info="signal"></span></h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                <div class="field-group">
+                    <label>Источник сигналов</label>
+                    <select name="signal_source" id="signal-source">
+                        <option value="bot">Только бот (стратегия)</option>
+                        <option value="ai">Только ИИ (AI анализ)</option>
+                        <option value="ai_bot">ИИ + Бот (комбинированный)</option>
                     </select>
                 </div>
-                <div class="field-group"><label for="strategy-info">Описание</label><p id="strategy-info" class="muted" style="font-size:.85rem;">—</p></div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;">
-                    <div class="field-group"><label for="leverage">Леверидж</label><input type="number" id="leverage" name="leverage" step="0.1" min="0.1" max="10" value="{{ config.get('leverage', 1.5) }}"></div>
-                    <div class="field-group"><label for="risk_tolerance">Риск</label><input type="number" id="risk_tolerance" name="risk_tolerance" step="0.01" min="0" max="1" value="{{ config.get('risk_tolerance', 0.03) }}"></div>
-                    <div class="field-group"><label for="fee_rate">Комиссия</label><input type="number" id="fee_rate" name="fee_rate" step="0.001" min="0" max="0.05" value="{{ config.get('fee_rate', 0.001) }}"></div>
+                <div class="field-group">
+                    <label>Порог уверенности (%)</label>
+                    <input type="number" name="signal_confidence" value="60" min="0" max="100" step="5">
                 </div>
-                <button class="btn" type="submit" style="margin-top:1rem;">Сохранить стратегию</button>
-            </form>
+                <div class="field-group">
+                    <label>Auto-Apply сигналов</label>
+                    <select name="auto_apply">
+                        <option value="off">Выключено</option>
+                        <option value="demo">Только демо</option>
+                        <option value="live">Демо + LIVE</option>
+                    </select>
+                </div>
+            </div>
+            <p style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0 0 0;">
+                Бот: стратегия определяет сигнал. ИИ: анализирует рынок. ИИ+бот: комбинирует оба подхода.
+                Auto-Apply: автоматически применять сигналы к сделкам.
+            </p>
         </div>
-        <div class="card">
-            <h2>Авто-генерация</h2>
-            <p class="muted" style="font-size:.85rem;margin-bottom:1rem;">Бот создаёт новые стратегии, тестирует их и публикует в маркетплейс на 15 дней бесплатно.</p>
-            <div class="stat-grid" style="margin-bottom:1rem;">
-                <div class="stat-tile"><div class="stat-value">{{ bot_status.strategies_generated|default(0) }}</div><div class="stat-label">Сгенерировано</div></div>
-                <div class="stat-tile"><div class="stat-value">{{ bot_status.strategies_published|default(0) }}</div><div class="stat-label">Опубликовано</div></div>
-            </div>
-            <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-                <button class="btn" id="generate-btn" onclick="generateStrategies()" type="button">Сгенерировать сейчас</button>
-                <button class="btn btn-outline" onclick="toggleAutoGenerate()" type="button">{{ 'Выкл. авто' if bot_status.auto_generate else 'Вкл. авто' }}</button>
-            </div>
-            <div id="generation-result" class="small-note" style="margin-top:.75rem;"></div>
 
-            <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem;">
-                <h3>Создать свою стратегию</h3>
-                <form onsubmit="createStrategy(event)">
-                    <div class="field-group"><label>Название</label><input type="text" id="new-strategy-name" required placeholder="Моя стратегия"></div>
-                    <div class="field-group"><label>Описание</label><input type="text" id="new-strategy-desc" placeholder="Описание стратегии"></div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;">
-                        <div class="field-group"><label>Тип</label>
-                            <select id="new-strategy-type">
-                                <option value="trend_following">Trend Following</option>
-                                <option value="mean_reversion">Mean Reversion</option>
-                                <option value="breakout">Breakout</option>
-                                <option value="scalping">Scalping</option>
-                                <option value="arbitrage">Arbitrage</option>
-                            </select>
-                        </div>
-                        <div class="field-group"><label>Леверидж</label><input type="number" id="new-leverage" value="1.5" step="0.1" min="0.1" max="10"></div>
-                    </div>
-                    <div class="field-group"><label>Риск</label><input type="number" id="new-risk" value="0.03" step="0.01" min="0" max="1"></div>
-                    <label class="term-check-row" style="margin:.5rem 0;"><input type="checkbox" id="new-strategy-public"> Опубликовать в маркетплейсе (15 дн. бесплатно)</label>
-                    <button class="btn btn-sm" type="submit">Создать стратегию</button>
-                </form>
-                <div id="user-strategies" class="small-note" style="margin-top:.5rem;"></div>
-            </div>
+        <!-- Strategy Parameters Panel -->
+        <div id="strategy-params" style="margin:1rem 0;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div id="params-content"></div>
         </div>
-    </div>
 
-    <!-- Market data -->
-    <div class="terminal-grid" style="margin-bottom:1rem;">
-        <div class="card">
-            <h2>Рынок <span id="market-source" class="status-pill">нет данных</span></h2>
-            <div class="form-grid">
-                <div class="field-group"><label for="market-pair">Пара</label><select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
-                <div class="field-group"><label for="market-exchange">Биржа</label><select id="market-exchange">{% for exchange in trading_exchanges %}<option>{{ exchange }}</option>{% endfor %}</select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Леверидж (x)</label>
+                <input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" min="0.1" max="2.0" step="0.1" id="leverage-input">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-top:.2rem;">Диапазон: 0.1x — 2.0x</div>
             </div>
-            <div class="button-row"><button class="btn" id="refresh-market" type="button">Обновить данные</button><button class="btn btn-outline" id="get-signal" type="button">Сигнал</button></div>
-            <div id="ticker" class="market-stats muted" style="margin-top:.5rem;">Загрузите данные.</div>
-            <div id="signal-result" class="small-note" role="status"></div>
-            <canvas id="price-chart" height="260" aria-label="График" style="margin-top:.5rem;width:100%;"></canvas>
+            <div class="field-group">
+                <label>Риск-толерантность</label>
+                <input type="number" name="risk_tolerance" value="{{ config.risk_tolerance|default(0.03) }}" min="0.01" max="1.0" step="0.01" id="risk-input">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-top:.2rem;">Макс. потеря за сделку: 1-100%</div>
+            </div>
+            <div class="field-group">
+                <label>Комиссия</label>
+                <input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" min="0" max="0.05" step="0.0001" id="fee-input">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-top:.2rem;">Ставка: 0-5%</div>
+            </div>
         </div>
-        <div class="card">
-            <h2>Демо-торговля</h2>
-            <form onsubmit="demoTrade(event)">
-                <div class="field-group"><label>Пара</label><select id="demo-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select></div>
-                <div class="field-group"><label>Сентимент</label><input type="number" id="demo-sentiment" value="0.5" step="0.1" min="-1" max="1"></div>
-                <div class="field-group"><label>Изменение цены %</label><input type="number" id="demo-change" value="0" step="0.1"></div>
-                <button class="btn btn-sm" type="submit" style="margin-top:.5rem;">Выполнить сделку</button>
-            </form>
-            <div id="demo-result" style="margin-top:.5rem;font-size:.82rem;"></div>
-        </div>
+        <button class="btn" type="submit" style="margin-top:.5rem;">Сохранить стратегию</button>
+    </form>
+</div>
+
+<!-- Activity Log -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📋 Журнал активности</h2>
+    <div id="bot-activity-log" style="max-height:300px;overflow-y:auto;">
+        {% if bot_status.activity_log %}
+            {% for event in bot_status.activity_log %}
+            <div style="padding:.5rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <span style="font-weight:600;font-size:.82rem;">{{ event.event or '—' }}</span>
+                    <span style="font-size:.75rem;color:var(--text-secondary);margin-left:.5rem;">{{ event.detail or '' }}</span>
+                </div>
+                <span style="font-size:.68rem;color:var(--text-muted);">{{ event.time[:19]|replace('T',' ') if event.time else '' }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="term-empty">Бот не активен. Нажмите «Запустить».</div>
+        {% endif %}
     </div>
+</div>
+
+<!-- Auto Generate -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>🤖 Авто-генерация стратегий</h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:.75rem;">Бот генерирует, тестирует и публикует лучшие стратегии в маркет.</p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-success btn-sm" id="generate-btn" onclick="generateStrategies()">🧪 Сгенерировать сейчас</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleAutoGenerate()">{{ 'Отключить автогенерацию' if bot_status.auto_generate else 'Включить автогенерацию' }}</button>
+        <span style="font-size:.75rem;color:var(--text-muted);">Сгенерировано: {{ bot_status.strategies_generated|default(0) }} | Опубликовано: {{ bot_status.strategies_published|default(0) }}</span>
+    </div>
+    <div id="generation-result" style="margin-top:.75rem;font-size:.82rem;"></div>
+</div>
+
+<!-- User Strategies -->
+<div class="card">
+    <h2>📝 Мои стратегии</h2>
+    <form onsubmit="createStrategy(event)" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:1rem;">
+        <input type="text" id="new-strategy-name" placeholder="Название" required style="margin:0;">
+        <input type="text" id="new-strategy-desc" placeholder="Описание" style="margin:0;">
+        <button class="btn btn-sm" type="submit">Создать</button>
+    </form>
+    <div id="user-strategies" style="font-size:.82rem;"></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const strategyParams = {
-    'pure_harvester': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'Сбор дневной доходности через реинвестирование прибыли.'},
-    'high_frequency_momentum': {leverage: 2.0, risk: 0.05, fee: 0.001, desc: 'Высокочастотная торговля на основе импульса.'},
-    'compound_defender': {leverage: 1.2, risk: 0.02, fee: 0.001, desc: 'Защитная стратегия с компаундированием.'},
-    'trend_breakout_compound': {leverage: 1.8, risk: 0.04, fee: 0.001, desc: 'Компаунд-пробой на тренде.'},
-    'multi_sentiment_scalper': {leverage: 1.5, risk: 0.03, fee: 0.001, desc: 'Мультисентиментный скальпинг.'},
-    'neural_pattern_recognizer': {leverage: 2.0, risk: 0.03, fee: 0.001, desc: 'Нейросетевой анализ паттернов.'},
-    'delta_neutral_hedger': {leverage: 1.0, risk: 0.01, fee: 0.001, desc: 'Дельта-нейтральный хеджер.'},
-    'volatility_harvest': {leverage: 1.8, risk: 0.05, fee: 0.001, desc: 'Сбор волатильности на рынке.'},
+const STRATEGY_PARAMS = {
+    pure_harvester: {
+        name: 'Pure Harvester', desc: 'Следование за трендом. Покупает при росте, продаёт при падении.',
+        signal: 'Направление тренда', leverage: '1.0-1.5x', risk: 'Низкий',
+        stop_loss: '2-3%', take_profit: '3-5%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Трендовый',
+    },
+    high_frequency_momentum: {
+        name: 'HFT Momentum', desc: 'Высокочастотная торговля на импульсе. Быстрые сделки.',
+        signal: 'Сила импульса', leverage: '1.5-2.0x', risk: 'Высокий',
+        stop_loss: '1-2%', take_profit: '1-3%', timeframe: '1m-15m',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Вolatile',
+    },
+    compound_defender: {
+        name: 'Compound Defender', desc: 'Защита капитала. Контртренд с низким плечом.',
+        signal: 'Против тренда', leverage: '0.8-1.0x', risk: 'Низкий',
+        stop_loss: '3-5%', take_profit: '2-4%', timeframe: '4h-1d',
+        pairs: 'BTC/USDT', best_market: 'Спокойный',
+    },
+    trend_breakout_compound: {
+        name: 'Trend Breakout', desc: 'Прорыв уровней поддержки/сопротивления.',
+        signal: 'Пробой уровня', leverage: '1.2-1.8x', risk: 'Средний',
+        stop_loss: '2-4%', take_profit: '4-8%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT, SOL/USDT', best_market: 'Пробойный',
+    },
+    multi_sentiment_scalper: {
+        name: 'Multi Sentiment', desc: 'Комбинирование новостного.sentiment и ценового изменения.',
+        signal: 'Sentiment + Price', leverage: '1.5-2.0x', risk: 'Высокий',
+        stop_loss: '1-2%', take_profit: '2-5%', timeframe: '15m-1h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Новостной',
+    },
+    ai_adaptive_momentum: {
+        name: 'AI Adaptive', desc: 'Адаптивный порог подстраивается под баланс и рынок.',
+        signal: 'AI порог', leverage: '1.0-1.5x', risk: 'Средний',
+        stop_loss: '2-3%', take_profit: '3-6%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Любой',
+    },
+    quantum_grid_trader: {
+        name: 'Quantum Grid', desc: 'Сеточная торговля с масштабированием по sentiment.',
+        signal: 'Сетка + Sentiment', leverage: '1.0-1.2x', risk: 'Низкий',
+        stop_loss: '3-5%', take_profit: '1-3%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Боковой',
+    },
+    neural_pattern_recognition: {
+        name: 'Neural Pattern', desc: 'Паттерн-анализ на основе нейросетевого score.',
+        signal: 'Pattern Score', leverage: '1.0-1.5x', risk: 'Средний',
+        stop_loss: '2-4%', take_profit: '3-6%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Паттерный',
+    },
+    delta_neutral_hedger: {
+        name: 'Delta Neutral', desc: 'Хеджированная позиция. Минимальный риск, стабильный доход.',
+        signal: 'Против изменения', leverage: '0.8-1.0x', risk: 'Минимальный',
+        stop_loss: '5-8%', take_profit: '2-4%', timeframe: '4h-1d',
+        pairs: 'BTC/USDT', best_market: 'Стабильный',
+    },
+    volatility_harvest: {
+        name: 'Volatility Harvest', desc: 'Сбор дохода от волатильности. Агрессивный при сильных движениях.',
+        signal: 'Абс. волатильность', leverage: '1.5-1.8x', risk: 'Высокий',
+        stop_loss: '2-3%', take_profit: '3-7%', timeframe: '15m-1h',
+        pairs: 'BTC/USDT, ETH/USDT, SOL/USDT', best_market: 'Волатильный',
+    },
 };
 
-function updateStrategyParams(strategy) {
-    const params = strategyParams[strategy];
-    if (!params) return;
-    document.getElementById('leverage').value = params.leverage;
-    document.getElementById('risk_tolerance').value = params.risk;
-    document.getElementById('fee_rate').value = params.fee;
-    document.getElementById('strategy-info').textContent = params.desc;
+function showStrategyParams(strategy) {
+    const p = STRATEGY_PARAMS[strategy];
+    if (!p) return;
+    document.getElementById('params-content').innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;">
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Стратегия</div><div style="font-weight:600;">${p.name}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Описание</div><div style="font-size:.82rem;">${p.desc}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Сигнал</div><div style="font-weight:600;color:var(--accent);">${p.signal}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Леверидж</div><div style="font-weight:600;">${p.leverage}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Риск</div><div style="font-weight:600;color:${p.risk==='Высокий'?'var(--danger)':p.risk==='Низкий'?'var(--success)':'var(--warning)'};">${p.risk}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Stop Loss</div><div style="font-weight:600;color:var(--danger);">${p.stop_loss}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Take Profit</div><div style="font-weight:600;color:var(--success);">${p.take_profit}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Таймфрейм</div><div style="font-weight:600;">${p.timeframe}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Пары</div><div style="font-weight:600;">${p.pairs}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Лучший рынок</div><div style="font-weight:600;">${p.best_market}</div></div>
+        </div>
+    `;
 }
+showStrategyParams(document.getElementById('strategy-select').value);
 
-document.getElementById('strategy').addEventListener('change', function() {
-    updateStrategyParams(this.value);
-});
-updateStrategyParams('{{ current_strategy }}');
-
-async function refreshActivity() {
+async function botAction(action) {
     try {
-        const resp = await fetch('/api/bot/status');
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const el = document.getElementById('bot-activity-log');
-        if (data.activity_log && data.activity_log.length) {
-            el.innerHTML = data.activity_log.map(a =>
-                `<div style="padding:.5rem;border-bottom:1px solid var(--border);">` +
-                `<div style="font-size:.72rem;color:var(--muted);">${(a.time||'').substring(0,19).replace('T',' ')}</div>` +
-                `<div style="font-weight:600;">${a.event || '—'}</div>` +
-                `<div style="color:var(--muted);">${a.detail || a.strategy || ''}</div>` +
-                `</div>`
-            ).join('');
-        } else {
-            el.innerHTML = '<div class="term-empty">Бот не активен.</div>';
-        }
-    } catch(_) {}
+        const resp = await fetch('/api/bot/' + action, {method: 'POST'});
+        if (resp.ok) location.reload();
+    } catch(e) {}
 }
 
 async function generateStrategies() {
     const btn = document.getElementById('generate-btn');
     const el = document.getElementById('generation-result');
-    btn.disabled = true; btn.textContent = 'Генерация...';
-    el.textContent = 'Загружаем данные рынка и тестируем стратегии...';
+    btn.disabled = true; btn.textContent = '⏳ Генерация...';
     try {
         const resp = await fetch('/api/bot/generate', {method:'POST'});
         const data = await resp.json();
         if (resp.ok) {
-            let html = '<p>Сгенерировано: ' + data.generated + ' кандидатов</p>';
-            html += '<p>Победителей: ' + data.winners + '</p>';
-            html += '<p>Опубликовано: ' + data.published + '</p>';
-            if (data.winner_details && data.winner_details.length) {
-                html += '<h4 style="margin:.5rem 0 .25rem;">Лучшие:</h4>';
-                data.winner_details.forEach(w => {
-                    html += '<p>' + w.name + ' — доход ' + w.return + '%, винрейт ' + w.win_rate + '%</p>';
-                });
-            }
-            el.innerHTML = html;
+            el.innerHTML = `<span style="color:var(--success);">✓ Сгенерировано: ${data.generated} | Победителей: ${data.winners} | Опубликовано: ${data.published}</span>`;
         } else {
-            el.textContent = 'Ошибка: ' + (data.detail || 'неизвестная');
+            el.innerHTML = `<span style="color:var(--danger);">Ошибка: ${data.detail||'неизвестная'}</span>`;
         }
-    } catch(e) { el.textContent = 'Ошибка сети'; }
-    btn.disabled = false; btn.textContent = 'Сгенерировать сейчас';
-    refreshActivity();
+    } catch(e) { el.innerHTML = '<span style="color:var(--danger);">Ошибка сети</span>'; }
+    btn.disabled = false; btn.textContent = '🧪 Сгенерировать сейчас';
 }
 
 async function toggleAutoGenerate() {
@@ -230,20 +310,13 @@ async function createStrategy(e) {
     const payload = {
         name: document.getElementById('new-strategy-name').value,
         description: document.getElementById('new-strategy-desc').value,
-        strategy_type: document.getElementById('new-strategy-type').value,
-        leverage: parseFloat(document.getElementById('new-leverage').value),
-        risk_tolerance: parseFloat(document.getElementById('new-risk').value),
-        is_public: document.getElementById('new-strategy-public').checked,
+        strategy_type: document.getElementById('strategy-select').value,
+        leverage: parseFloat(document.getElementById('leverage-input').value) || 1.5,
+        risk_tolerance: parseFloat(document.getElementById('risk-input').value) || 0.03,
+        is_public: false,
     };
     const resp = await fetch('/api/strategies/create', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-    const data = await resp.json();
-    if (resp.ok) {
-        document.getElementById('user-strategies').textContent = 'Стратегия "' + data.name + '" создана!';
-        loadUserStrategies();
-        refreshActivity();
-    } else {
-        document.getElementById('user-strategies').textContent = 'Ошибка: ' + (data.detail || 'неизвестная');
-    }
+    if (resp.ok) { document.getElementById('user-strategies').textContent = 'Стратегия создана!'; loadUserStrategies(); }
 }
 
 async function loadUserStrategies() {
@@ -251,31 +324,14 @@ async function loadUserStrategies() {
     if (!resp.ok) return;
     const strategies = await resp.json();
     const el = document.getElementById('user-strategies');
-    if (strategies.length === 0) { el.textContent = 'У вас пока нет стратегий.'; return; }
-    el.innerHTML = strategies.map(s => '<p>' + s.name + ' (' + s.strategy_type + ')' + (s.is_public ? ' ★ публичная' : '') + ' — ' + s.created_at[:10] + '</p>').join('');
+    if (!strategies.length) { el.textContent = 'Нет стратегий.'; return; }
+    el.innerHTML = strategies.map(s => '<div style="padding:.4rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;"><span>' + s.name + ' (' + s.strategy_type + ')</span><span style="color:var(--text-muted);">' + s.created_at[:10] + '</span></div>').join('');
 }
 loadUserStrategies();
 
-async function demoTrade(e) {
-    e.preventDefault();
-    const payload = {
-        pair: document.getElementById('demo-pair').value,
-        strategy: document.getElementById('strategy').value,
-        sentiment: parseFloat(document.getElementById('demo-sentiment').value),
-        price_change: parseFloat(document.getElementById('demo-change').value),
-    };
-    const resp = await fetch('/api/demo/trade', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-    const data = await resp.json();
-    const el = document.getElementById('demo-result');
-    if (resp.ok) {
-        el.innerHTML = '<p style="color:var(--success);">P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€</p>';
-        refreshActivity();
-    } else {
-        el.innerHTML = '<p style="color:var(--danger);">Ошибка: ' + (data.detail || 'неизвестная') + '</p>';
-    }
-}
-
-// Auto refresh activity
-setInterval(refreshActivity, 5000);
+setInterval(() => { fetch('/api/bot/status').then(r=>r.json()).then(d => {
+    document.querySelectorAll('.stat-value')[1].textContent = d.trade_count || 0;
+    document.querySelectorAll('.stat-value')[2].textContent = (d.win_rate||0) + '%';
+}).catch(()=>{}); }, 5000);
 </script>
 {% endblock %}

@@ -71,6 +71,9 @@ class Wallet(Base):
     exchange_provider = Column(String, nullable=True)
     exchange_key_masked = Column(String, nullable=True)
     exchange_sandbox = Column(Boolean, default=True)
+    exchange_provider_arb = Column(String, nullable=True)
+    exchange_key_masked_arb = Column(String, nullable=True)
+    exchange_sandbox_arb = Column(Boolean, default=True)
     telegram_username = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -549,8 +552,8 @@ class CMSEngine:
     @staticmethod
     def _wallet_to_dict(wallet) -> dict:
         if not wallet:
-            return {"credits": 0.0, "balance": 0.0, "provider": None, "address": None, "exchange_provider": None, "exchange_address": None, "telegram": None}
-        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "exchange_sandbox": bool(wallet.exchange_sandbox), "telegram": wallet.telegram_username}
+            return {"credits": 0.0, "balance": 0.0, "provider": None, "address": None, "exchange_provider": None, "exchange_address": None, "telegram": None, "exchange_provider_arb": None, "exchange_key_masked_arb": None, "exchange_sandbox_arb": True}
+        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "exchange_sandbox": bool(wallet.exchange_sandbox), "telegram": wallet.telegram_username, "exchange_provider_arb": wallet.exchange_provider_arb, "exchange_key_masked_arb": wallet.exchange_key_masked_arb, "exchange_sandbox_arb": bool(wallet.exchange_sandbox_arb)}
 
     def update_wallet(self, email: str, **fields) -> dict:
         session = self.SessionLocal()

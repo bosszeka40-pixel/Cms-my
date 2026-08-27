@@ -843,3 +843,119 @@ tr:hover td { background: var(--bg-hover); }
 .mt-md { margin-top: 1rem; }
 .mb-sm { margin-bottom: .5rem; }
 .mb-md { margin-bottom: 1rem; }
+
+/* ═══════ Enhanced Mobile ═══════ */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        width: 240px;
+    }
+    body.menu-open .sidebar {
+        transform: translateX(0);
+        box-shadow: var(--shadow-lg);
+    }
+    .app-main {
+        margin-left: 0;
+    }
+    .menu-toggle {
+        display: block;
+    }
+    .cms-content {
+        padding: .75rem;
+    }
+    .page-title {
+        font-size: 1.2rem;
+    }
+    .page-head {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .5rem;
+    }
+    .stat-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: .5rem;
+    }
+    .stat-tile {
+        padding: .75rem .5rem;
+    }
+    .stat-value {
+        font-size: 1.1rem;
+    }
+    .grid {
+        grid-template-columns: 1fr;
+    }
+    .market-grid {
+        grid-template-columns: 1fr;
+    }
+    .market-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .filter-row {
+        flex-wrap: wrap;
+    }
+    .hero-badge {
+        padding: .5rem;
+    }
+    .btn {
+        padding: .5rem .75rem;
+        font-size: .78rem;
+    }
+    .card {
+        padding: 1rem;
+    }
+    input, select, textarea {
+        font-size: 16px;
+    }
+    .term-grid {
+        grid-template-columns: 1fr !important;
+    }
+    .term-panel {
+        max-height: none;
+    }
+    .term-chart-container {
+        min-height: 280px;
+    }
+    .term-header {
+        padding: .5rem;
+        gap: .5rem;
+    }
+    .term-stats {
+        gap: .75rem;
+    }
+    .topbar {
+        padding: .5rem .75rem;
+    }
+    .topbar-actions {
+        gap: .5rem;
+    }
+    table {
+        font-size: .75rem;
+    }
+    th, td {
+        padding: .4rem .3rem;
+    }
+    .market-metrics {
+        grid-template-columns: 1fr 1fr;
+    }
+    .term-order-form {
+        padding: .5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .stat-grid {
+        grid-template-columns: 1fr 1fr !important;
+    }
+    .sidebar {
+        width: 100%;
+    }
+    .term-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .term-stats {
+        width: 100%;
+        justify-content: space-between;
+    }
+}

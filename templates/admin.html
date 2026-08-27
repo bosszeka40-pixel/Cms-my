@@ -1,417 +1,188 @@
 {% extends 'base.html' %}
+{% block title %}Админ — CMS Trading{% endblock %}
+{% block breadcrumb %}Админ-панель{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Админ-панель</h1>
-    <p class="lead">Управление пользователями, плагинами, настройками платформы и выплатами.</p>
-    {% if message %}
-        <div class="message success">{{ message }}</div>
-    {% endif %}
-    <nav class="admin-nav">
-        <a href="#site-settings">Настройки сайта</a>
-        <a href="#social-login">Соцвход</a>
-        <a href="#payout-settings">Выплаты</a>
-        <a href="#trading-settings">Торговля</a>
-        <a href="#risk">Безопасность</a>
-        <a href="#live-controls">LIVE-контроли</a>
-        <a href="#plugins">Плагины</a>
-        <a href="#users">Пользователи и роли</a>
-        <a href="#wallets">Кошельки</a>
-        <a href="#purchases">Покупки</a>
-        <a href="#stats">Статистика</a>
-        <a href="#diagnostics">Диагностика</a>
-    </nav>
-    <div class="grid admin-grid">
-        <section class="card" id="site-settings">
-            <h2>Настройки сайта</h2>
-            <p class="muted">Название, доступные биржи/кошельки и режим обслуживания — применяются ко всему сайту.</p>
-            <form method="post">
-                <input type="hidden" name="action" value="save_site_settings">
-                <div class="field-group">
-                    <label for="site_name">Название сайта</label>
-                    <input type="text" id="site_name" name="site_name" value="{{ site_settings.site_name }}" required>
-                </div>
-                <div class="field-group">
-                    <label for="support_contact">Контакт поддержки</label>
-                    <input type="text" id="support_contact" name="support_contact" value="{{ site_settings.support_contact }}" placeholder="support@example.com">
-                </div>
-                <div class="field-group">
-                    <label><input type="checkbox" name="maintenance_mode" {% if site_settings.maintenance_mode == 'true' %}checked{% endif %}> Режим обслуживания (сайт закрыт для пользователей)</label>
-                </div>
-                <div class="field-group">
-                    <label>Доступные биржи в маркетплейсе</label>
-                    {% for ex in supported_exchanges %}
-                        <label class="inline-check">
-                            <input type="checkbox" name="allowed_exchanges" value="{{ ex }}" {% if ex in allowed_exchanges %}checked{% endif %}> {{ ex }}
-                        </label>
-                    {% endfor %}
-                </div>
-                <div class="field-group">
-                    <label>Доступные кошельки в маркетплейсе</label>
-                    {% for w in wallet_providers %}
-                        <label class="inline-check">
-                            <input type="checkbox" name="allowed_wallets" value="{{ w }}" {% if w in allowed_wallets %}checked{% endif %}> {{ w }}
-                        </label>
-                    {% endfor %}
-                </div>
-                <button type="submit" class="btn">Сохранить настройки сайта</button>
-            </form>
-        </section>
-        <section class="card" id="social-login">
-            <h2>Вход через соцсети</h2>
-            <p class="muted">Статус OAuth-провайдеров (настраивается через переменные окружения на сервере).</p>
-            <ul>
-                <li>Google: <strong>{{ 'настроен' if google_configured else 'не настроен' }}</strong></li>
-                <li>GitHub: <strong>{{ 'настроен' if github_configured else 'не настроен' }}</strong></li>
-                <li>Telegram: <strong>{{ 'настроен' if telegram_configured else 'не настроен' }}</strong></li>
-            </ul>
-        </section>
-        <section class="card" id="payout-settings">
-            <h2>Получение средств от продаж</h2>
-            <p class="muted">Укажите реквизиты для зачисления выручки. Платёжные операции выполняются только после подключения соответствующего сервиса.</p>
-            <form method="post">
-                <input type="hidden" name="action" value="save_payout_settings">
-                <h3>Криптовалютные выплаты</h3>
-                <div class="field-group">
-                    <label for="crypto_asset">Валюта</label>
-                    <select id="crypto_asset" name="crypto_asset">
-                        {% for asset in crypto_payout_assets %}
-                            <option value="{{ asset }}" {% if payout_settings.crypto_asset == asset %}selected{% endif %}>{{ asset }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="crypto_network">Сеть</label>
-                    <input type="text" id="crypto_network" name="crypto_network" value="{{ payout_settings.crypto_network }}" placeholder="Например, ERC-20 или TRC-20" required>
-                </div>
-                <div class="field-group">
-                    <label for="crypto_address">Адрес получения</label>
-                    <input type="text" id="crypto_address" name="crypto_address" value="{{ payout_settings.crypto_address }}" autocomplete="off" required>
-                </div>
-                <h3>Выплаты на банковскую карту</h3>
-                <div class="field-group">
-                    <label for="card_provider">Платёжный сервис</label>
-                    <select id="card_provider" name="card_provider">
-                        {% for provider in card_payout_services %}
-                            <option value="{{ provider }}" {% if payout_settings.card_provider == provider %}selected{% endif %}>{{ provider }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="card_recipient">Аккаунт сервиса или merchant ID</label>
-                    <input type="text" id="card_recipient" name="card_recipient" value="{{ payout_settings.card_recipient }}" autocomplete="off" placeholder="Email или merchant ID" required>
-                </div>
-                <p class="small-note">Выплаты на банковскую карту доступны только в EUR. Номер карты в CMS не сохраняется.</p>
-                <button type="submit" class="btn">Сохранить реквизиты выплат</button>
-            </form>
-        </section>
-        <section class="card" id="trading-settings">
-            <h2>Настройки торговой платформы</h2>
-            <p class="muted">Эти параметры применяются к стратегиям и тестам пользователей.</p>
-            <form method="post">
-                <input type="hidden" name="action" value="save_admin_settings">
-                <div class="field-group">
-                    <label for="admin_strategy">Стратегия по умолчанию</label>
-                    <select id="admin_strategy" name="strategy">
-                        <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
-                        <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
-                        <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="admin_leverage">Леверидж</label>
-                    <input type="number" id="admin_leverage" name="leverage" min="0.1" max="10" step="0.1" value="{{ config.leverage }}">
-                </div>
-                <div class="field-group">
-                    <label for="admin_risk">Допустимый риск</label>
-                    <input type="number" id="admin_risk" name="risk_tolerance" min="0" max="1" step="0.01" value="{{ config.risk_tolerance }}">
-                </div>
-                <div class="field-group">
-                    <label for="admin_fee_rate">Комиссия за сделку (доля)</label>
-                    <input type="number" id="admin_fee_rate" name="fee_rate" min="0" max="0.05" step="0.0001" value="{{ config.fee_rate }}">
-                </div>
-                <button type="submit" class="btn">Сохранить настройки</button>
-            </form>
-        </section>
-        <section class="card admin-risk-card" id="risk">
-            <h2>Безопасность торговли</h2>
-            <p class="muted">Контроль kill switch и лимитов применяется ко всем пользователям.</p>
-            <p><strong>Kill switch:</strong> {{ risk.kill_switch|default(false) }}</p>
-            <p><strong>Дневной P/L:</strong> {{ risk.daily_pnl|default(0) }}</p>
-            <form method="post" action="{{ url_for('admin_risk_action') }}">
-                <button class="btn" type="submit" name="enabled" value="true">Остановить торговлю</button>
-                <button class="btn" type="submit" name="enabled" value="false">Возобновить торговлю</button>
-            </form>
-        </section>
-        <section class="card" id="live-controls">
-            <h2>LIVE-контроли</h2>
-            <p class="muted">Это отдельный административный шлюз реальной торговли. Без явного разрешения каждый новый Bot и AI Bot заблокирован.</p>
-            <div id="live-controls-status" class="small-note">Загрузка состояния...</div>
-            <div class="field-group">
-                <strong>Глобальный Kill Switch</strong>
-                <p id="global-live-state" class="small-note">Состояние загружается...</p>
-                <div class="button-row">
-                    <button class="btn" type="button" data-live-global="true">Выключить LIVE</button>
-                    <button class="btn" type="button" data-live-global="false">Разрешить LIVE</button>
-                </div>
-            </div>
-            <div class="field-group">
-                <h3>Bots</h3>
-                <div id="live-bot-controls"><p class="muted">Нет зарегистрированных Bot-контролей.</p></div>
-                <label for="new-bot-id">Известный ID Bot</label>
-                <div class="button-row">
-                    <input id="new-bot-id" type="text" placeholder="например: bot-1" autocomplete="off">
-                    <button class="btn" type="button" id="add-bot-control">Добавить контроль</button>
-                </div>
-            </div>
-            <div class="field-group">
-                <h3>AI Bots</h3>
-                <div id="live-ai-bot-controls"><p class="muted">Нет зарегистрированных AI Bot-контролей.</p></div>
-                <label for="new-ai-bot-id">Известный ID AI Bot</label>
-                <div class="button-row">
-                    <input id="new-ai-bot-id" type="text" placeholder="например: ai-1" autocomplete="off">
-                    <button class="btn" type="button" id="add-ai-bot-control">Добавить контроль</button>
-                </div>
-            </div>
-            <details>
-                <summary>Аудит LIVE-контролей</summary>
-                <pre id="live-control-audit" style="white-space: pre-wrap; max-height: 260px; overflow-y: auto;">Загрузка...</pre>
-            </details>
-        </section>
-        <section class="card" id="plugins">
-            <h2>Плагины</h2>
-            <form method="post">
-                <input type="hidden" name="action" value="create_plugin">
-                <div class="field-group"><label for="plugin_name">Название</label><input type="text" id="plugin_name" name="plugin_name" required></div>
-                <div class="field-group"><label for="plugin_price">Цена CMSC</label><input type="number" id="plugin_price" name="plugin_price" min="0.01" step="0.01" required></div>
-                <div class="field-group"><label for="plugin_description">Описание</label><textarea id="plugin_description" name="plugin_description" rows="4"></textarea></div>
-                <button type="submit" class="btn">Создать плагин</button>
-            </form>
-            {% if plugins %}
-                <h3>Существующие плагины</h3>
-                {% for plugin in plugins %}
-                    <form method="post" class="plugin-edit-form">
-                        <input type="hidden" name="plugin_id" value="{{ plugin.id }}">
-                        <div class="field-group"><label>Название</label><input type="text" name="plugin_name" value="{{ plugin.name }}" required></div>
-                        <div class="field-group"><label>Цена CMSC</label><input type="number" name="plugin_price" min="0" step="0.01" value="{{ plugin.price }}"></div>
-                        <div class="field-group"><label>Описание</label><textarea name="plugin_description" rows="2">{{ plugin.description }}</textarea></div>
-                        <div class="button-row">
-                            <button type="submit" class="btn" name="action" value="update_plugin">Сохранить</button>
-                            <button type="submit" class="btn" name="action" value="delete_plugin" onclick="return confirm('Удалить плагин?');">Удалить</button>
-                        </div>
-                    </form>
-                {% endfor %}
-            {% else %}
-                <p class="muted">Нет плагинов.</p>
-            {% endif %}
-        </section>
-        <section class="card" id="users">
-            <h2>Пользователи и роли</h2>
-            <p class="muted">Изменение роли вступает в силу сразу — но пункт меню "Админ" появится у пользователя после его следующего входа.</p>
-            {% if users %}
-                <div class="table-wrap">
-                    <table>
-                        <thead><tr><th>ID</th><th>Email</th><th>KYC</th><th>Роль</th><th></th></tr></thead>
-                        <tbody>
-                        {% for user in users %}
-                            <tr>
-                                <td>{{ user[0] }}</td>
-                                <td>{{ user[1] }}</td>
-                                <td>{{ 'да' if user[2] else 'нет' }}</td>
-                                <td>{{ user[3] }}</td>
-                                <td>
-                                    <form method="post" class="role-form">
-                                        <input type="hidden" name="action" value="update_user_role">
-                                        <input type="hidden" name="user_id" value="{{ user[0] }}">
-                                        <select name="role">
-                                            <option value="user" {% if user[3] == 'user' %}selected{% endif %}>user</option>
-                                            <option value="admin" {% if user[3] == 'admin' %}selected{% endif %}>admin</option>
-                                        </select>
-                                        <button type="submit" class="btn">Сохранить</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <p class="muted">Нет пользователей.</p>
-            {% endif %}
-        </section>
-        <section class="card" id="wallets">
-            <h2>Кошельки пользователей</h2>
-            {% if wallets %}<ul>{% for wallet in wallets %}<li>Пользователь ID {{ wallet[0] }} — Баланс €{{ '%.2f'|format(wallet[1] or 0.0) }}; Кошелек: {{ wallet[2] or '—' }} {{ wallet[3] or '' }}; Биржа: {{ wallet[4] or '—' }} {{ wallet[5] or '' }}; Telegram: {{ wallet[6] or '—' }}</li>{% endfor %}</ul>{% else %}<p class="muted">Нет данных кошельков.</p>{% endif %}
-        </section>
-        <section class="card" id="purchases">
-            <h2>Покупки</h2>
-            {% if purchases %}<ul>{% for item in purchases %}<li>Пользователь ID {{ item[0] }} купил {{ item[1] }} в {{ item[2] }}</li>{% endfor %}</ul>{% else %}<p class="muted">Нет покупок.</p>{% endif %}
-        </section>
-        <section class="card" id="stats">
-            <h2>Статистика платформы</h2>
-            <div class="grid">
-                <div class="card"><h3>Пользователи</h3><p style="font-size: 22px; font-weight: bold;">{{ users|length }}</p></div>
-                <div class="card"><h3>Покупки</h3><p style="font-size: 22px; font-weight: bold;">{{ purchases|length }}</p></div>
-                <div class="card"><h3>Подключенные кошельки/биржи</h3><p style="font-size: 22px; font-weight: bold;">{{ connected_wallets_count }}</p></div>
-                <div class="card"><h3>Плагины</h3><p style="font-size: 22px; font-weight: bold;">{{ plugins|length }}</p></div>
-            </div>
-            <h3 style="margin-top: 15px;">Покупки по стратегиям</h3>
-            {% if plugin_purchase_counts %}
-                {% set max_count = plugin_purchase_counts[0][1] %}
-                {% for name, count in plugin_purchase_counts %}
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>{{ name }}</span><span>{{ count }}</span></div>
-                    <div style="height: 12px; background: var(--surface-muted); border-radius: 4px; margin-bottom: 8px;">
-                        <div style="width: {{ (count / max_count) * 100 }}%; background: var(--primary); height: 100%; border-radius: 4px;"></div>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <p class="muted">Покупок пока нет.</p>
-            {% endif %}
-        </section>
-        <section class="card" id="diagnostics">
-            <h2>Диагностика системы</h2>
-            <p class="muted">Сводные метрики бота, состояние ИИ-памяти и отчёт о тестировании стратегий.</p>
-            <div class="button-row">
-                <button class="btn" id="load-metrics" type="button">Обновить метрики</button>
-                <button class="btn" id="load-report" type="button">Показать отчёт тестирования</button>
-            </div>
-            <div id="metrics-result" class="small-note">Нажмите «Обновить метрики».</div>
-            <details class="card" style="margin-top: 10px;">
-                <summary>Отчёт о тестировании (ADVANCED_TEST_REPORT.md)</summary>
-                <pre id="report-content" style="white-space: pre-wrap; max-height: 420px; overflow-y: auto;">Отчёт ещё не загружен.</pre>
-            </details>
-        </section>
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Управление</span>
+        <h1 class="page-title">Админ-панель</h1>
+        <p class="lead">Пользователи, плагины, риск, настройки платформы.</p>
     </div>
+</div>
+
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<!-- Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:1.5rem;">
+    <div class="card stat-tile"><div class="stat-value">{{ users|length }}</div><div class="stat-label">Пользователей</div></div>
+    <div class="card stat-tile"><div class="stat-value">{{ plugins|length }}</div><div class="stat-label">Плагинов</div></div>
+    <div class="card stat-tile"><div class="stat-value">{{ connected_wallets_count }}</div><div class="stat-label">Подключений</div></div>
+    <div class="card stat-tile"><div class="stat-value">{{ risk.daily_pnl|default(0) }}</div><div class="stat-label">Daily P/L</div></div>
+    <div class="card stat-tile"><div class="stat-value" style="color:{% if risk.kill_switch %}var(--danger){% else %}var(--success){% endif %};">{{ 'ON' if risk.kill_switch else 'OFF' }}</div><div class="stat-label">Kill Switch</div></div>
+</div>
+
+<!-- Tabs -->
+<div style="display:flex;gap:.25rem;margin-bottom:1rem;flex-wrap:wrap;" id="admin-tabs">
+    <button class="filter-btn active" onclick="showTab('users')">👥 Пользователи</button>
+    <button class="filter-btn" onclick="showTab('plugins')">🧩 Плагины</button>
+    <button class="filter-btn" onclick="showTab('risk')">⚠️ Риск</button>
+    <button class="filter-btn" onclick="showTab('settings')">⚙️ Настройки</button>
+    <button class="filter-btn" onclick="showTab('payouts')">💳 Выплаты</button>
+</div>
+
+<!-- Users -->
+<div id="tab-users" class="card">
+    <h2>👥 Пользователи</h2>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Email</th><th>KYC</th><th>Роль</th><th>Действие</th></tr></thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u[0] }}</td>
+                    <td>{{ u[1] }}</td>
+                    <td>{% if u[2] %}✅{% else %}❌{% endif %}</td>
+                    <td><span class="badge badge-{{ 'success' if u[3]=='admin' else 'accent' }}">{{ u[3] }}</span></td>
+                    <td>
+                        <form method="post" style="display:inline-flex;gap:.25rem;align-items:center;">
+                            <input type="hidden" name="action" value="update_user_role">
+                            <input type="hidden" name="user_id" value="{{ u[0] }}">
+                            <select name="role" style="width:auto;padding:.2rem .4rem;font-size:.75rem;margin:0;">
+                                <option value="user" {% if u[3]=='user' %}selected{% endif %}>user</option>
+                                <option value="admin" {% if u[3]=='admin' %}selected{% endif %}>admin</option>
+                            </select>
+                            <button class="btn btn-sm" type="submit">OK</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Plugins -->
+<div id="tab-plugins" class="card" style="display:none;">
+    <h2>🧩 Плагины / Стратегии</h2>
+    <form method="post" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:1rem;">
+        <input type="hidden" name="action" value="create_plugin">
+        <input name="plugin_name" placeholder="Название" required style="margin:0;">
+        <input name="plugin_price" type="number" placeholder="Цена (€)" step="0.01" style="margin:0;">
+        <button class="btn btn-sm" type="submit">Добавить</button>
+    </form>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Название</th><th>Цена</th><th>Описание</th><th>Покупок</th><th>Действия</th></tr></thead>
+            <tbody>
+                {% for p in plugins %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td>{{ p.name }}</td>
+                    <td>€{{ '%.2f'|format(p.price) }}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">{{ p.description[:50] }}</td>
+                    <td>{{ plugin_purchase_counts_map.get(p.name, 0) }}</td>
+                    <td>
+                        <form method="post" style="display:inline-flex;gap:.25rem;align-items:center;">
+                            <input type="hidden" name="action" value="update_plugin">
+                            <input type="hidden" name="plugin_id" value="{{ p.id }}">
+                            <input name="plugin_name" value="{{ p.name }}" style="width:120px;margin:0;padding:.2rem .4rem;font-size:.75rem;">
+                            <input name="plugin_price" type="number" value="{{ p.price }}" step="0.01" style="width:80px;margin:0;padding:.2rem .4rem;font-size:.75rem;">
+                            <input name="plugin_description" value="{{ p.description }}" style="width:120px;margin:0;padding:.2rem .4rem;font-size:.75rem;">
+                            <button class="btn btn-sm" type="submit">OK</button>
+                        </form>
+                        <form method="post" style="display:inline;margin-left:.25rem;">
+                            <input type="hidden" name="action" value="delete_plugin">
+                            <input type="hidden" name="plugin_id" value="{{ p.id }}">
+                            <button class="btn btn-danger btn-sm" type="submit" onclick="return confirm('Удалить?')">✕</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Risk -->
+<div id="tab-risk" class="card" style="display:none;">
+    <h2>⚠️ Управление рисками</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div style="padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;">Kill Switch</div>
+            <div style="font-size:1.5rem;font-weight:700;color:{% if risk.kill_switch %}var(--danger){% else %}var(--success){% endif %};">{{ 'ВКЛ' if risk.kill_switch else 'ВЫКЛ' }}</div>
+        </div>
+        <div style="padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;">Daily PnL</div>
+            <div style="font-size:1.5rem;font-weight:700;">{{ risk.daily_pnl|default(0) }}</div>
+        </div>
+    </div>
+    <form method="post" style="margin-bottom:1rem;">
+        <input type="hidden" name="action" value="save_admin_settings">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Глобальная стратегия</label>
+                <select name="strategy">
+                    <option value="pure_harvester" {% if current_strategy=='pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                    <option value="high_frequency_momentum" {% if current_strategy=='high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
+                    <option value="compound_defender" {% if current_strategy=='compound_defender' %}selected{% endif %}>Compound Defender</option>
+                </select>
+            </div>
+            <div class="field-group"><label>Леверидж</label><input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" step="0.1" min="0.1" max="2.0"></div>
+            <div class="field-group"><label>Комиссия</label><input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" step="0.0001"></div>
+        </div>
+        <button class="btn" type="submit">Сохранить настройки</button>
+    </form>
+</div>
+
+<!-- Site Settings -->
+<div id="tab-settings" class="card" style="display:none;">
+    <h2>⚙️ Настройки сайта</h2>
+    <form method="post">
+        <input type="hidden" name="action" value="save_site_settings">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group"><label>Название</label><input name="site_name" value="{{ site_settings.site_name }}" required></div>
+            <div class="field-group"><label>Контакт</label><input name="support_contact" value="{{ site_settings.support_contact }}"></div>
+        </div>
+        <div class="field-group"><label>Доступные биржи</label>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                {% for ex in supported_exchanges %}
+                <label class="term-check-row"><input type="checkbox" name="allowed_exchanges" value="{{ ex }}" {% if ex in allowed_exchanges %}checked{% endif %}> {{ ex|capitalize }}</label>
+                {% endfor %}
+            </div>
+        </div>
+        <label class="term-check-row"><input type="checkbox" name="maintenance_mode" {% if site_settings.maintenance_mode=='true' %}checked{% endif %}> Режим обслуживания</label>
+        <button class="btn" type="submit" style="margin-top:.5rem;">Сохранить</button>
+    </form>
+</div>
+
+<!-- Payouts -->
+<div id="tab-payouts" class="card" style="display:none;">
+    <h2>💳 Настройки выплат</h2>
+    <form method="post">
+        <input type="hidden" name="action" value="save_payout_settings">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group"><label>Крипто актив</label>
+                <select name="crypto_asset">{% for a in crypto_payout_assets %}<option value="{{ a }}" {% if payout_settings.crypto_asset==a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+            </div>
+            <div class="field-group"><label>Карточный сервис</label>
+                <select name="card_provider">{% for s in card_payout_services %}<option value="{{ s }}" {% if payout_settings.card_provider==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+            </div>
+        </div>
+        <div class="field-group"><label>Криптоадрес</label><input name="crypto_address" value="{{ payout_settings.crypto_address }}"></div>
+        <div class="field-group"><label>Получатель</label><input name="card_recipient" value="{{ payout_settings.card_recipient }}"></div>
+        <button class="btn" type="submit" style="margin-top:.5rem;">Сохранить</button>
+    </form>
+</div>
 {% endblock %}
+
 {% block scripts %}
 <script>
-document.getElementById('load-metrics').addEventListener('click', async () => {
-    const box = document.getElementById('metrics-result');
-    box.textContent = 'Загружаем метрики...';
-    try {
-        const [metricsResponse, brainResponse] = await Promise.all([fetch('/api/metrics'), fetch('/api/bot/brain')]);
-        const metrics = await metricsResponse.json();
-        const brain = await brainResponse.json();
-        if (!metricsResponse.ok) throw new Error(metrics.detail || 'Ошибка загрузки метрик');
-        box.innerHTML = `Бот: <strong>${metrics.bot_status.active ? 'активен' : 'остановлен'}</strong>, событий: ${metrics.bot_status.runs}. `
-            + `Стратегия: <strong>${metrics.strategy}</strong>. `
-            + `Kill switch: <strong>${metrics.risk.kill_switch}</strong>, дневной P/L: ${Number(metrics.risk.daily_pnl).toFixed(4)}. `
-            + (brainResponse.ok ? `ИИ-память: ${brain.actions} действий.` : '');
-    } catch (error) {
-        box.textContent = error.message;
-    }
-});
-document.getElementById('load-report').addEventListener('click', async () => {
-    const box = document.getElementById('report-content');
-    box.textContent = 'Загружаем отчёт...';
-    try {
-        const response = await fetch('/api/report');
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Отчёт не найден');
-        box.textContent = data.report;
-    } catch (error) {
-        box.textContent = error.message;
-    }
-});
-
-let liveControlCsrf = '';
-
-async function liveControlRequest(url, enabled) {
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': liveControlCsrf},
-        body: JSON.stringify({enabled})
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Не удалось изменить LIVE-контроль');
-    renderLiveControls(data);
+function showTab(name) {
+    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+    document.getElementById('tab-' + name).style.display = '';
+    document.querySelectorAll('#admin-tabs .filter-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
 }
-
-function controlRow(container, id, enabled, kind) {
-    const row = document.createElement('div');
-    row.className = 'button-row';
-    const label = document.createElement('strong');
-    label.textContent = id;
-    const state = document.createElement('span');
-    state.className = 'small-note';
-    state.textContent = enabled ? 'LIVE разрешён' : 'LIVE выключен';
-    const off = document.createElement('button');
-    off.className = 'btn';
-    off.type = 'button';
-    off.textContent = 'Выключить';
-    off.addEventListener('click', async () => {
-        try { await liveControlRequest(`/api/admin/live-controls/${kind}/${encodeURIComponent(id)}`, false); }
-        catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
-    });
-    const on = document.createElement('button');
-    on.className = 'btn';
-    on.type = 'button';
-    on.textContent = 'Разрешить';
-    on.addEventListener('click', async () => {
-        try { await liveControlRequest(`/api/admin/live-controls/${kind}/${encodeURIComponent(id)}`, true); }
-        catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
-    });
-    row.append(label, state, off, on);
-    container.appendChild(row);
-}
-
-function renderLiveControls(data) {
-    liveControlCsrf = data.csrf_token || liveControlCsrf;
-    const global = document.getElementById('global-live-state');
-    global.textContent = data.global_kill_switch ? 'LIVE выключен глобальным Kill Switch' : 'Глобальный Kill Switch снят';
-    const bots = document.getElementById('live-bot-controls');
-    const aiBots = document.getElementById('live-ai-bot-controls');
-    bots.replaceChildren();
-    aiBots.replaceChildren();
-    const botEntries = Object.entries(data.bot_live || {});
-    const aiEntries = Object.entries(data.ai_bot_live || {});
-    if (!botEntries.length) bots.innerHTML = '<p class="muted">Нет зарегистрированных Bot-контролей. Укажи известный ID ниже.</p>';
-    if (!aiEntries.length) aiBots.innerHTML = '<p class="muted">Нет зарегистрированных AI Bot-контролей. Укажи известный ID ниже.</p>';
-    botEntries.forEach(([id, enabled]) => controlRow(bots, id, enabled, 'bots'));
-    aiEntries.forEach(([id, enabled]) => controlRow(aiBots, id, enabled, 'ai-bots'));
-    document.getElementById('live-control-audit').textContent = JSON.stringify(data.audit_log || [], null, 2);
-    document.getElementById('live-controls-status').textContent = 'Состояние LIVE-контролей обновлено.';
-}
-
-async function loadLiveControls() {
-    const status = document.getElementById('live-controls-status');
-    status.textContent = 'Загрузка LIVE-контролей...';
-    try {
-        const response = await fetch('/api/admin/live-controls');
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Не удалось загрузить LIVE-контроли');
-        renderLiveControls(data);
-    } catch (error) {
-        status.textContent = error.message;
-    }
-}
-
-document.querySelectorAll('[data-live-global]').forEach(button => {
-    button.addEventListener('click', async () => {
-        try { await liveControlRequest('/api/admin/live-controls/global', button.dataset.liveGlobal === 'true'); }
-        catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
-    });
-});
-
-document.getElementById('add-bot-control').addEventListener('click', async () => {
-    const input = document.getElementById('new-bot-id');
-    const id = input.value.trim();
-    if (!id) return;
-    try {
-        await liveControlRequest(`/api/admin/live-controls/bots/${encodeURIComponent(id)}`, false);
-        input.value = '';
-    } catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
-});
-
-document.getElementById('add-ai-bot-control').addEventListener('click', async () => {
-    const input = document.getElementById('new-ai-bot-id');
-    const id = input.value.trim();
-    if (!id) return;
-    try {
-        await liveControlRequest(`/api/admin/live-controls/ai-bots/${encodeURIComponent(id)}`, false);
-        input.value = '';
-    } catch (error) { document.getElementById('live-controls-status').textContent = error.message; }
-});
-
-loadLiveControls();
 </script>
 {% endblock %}

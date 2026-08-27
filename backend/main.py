@@ -37,6 +37,7 @@ from .security.live_controls import LIVE_CONTROL_STATE, LiveControlState
 from .security.execution_gateway import submit_real_order, cancel_real_order
 from .security.safe_errors import safe_exception_message, safe_error_payload
 from .health import router as health_router
+from .modules.arbitrage_engine import ArbitrageEngine
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -73,6 +74,7 @@ bot = HFTBot()
 production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
 exchange_service = ExchangeService(LIVE_CONTROL_STATE)
+arbitrage_engine = ArbitrageEngine()
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
 WALLET_PROVIDERS = ("MetaMask", "Trust Wallet", "Binance Wallet", "WalletConnect", "Ledger", "Trezor")
@@ -136,6 +138,12 @@ class ExchangeConfig(BaseModel):
     exchange_name: str
     api_key: str
     api_secret: str
+
+class ArbitrageExchangeConfig(BaseModel):
+    exchange_name: str
+    api_key: str
+    api_secret: str
+    passphrase: str = ""
 
 class HFTSimulatePayload(BaseModel):
     market_data: list[float]
@@ -969,6 +977,7 @@ async def admin_panel(request: Request):
             "allowed_exchanges": {name.strip() for name in site_settings["allowed_exchanges"].split(",")},
             "allowed_wallets": {name.strip() for name in site_settings["allowed_wallets"].split(",")},
             "plugin_purchase_counts": sorted(purchase_counts.items(), key=lambda item: item[1], reverse=True),
+            "plugin_purchase_counts_map": dict(purchase_counts),
             "connected_wallets_count": sum(1 for w in all_wallets if w[2] or w[4]),
             **social_login_context()},
     )
@@ -1063,6 +1072,31 @@ async def admin_risk_action(request: Request, enabled: str = Form("true")):
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/", status_code=302)
+
+@app.post("/api/user/connect-arbitrage-exchange")
+def connect_arbitrage_exchange(config: ArbitrageExchangeConfig, request: Request):
+    email = _require_user(request)
+    try:
+        exchange_name = config.exchange_name.lower()
+        if exchange_name not in SUPPORTED_MARKET_EXCHANGES:
+            raise HTTPException(status_code=400, detail="Биржа не поддерживается.")
+        exchange_class = getattr(ccxt, exchange_name)
+        exchange_config = {
+            "apiKey": config.api_key,
+            "secret": config.api_secret,
+            "enableRateLimit": True,
+        }
+        if config.passphrase:
+            exchange_config["password"] = config.passphrase
+        client = exchange_class(exchange_config)
+        client.load_markets()
+        engine.update_wallet(email,
+            exchange_provider_arb=exchange_name,
+            exchange_key_masked_arb=engine.mask_secret(config.api_key))
+        engine.record_audit("arbitrage_exchange_connected", exchange_name, user_email=email)
+        return {"ok": True, "exchange": exchange_name, "mode": "arbitrage"}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Ошибка подключения: {exc}")
 
 @app.post("/api/user/connect-exchange")
 def connect_exchange(config: ExchangeConfig, request: Request):
@@ -1341,7 +1375,13 @@ def start_bot(request: Request):
     _require_admin(request)
     if risk_manager.kill_switch:
         raise HTTPException(status_code=423, detail="Сначала отключите аварийный выключатель.")
+    leverage = float(strategy_manager.config.get("leverage", 1.0))
+    risk_score = risk_manager.calculate_risk_score(leverage=leverage)
+    allowed, reason = risk_manager.check_risk_score(risk_score)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
     result = bot.start()
+    result["risk_score"] = risk_score
     engine.record_audit("bot_started", user_id=request.session.get("user_email"))
     engine.record_bot_stat("bot_status", "started")
     return result
@@ -1437,7 +1477,27 @@ def execute_strategy(payload: StrategyPayload, request: Request):
 @app.get("/api/risk/status")
 def risk_status(request: Request):
     _require_user(request)
-    return risk_manager.status()
+    status = risk_manager.status()
+    leverage = float(strategy_manager.config.get("leverage", 1.0))
+    status["current_risk_score"] = risk_manager.calculate_risk_score(leverage=leverage)
+    status["max_risk_score"] = risk_manager.MAX_RISK_SCORE
+    return status
+
+@app.post("/api/risk/score")
+def calculate_risk_score(request: Request, leverage: float = 1.0, volatility: float = 0.02,
+                         drawdown: float = 0.0, liquidity: float = 0.8,
+                         concentration: float = 0.1, positions: int = 1,
+                         execution_complexity: int = 1, exchange_risk: float = 0.1,
+                         slippage: float = 0.001, market_regime: str = "normal"):
+    _require_user(request)
+    score = risk_manager.calculate_risk_score(
+        volatility=volatility, leverage=leverage, drawdown=drawdown,
+        liquidity=liquidity, concentration=concentration, positions=positions,
+        execution_complexity=execution_complexity, exchange_risk=exchange_risk,
+        slippage=slippage, market_regime=market_regime
+    )
+    allowed, reason = risk_manager.check_risk_score(score)
+    return {"risk_score": score, "allowed": allowed, "reason": reason, "max_allowed": risk_manager.MAX_RISK_SCORE}
 
 @app.post("/api/risk/kill-switch")
 def set_kill_switch(payload: KillSwitchPayload, request: Request):
@@ -1651,3 +1711,71 @@ def copy_reset(request: Request):
 # Testing page — тесты стратегий на реальных данных (live)
 # ═══════════════════════════════════════════════════════════════
 
+
+
+# ═══════════════════════════════════════════════════════════════
+# Arbitrage Engine — страница и API
+# ═══════════════════════════════════════════════════════════════
+
+@app.api_route("/arbitrage", methods=["GET", "POST"], name="arbitrage_page")
+async def arbitrage_page(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    ctx = _trading_context(user_email)
+    ctx["arbitrage"] = arbitrage_engine.status()
+    return templates.TemplateResponse(request, "arbitrage.html", ctx)
+
+
+@app.post("/api/arbitrage/start")
+def arbitrage_start(request: Request):
+    _require_admin(request)
+    return arbitrage_engine.start()
+
+
+@app.post("/api/arbitrage/stop")
+def arbitrage_stop(request: Request):
+    _require_admin(request)
+    return arbitrage_engine.stop()
+
+
+@app.get("/api/arbitrage/status")
+def arbitrage_status(request: Request):
+    _require_user(request)
+    return arbitrage_engine.status()
+
+
+@app.post("/api/arbitrage/scan")
+def arbitrage_scan(request: Request):
+    _require_user(request)
+    leverage = float(strategy_manager.config.get("leverage", 1.0))
+    risk_score = risk_manager.calculate_risk_score(leverage=leverage, execution_complexity=3)
+    allowed, reason = risk_manager.check_risk_score(risk_score)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
+    results = {}
+    try:
+        import ccxt
+        exchange = ccxt.binance({"enableRateLimit": True})
+        pairs = ["BTC/USDT", "ETH/USDT", "ETH/BTC", "BNB/USDT", "SOL/USDT", "XRP/USDT"]
+        tickers = {}
+        for pair in pairs:
+            try:
+                tickers[pair] = exchange.fetch_ticker(pair)
+            except Exception:
+                continue
+        results["triangular"] = arbitrage_engine.triangular.scan(tickers)
+        results["cross_exchange"] = []
+        for pair in ["BTC/USDT", "ETH/USDT"]:
+            opp = arbitrage_engine.cross_exchange.scan(tickers, tickers, pair)
+            if opp:
+                results["cross_exchange"].append(opp)
+        for pair, ticker in tickers.items():
+            price = float(ticker.get("last", 0))
+            if price > 0:
+                opp = arbitrage_engine.statistical.scan(pair, price)
+                if opp:
+                    results.setdefault("statistical", []).append(opp)
+    except Exception as e:
+        results["error"] = str(e)
+    return results

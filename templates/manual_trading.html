@@ -147,6 +147,30 @@
                 </div>
                 <div id="order-result" style="margin-top:.5rem;font-size:.78rem;"></div>
             </div>
+            <!-- Signal Settings -->
+            <div style="border-top:1px solid var(--border);padding:.75rem;">
+                <div class="term-section-title">Настройки сигналов<span data-info="signal"></span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.5rem 0;">
+                    <div class="term-field">
+                        <label>Источник</label>
+                        <select id="signal-source-trade">
+                            <option value="manual">Ручной</option>
+                            <option value="bot">Бот</option>
+                            <option value="ai">ИИ</option>
+                            <option value="ai_bot">ИИ+Бот</option>
+                        </select>
+                    </div>
+                    <div class="term-field">
+                        <label>Порог (%)</label>
+                        <input id="signal-threshold" type="number" value="60" min="0" max="100" step="5">
+                    </div>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="applySignal()" style="width:100%;">
+                    Apply Signal<span data-info="apply_signal"></span>
+                </button>
+                <div id="signal-result" style="margin-top:.5rem;font-size:.75rem;"></div>
+            </div>
+
             <div class="term-balance-info">
                 <span>Демо баланс: <strong id="demo-balance">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</strong></span>
                 <span>P/L: <strong id="demo-pnl-val" class="{{ 'up' if demo.demo_pnl|default(0) >= 0 else 'down' }}">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</strong></span>
@@ -199,7 +223,33 @@
     });
 
     /* Buy/Sell tabs */
-    document.querySelectorAll('.term-panel-tab').forEach(tab => {
+    async function applySignal() {
+    const el = document.getElementById('signal-result');
+    el.innerHTML = '<span style="color:var(--text-muted);">⏳ Получение сигнала...</span>';
+    const source = document.getElementById('signal-source-trade').value;
+    const threshold = document.getElementById('signal-threshold').value;
+    const pair = document.getElementById('term-pair') ? document.getElementById('term-pair').value : 'BTC/USDT';
+
+    try {
+        const resp = await fetch('/api/market/signal?pair=' + encodeURIComponent(pair) + '&exchange=binance');
+        const data = await resp.json();
+        if (resp.ok) {
+            const direction = data.signal === 1 ? 'BUY' : data.signal === -1 ? 'SELL' : 'HOLD';
+            const confidence = (data.confidence * 100).toFixed(1);
+            if (confidence >= threshold) {
+                el.innerHTML = '<span style="color:var(--success);">✓ Сигнал: ' + direction + ' (' + confidence + '%) | Источник: ' + source + '</span>';
+            } else {
+                el.innerHTML = '<span style="color:var(--warning);">⚠ Уверенность ' + confidence + '% < порога ' + threshold + '%. Сигнал отклонён.</span>';
+            }
+        } else {
+            el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка: ' + (data.detail || 'неизвестная') + '</span>';
+        }
+    } catch(e) {
+        el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка сети</span>';
+    }
+}
+
+document.querySelectorAll('.term-panel-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             currentSide = tab.dataset.side;
             document.querySelectorAll('.term-panel-tab').forEach(t => t.classList.remove('active'));

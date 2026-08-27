@@ -1,5 +1,5 @@
-fee_rate: 0.0
+fee_rate: 0.02
 leverage: 2.0
 log_level: info
-risk_tolerance: 0.0
-strategy: neural_pattern_recognizer
+risk_tolerance: 0.06
+strategy: delta_neutral_hedger

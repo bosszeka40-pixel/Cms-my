@@ -23,44 +23,47 @@
             {% if user_id %}
                 <div class="nav-group">Обзор</div>
                 <a class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                    <span>📊</span> Дашборд
+                    <span>📊</span> Дашборд<span data-info="dashboard"></span>
                 </a>
                 <a class="nav-link {% if request.url.path == '/marketplace' %}active{% endif %}" href="{{ url_for('marketplace') }}">
-                    <span>🏪</span> Маркет
+                    <span>🏪</span> Маркет<span data-info="marketplace"></span>
                 </a>
 
                 <div class="nav-group">Торговля</div>
                 <a class="nav-link {% if request.url.path == '/bot-management' %}active{% endif %}" href="{{ url_for('bot_management') }}">
-                    <span>🤖</span> Бот
+                    <span>🤖</span> Бот<span data-info="bots"></span>
                 </a>
                 <a class="nav-link {% if request.url.path == '/manual-trading' %}active{% endif %}" href="{{ url_for('manual_trading') }}">
-                    <span>📈</span> Терминал
+                    <span>📈</span> Терминал<span data-info="trade"></span>
                 </a>
                 <a class="nav-link {% if request.url.path == '/copy-trading' %}active{% endif %}" href="{{ url_for('copy_trading_page') }}">
-                    <span>👥</span> Копитрейдинг
+                    <span>👥</span> Копитрейдинг<span data-info="copy_trading"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/arbitrage' %}active{% endif %}" href="{{ url_for('arbitrage_page') }}">
+                    <span>🔄</span> Арбитраж<span data-info="arbitrage"></span>
                 </a>
 
                 <div class="nav-group">Тестирование</div>
                 <a class="nav-link {% if request.url.path == '/strategies' %}active{% endif %}" href="{{ url_for('strategies_page') }}">
-                    <span>🧬</span> Стратегии
+                    <span>🧬</span> Стратегии<span data-info="strategies"></span>
                 </a>
                 <a class="nav-link {% if request.url.path == '/testing' %}active{% endif %}" href="{{ url_for('testing_page') }}">
-                    <span>🔬</span> Тесты
+                    <span>🔬</span> Тесты<span data-info="backtest"></span>
                 </a>
                 <a class="nav-link {% if request.url.path == '/demo' %}active{% endif %}" href="{{ url_for('demo_page') }}">
-                    <span>🎯</span> Демо
+                    <span>🎯</span> Демо<span data-info="demo"></span>
                 </a>
 
                 <div class="nav-group">Аккаунт</div>
                 <a class="nav-link {% if request.url.path == '/wallet' %}active{% endif %}" href="{{ url_for('wallet_page') }}">
-                    <span>💰</span> Кошелёк
+                    <span>💰</span> Кошелёк<span data-info="wallet"></span>
                 </a>
                 <a class="nav-link {% if request.url.path == '/settings' %}active{% endif %}" href="{{ url_for('settings') }}">
-                    <span>⚙️</span> Настройки
+                    <span>⚙️</span> Настройки<span data-info="settings"></span>
                 </a>
                 {% if is_admin %}
                     <a class="nav-link {% if request.url.path == '/admin' %}active{% endif %}" href="{{ url_for('admin_panel') }}">
-                        <span>🛡️</span> Админ
+                        <span>🛡️</span> Админ<span data-info="admin"></span>
                     </a>
                 {% endif %}
             {% else %}
@@ -110,6 +113,106 @@
 </div>
 
 {% block scripts %}{% endblock %}
+
+<!-- Info Tooltip System -->
+<style>
+.info-tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+    color: var(--text-muted);
+    font-size: 0.8em;
+    margin-left: 4px;
+}
+.info-tooltip .info-icon {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+}
+.info-tooltip .info-text {
+    visibility: hidden;
+    width: 250px;
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -125px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 12px;
+    line-height: 1.4;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.info-tooltip:hover .info-text {
+    visibility: visible;
+    opacity: 1;
+}
+.info-tooltip .info-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: var(--border) transparent transparent transparent;
+}
+</style>
+
+<script>
+const CMS_INFO = {
+    "dashboard": "Обзор портфеля: баланс, P/L, активные боты, текущая стратегия, риск-скор, уведомления.",
+    "markets": "Рыночные данные: тикеры, стакан, свечи, объемы, новости и.sentiment анализ.",
+    "trade": "Ручная торговля: ордера (market/limit), сигналы ИИ, Apply Signal для быстрого входа.",
+    "bots": "Управление ботами: запуск/остановка, стратегии, AI-мозг, память, логи.",
+    "strategies": "Стратегии: 10+ встроенных, генерация новых, backtest, активация, Risk Score.",
+    "arbitrage": "Арбитраж: треугольный, межбиржевой, статистический, funding-rate. Два API ключа.",
+    "copy_trading": "Копитрейдинг: копируйте стратегии трейдеров с настройками риска.",
+    "backtest": "Тестирование стратегий на исторических данных. Без знания будущего.",
+    "demo": "Демо-режим: торговля на реальных данных с балансом 100 EUR. Идентичен LIVE.",
+    "paper": "Paper Trading: виртуальная торговля без реальных денег, но с реальными ценами.",
+    "ai": "AI-ассистент: анализ рынка, рекомендации стратегий, сигналы для торговли.",
+    "portfolio": "Портфель: открытые позиции, P/L, распределение активов.",
+    "orders": "Ордера: история ордеров, ожидающие, выполненные, отмененные.",
+    "positions": "Позиции: открытые, закрытые, P/L по каждой позиции.",
+    "history": "История: все сделки, боты, арбитраж, копитрейдинг.",
+    "analytics": "Аналитика: статистика стратегий, волатильность, тренды.",
+    "risk": "Риск-менеджмент: Risk Score (макс 60), лимиты, kill switch, дневные лимиты.",
+    "marketplace": "Маркетплейс: стратегии и модули. 15 дней бесплатно для платиновых.",
+    "exchanges": "Биржи: подключение API, sandbox/live, capabilities, второй ключ для арбитража.",
+    "wallet": "Кошелёк: CMSC баланс, пополнение, крипто/карточные выплаты.",
+    "notifications": "Уведомления: сигналы бота, арбитраж, ошибки, достижения.",
+    "settings": "Настройки: тема, профиль, безопасность, уведомления, язык.",
+    "admin": "Админ: пользователи, плагины, риск, настройки сайта, выплаты.",
+    "risk_score": "Risk Score: нормализованный показатель риска 0-100. Максимум для запуска: 60.",
+    "signal": "Сигнал: рекомендация ИИ/бота для входа/выхода. Источник: бот, ИИ или ИИ+бот.",
+    "apply_signal": "Apply Signal: применить сигнал к текущей сделке. Автоматически выставляет ордер.",
+    "live_trading": "LIVE Trading: реальная торговля через API биржи. Требует подключения биржи.",
+    "risk_limit": "Лимит риска: стратегии с Risk Score > 60 блокируются. Защита от потерь.",
+};
+document.querySelectorAll("[data-info]").forEach(el => {
+    const key = el.getAttribute("data-info");
+    if (CMS_INFO[key]) {
+        const tooltip = document.createElement("span");
+        tooltip.className = "info-tooltip";
+        tooltip.innerHTML = `<span class="info-icon">?</span><span class="info-text">${CMS_INFO[key]}</span>`;
+        el.appendChild(tooltip);
+    }
+});
+</script>
+
 <script>
 (() => {
     const menuToggle = document.querySelector('.menu-toggle');

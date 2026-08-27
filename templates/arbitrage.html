@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+{% block title %}Арбитраж — CMS Trading{% endblock %}
+{% block breadcrumb %}Торговля / Арбитраж{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Arbitrage Engine</span>
+        <h1 class="page-title">Арбитраж</h1>
+        <p class="lead">Треугольный, межбиржевой, статистический и funding-rate арбитраж.</p>
+    </div>
+    <div class="hero-badge" style="{% if arbitrage.active %}border-color:var(--success){% endif %}">
+        <strong style="color:{% if arbitrage.active %}var(--success){% else %}var(--text-muted){% endif %};">{{ 'ON' if arbitrage.active else 'OFF' }}</strong>
+        <span>статус</span>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:1.5rem;">
+    <div class="card stat-tile">
+        <div class="stat-value" style="color:{% if arbitrage.total_pnl > 0 %}var(--success){% elif arbitrage.total_pnl < 0 %}var(--danger){% endif %};">{{ '%.4f'|format(arbitrage.total_pnl) }}€</div>
+        <div class="stat-label">Общий P/L</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ arbitrage.total_trades }}</div>
+        <div class="stat-label">Сделок</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ arbitrage.modules.triangular.opportunities_found + arbitrage.modules.cross_exchange.opportunities_found + arbitrage.modules.statistical.opportunities_found + arbitrage.modules.funding_rate.opportunities_found }}</div>
+        <div class="stat-label">Возможностей</div>
+    </div>
+</div>
+
+<!-- Controls -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>⚙️ Управление<span data-info="arbitrage"></span></h2>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="arbitrageAction('start')">▶ Запустить</button>
+        <button class="btn btn-danger" onclick="arbitrageAction('stop')">⏹ Остановить</button>
+        <button class="btn btn-outline" onclick="scanArbitrage()">🔍 Сканировать рынок</button>
+    </div>
+    <div id="scan-results" style="margin-top:1rem;"></div>
+</div>
+
+<!-- Arbitrage Exchange Connection -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>🔗 Подключение второй биржи для арбитража<span data-info="arbitrage"></span></h2>
+    <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:1rem;">
+        Для межбиржевого арбитража необходимы два API ключа: основная биржа + вторая биржа.
+    </p>
+    <form onsubmit="connectArbitrageExchange(event)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Вторая биржа</label>
+                <select id="arb-exchange-name" required>
+                    <option value="binance">Binance</option>
+                    <option value="bybit">Bybit</option>
+                    <option value="okx">OKX</option>
+                    <option value="kraken">Kraken</option>
+                    <option value="bitfinex">Bitfinex</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Режим</label>
+                <select id="arb-exchange-sandbox">
+                    <option value="sandbox">Sandbox (тестовый)</option>
+                    <option value="live">Live (реальный)</option>
+                </select>
+            </div>
+        </div>
+        <div class="field-group">
+            <label>API Key</label>
+            <input type="text" id="arb-api-key" placeholder="API Key второй биржи" required>
+        </div>
+        <div class="field-group">
+            <label>API Secret</label>
+            <input type="password" id="arb-api-secret" placeholder="API Secret" required>
+        </div>
+        <div class="field-group">
+            <label>Passphrase (если требуется)</label>
+            <input type="password" id="arb-passphrase" placeholder="Для OKX и др.">
+        </div>
+        <button class="btn" type="submit">Подключить вторую биржу</button>
+    </form>
+    <div id="arb-exchange-status" style="margin-top:1rem;"></div>
+</div>
+
+<!-- Arbitrage Modules -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;">
+    <!-- Triangular -->
+    <div class="card">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+            <span style="font-size:1.2rem;">🔺</span>
+            <div>
+                <h3 style="margin:0;">Треугольный арбитраж</h3>
+                <p class="muted" style="font-size:.72rem;margin:0;">USDT → BTC → ETH → USDT</p>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem;">
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;">{{ arbitrage.modules.triangular.trade_count }}</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">СДЕЛОК</div>
+            </div>
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;color:{% if arbitrage.modules.triangular.total_pnl > 0 %}var(--success){% else %}var(--text-muted){% endif %};">{{ '%.4f'|format(arbitrage.modules.triangular.total_pnl) }}€</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">P/L</div>
+            </div>
+        </div>
+        <div style="font-size:.78rem;">
+            {% if arbitrage.modules.triangular.recent %}
+                {% for r in arbitrage.modules.triangular.recent %}
+                <div style="padding:.4rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">
+                    <span>{{ r.pairs|join(' → ') }}</span>
+                    <span style="color:var(--success);font-weight:600;">+{{ r.net_profit_pct }}%</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="term-empty">Нет данных. Нажмите «Сканировать».</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Cross-Exchange -->
+    <div class="card">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+            <span style="font-size:1.2rem;">🔀</span>
+            <div>
+                <h3 style="margin:0;">Межбиржевой арбитраж</h3>
+                <p class="muted" style="font-size:.72rem;margin:0;">Разница цен между биржами</p>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem;">
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;">{{ arbitrage.modules.cross_exchange.trade_count }}</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">СДЕЛОК</div>
+            </div>
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;color:{% if arbitrage.modules.cross_exchange.total_pnl > 0 %}var(--success){% else %}var(--text-muted){% endif %};">{{ '%.4f'|format(arbitrage.modules.cross_exchange.total_pnl) }}€</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">P/L</div>
+            </div>
+        </div>
+        <div class="term-empty" style="font-size:.78rem;">Сканирует 2+ биржи одновременно.</div>
+    </div>
+
+    <!-- Statistical -->
+    <div class="card">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+            <span style="font-size:1.2rem;">📊</span>
+            <div>
+                <h3 style="margin:0;">Статистический арбитраж</h3>
+                <p class="muted" style="font-size:.72rem;margin:0;">Z-score анализ отклонений</p>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem;">
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;">{{ arbitrage.modules.statistical.trade_count }}</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">СДЕЛОК</div>
+            </div>
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;color:{% if arbitrage.modules.statistical.total_pnl > 0 %}var(--success){% else %}var(--text-muted){% endif %};">{{ '%.4f'|format(arbitrage.modules.statistical.total_pnl) }}€</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">P/L</div>
+            </div>
+        </div>
+        <div class="term-empty" style="font-size:.78rem;">Пар отслеживается: {{ arbitrage.modules.statistical.pairs_tracked }}</div>
+    </div>
+
+    <!-- Funding Rate -->
+    <div class="card">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+            <span style="font-size:1.2rem;">💱</span>
+            <div>
+                <h3 style="margin:0;">Funding Rate арбитраж</h3>
+                <p class="muted" style="font-size:.72rem;margin:0;">Доход на funding между спотом и фьючерсами</p>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem;">
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;">{{ arbitrage.modules.funding_rate.trade_count }}</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">СДЕЛОК</div>
+            </div>
+            <div style="padding:.5rem;background:var(--bg-tertiary);border-radius:4px;text-align:center;">
+                <div style="font-size:.9rem;font-weight:700;color:{% if arbitrage.modules.funding_rate.total_pnl > 0 %}var(--success){% else %}var(--text-muted){% endif %};">{{ '%.4f'|format(arbitrage.modules.funding_rate.total_pnl) }}€</div>
+                <div style="font-size:.65rem;color:var(--text-muted);">P/L</div>
+            </div>
+        </div>
+        <div class="term-empty" style="font-size:.78rem;">Анализирует funding rate на фьючерсах.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function arbitrageAction(action) {
+    try {
+        const resp = await fetch('/api/arbitrage/' + action, {method: 'POST'});
+        if (resp.ok) location.reload();
+        else alert('Ошибка: ' + (await resp.json()).detail);
+    } catch(e) { alert('Ошибка сети'); }
+}
+
+async function connectArbitrageExchange(e) {
+    e.preventDefault();
+    const el = document.getElementById('arb-exchange-status');
+    el.innerHTML = '<span style="color:var(--text-muted);">⏳ Подключение...</span>';
+    try {
+        const resp = await fetch('/api/user/connect-arbitrage-exchange', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                exchange_name: document.getElementById('arb-exchange-name').value,
+                api_key: document.getElementById('arb-api-key').value,
+                api_secret: document.getElementById('arb-api-secret').value,
+                passphrase: document.getElementById('arb-passphrase').value || ''
+            })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            el.innerHTML = '<span style="color:var(--success);">✓ ' + data.exchange + ' подключена для арбитража</span>';
+        } else {
+            el.innerHTML = '<span style="color:var(--danger);">✗ ' + (data.detail || 'Ошибка') + '</span>';
+        }
+    } catch(e) {
+        el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка сети</span>';
+    }
+}
+
+async function scanArbitrage() {
+    const el = document.getElementById('scan-results');
+    el.innerHTML = '<div class="term-empty">⏳ Сканирование рынка...</div>';
+    try {
+        const resp = await fetch('/api/arbitrage/scan', {method: 'POST'});
+        const data = await resp.json();
+        let html = '';
+        if (data.triangular && data.triangular.length) {
+            html += '<h4 style="margin:.5rem 0;">🔺 Треугольный:</h4>';
+            data.triangular.forEach(o => {
+                html += '<div style="padding:.5rem;margin:.25rem 0;background:var(--bg-tertiary);border-radius:4px;font-size:.82rem;display:flex;justify-content:space-between;">' +
+                    '<span>' + o.pairs.join(' → ') + '</span>' +
+                    '<span style="color:var(--success);font-weight:700;">+' + o.net_profit_pct + '%</span></div>';
+            });
+        }
+        if (data.statistical && data.statistical.length) {
+            html += '<h4 style="margin:.5rem 0;">📊 Статистический:</h4>';
+            data.statistical.forEach(o => {
+                html += '<div style="padding:.5rem;margin:.25rem 0;background:var(--bg-tertiary);border-radius:4px;font-size:.82rem;display:flex;justify-content:space-between;">' +
+                    '<span>' + o.pair + ' (Z: ' + o.z_score + ')</span>' +
+                    '<span style="color:var(--accent);font-weight:700;">' + o.signal + ' (' + o.deviation_pct + '%)</span></div>';
+            });
+        }
+        if (!html) html = '<div class="term-empty">Арбитражных возможностей не найдено</div>';
+        el.innerHTML = html;
+    } catch(e) { el.innerHTML = '<div class="term-empty">Ошибка: ' + e.message + '</div>'; }
+}
+</script>
+{% endblock %}
