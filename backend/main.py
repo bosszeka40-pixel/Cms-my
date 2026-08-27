@@ -31,6 +31,12 @@ from .strategy_performance import (
     price_for_duration,
 )
 from .risk_management import RiskManager
+from .exchange_service import ExchangeService
+from .security.execution_policy import current_mode, real_execution_allowed
+from .security.live_controls import LIVE_CONTROL_STATE, LiveControlState
+from .security.execution_gateway import submit_real_order, cancel_real_order
+from .security.safe_errors import safe_exception_message, safe_error_payload
+from .health import router as health_router
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -46,6 +52,7 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 app.include_router(admin_router)
+app.include_router(health_router)
 
 @app.get("/health", name="health")
 async def health():
@@ -65,6 +72,7 @@ risk_manager = RiskManager()
 bot = HFTBot()
 production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
+exchange_service = ExchangeService(LIVE_CONTROL_STATE)
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
 WALLET_PROVIDERS = ("MetaMask", "Trust Wallet", "Binance Wallet", "WalletConnect", "Ledger", "Trezor")
@@ -670,16 +678,19 @@ async def marketplace(request: Request):
             try:
                 duration_days = int(form.get("duration_days", 15))
                 result = performance.get(plugin_name, {})
-                purchase = engine.purchase_plugin(
-                    user_email,
-                    plugin_name,
-                    price_for_duration(result.get("price_eur", 0.0), duration_days),
-                    duration_days,
-                )
-                plugin_message = (
-                    f"Стратегия добавлена на {duration_days} дн."
-                    if purchase else "Стратегия не найдена."
-                )
+                price_eur = price_for_duration(result.get("price_eur", 0.0), duration_days)
+                wallet_data = engine.get_or_create_wallet(user_email)
+                if price_eur > 0 and (wallet_data.get("credits", 0) or 0) < price_eur:
+                    plugin_message = f"Недостаточно CMSC. Нужно: €{price_eur:.2f}, на балансе: €{wallet_data.get('credits', 0):.2f}"
+                else:
+                    purchase = engine.purchase_plugin(user_email, plugin_name, price_eur, duration_days)
+                    if purchase and price_eur > 0:
+                        engine.add_wallet_credits(user_email, -price_eur)
+                        engine.record_audit("plugin_purchase", f"{plugin_name} €{price_eur} for {duration_days}d", user_email)
+                    plugin_message = (
+                        f"Стратегия добавлена на {duration_days} дн."
+                        if purchase else "Стратегия не найдена."
+                    )
             except (TypeError, ValueError) as exc:
                 plugin_message = str(exc)
     site_settings = engine.get_site_settings()
