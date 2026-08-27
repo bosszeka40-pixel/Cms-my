@@ -13,6 +13,10 @@
         <strong style="color:{% if bot_status.active %}var(--success){% else %}var(--text-muted){% endif %};">{{ 'ON' if bot_status.active else 'OFF' }}</strong>
         <span>статус</span>
     </div>
+        <div class="hero-badge" style="margin-left:.5rem;">
+            <strong style="color:var(--accent);">{{ bot_status.lifecycle|default('STOPPED') }}</strong>
+            <span>lifecycle</span>
+        </div>
 </div>
 
 {% if message %}<div class="message success">{{ message }}</div>{% endif %}
@@ -50,6 +54,9 @@
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
         <button class="btn btn-success" onclick="botAction('start')">▶ Запустить</button>
         <button class="btn btn-danger" onclick="botAction('stop')">⏹ Остановить</button>
+        <button class="btn btn-outline" onclick="botAction('pause')">⏸ Пауза</button>
+        <button class="btn btn-outline" onclick="botAction('resume')">▶ Продолжить</button>
+        <button class="btn btn-danger" onclick="botAction('emergency-stop')" style="border-color:var(--danger);">🚨 Аварийная остановка</button>
         <button class="btn btn-outline" onclick="location.reload()">🔄 Обновить</button>
         <span style="font-size:.78rem;color:var(--text-muted);margin-left:.5rem;">Текущая стратегия: <strong style="color:var(--primary);">{{ current_strategy }}</strong></span>
     </div>

@@ -18,9 +18,11 @@ from urllib.parse import urlencode
 
 from .admin import router as admin_router
 from .bot import HFTBot
+from .bot_runtime import BotRuntime
 from .cms_core import CMSEngine
 from .hft_brain import CMSProductionHFTBot
 from .modules.strategy_manager import StrategyManager
+from .simple_cache import cached_fetch, cached_get
 from .market_history import (
     ensure_table, load_candles, refresh_candles, load_history, refresh_history,
     load_news, refresh_news, analyze_news_sentiment,
@@ -59,6 +61,34 @@ app.include_router(health_router)
 async def health():
     return {"status": "ok"}
 
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc: Exception):
+    """Friendly error page for 500 errors instead of raw traceback."""
+    from fastapi.responses import HTMLResponse
+    from .security.safe_errors import safe_exception_message, safe_error_payload
+    msg = safe_exception_message(exc, "server")
+    if request.url.path.startswith('/api/'):
+        return safe_error_payload(exc, "api")
+    html = f"""
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Ошибка сервера</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="dark">
+<div style="max-width:600px;margin:3rem auto;padding:2rem;text-align:center;">
+    <h1 style="color:var(--danger);margin-bottom:1rem;">Ошибка сервера</h1>
+    <p style="color:var(--text-secondary);margin-bottom:1.5rem;">{msg}</p>
+    <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:2rem;">
+        Администраторы уведомлены. Попробуйте повторить действие.
+    </p>
+    <a href="/" class="btn">На главную</a>
+    <a href="javascript:history.back()" class="btn btn-outline" style="margin-left:.5rem;">Назад</a>
+</div>
+</body>
+</html>
+"""
+    return HTMLResponse(content=html, status_code=500)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -75,6 +105,7 @@ production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
 exchange_service = ExchangeService(LIVE_CONTROL_STATE)
 arbitrage_engine = ArbitrageEngine()
+bot_runtime = BotRuntime(engine, strategy_manager, risk_manager, bot, exchange_service)
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
 WALLET_PROVIDERS = ("MetaMask", "Trust Wallet", "Binance Wallet", "WalletConnect", "Ledger", "Trezor")
@@ -343,9 +374,18 @@ def _exchange_directory() -> list[dict]:
 def _market_signal(pair: str, exchange_name: str):
     if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
         raise ValueError("Недоступная торговая пара.")
-    exchange = _public_exchange(exchange_name)
-    candles = refresh_candles(MARKET_DATABASE, exchange, exchange_name, pair)
-    daily = refresh_history(MARKET_DATABASE, exchange, exchange_name, pair)
+    def _compute():
+        exchange = _public_exchange(exchange_name)
+        candles = refresh_candles(MARKET_DATABASE, exchange, exchange_name, pair)
+        daily = refresh_history(MARKET_DATABASE, exchange, exchange_name, pair)
+        return candles, daily
+    cached = cached_get(f"market_signal:{pair}:{exchange_name}")
+    if cached is None:
+        candles, daily = _compute()
+        cached = (candles, daily)
+        cached_fetch(f"market_signal:{pair}:{exchange_name}", 5, lambda: cached)
+    else:
+        candles, daily = cached
     if len(candles) < 3 or len(daily) < 2:
         raise ValueError("Недостаточно исторических свечей для сигнала.")
     latest = candles[-1]
@@ -367,15 +407,26 @@ def _market_signal(pair: str, exchange_name: str):
 def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT"):
     from datetime import datetime, timedelta, timezone
 
-    ensure_table(MARKET_DATABASE)
-    daily = load_history(MARKET_DATABASE, exchange_name, pair)
-    freshness_cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
-    if not daily or str(daily[-1].get("day", "")) < freshness_cutoff:
-        client = _public_exchange(exchange_name)
-        daily = refresh_history(MARKET_DATABASE, client, exchange_name, pair)
-    month = daily[-31:]
-    names = [plugin.name for plugin in engine.list_plugins()]
-    return evaluate_strategies(month, names)
+    def _load():
+        ensure_table(MARKET_DATABASE)
+        daily = load_history(MARKET_DATABASE, exchange_name, pair)
+        freshness_cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
+        if not daily or str(daily[-1].get("day", "")) < freshness_cutoff:
+            client = _public_exchange(exchange_name)
+            daily = refresh_history(MARKET_DATABASE, client, exchange_name, pair)
+        month = daily[-31:]
+        names = [plugin.name for plugin in engine.list_plugins()]
+        return evaluate_strategies(month, names)
+    # TTL cache 300s; fallback to last computed стратегии if network fails
+    cached = cached_get(f"strategy_performance:{exchange_name}:{pair}")
+    if cached is not None:
+        return cached
+    try:
+        result = _load()
+        cached_fetch(f"strategy_performance:{exchange_name}:{pair}", 300, lambda: result)
+        return result
+    except Exception:
+        return {}
 
 
 def _strategy_catalog(email: str, performance: dict):
@@ -416,12 +467,14 @@ def _strategy_catalog(email: str, performance: dict):
             "available": price == 0 or bool(owned and owned["active"]),
             "active": bool(owned and owned["active"]),
             "owned": bool(owned),
+            "free_trial_days": 15 if price > 0 else 0,
             "access_until": owned["access_until"] if owned else None})
     return catalog
 
 class PluginActionPayload(BaseModel):
     plugin_name: str
     duration_days: int = 15
+    trial: bool = False
 class StrategyCreatePayload(BaseModel):
     name: str
     description: str = ""
@@ -1068,6 +1121,57 @@ async def admin_risk_action(request: Request, enabled: str = Form("true")):
     engine.record_audit("kill_switch", enabled, email)
     return RedirectResponse(url="/admin", status_code=303)
 
+@app.api_route("/profile", methods=["GET", "POST"], name="profile_page")
+async def profile(request: Request):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/login", status_code=302)
+    ctx = _trading_context(user_email)
+    db_user = engine.get_user(user_email)
+    wallet = engine.get_or_create_wallet(user_email)
+    exchanges = exchange_service.list_connected(user_email)
+    message = None
+    if request.method == "POST":
+        form = await request.form()
+        action = form.get("action")
+        if action == "save_profile":
+            message = "Настройки профиля сохранены."
+        elif action == "toggle_demo":
+            active = str(form.get("active", "true")).lower() == "true"
+            engine.toggle_demo_mode(user_email, active)
+            ctx["demo"] = engine.get_demo_session(user_email)
+            message = "Демо-режим " + ("включён" if active else "выключен") + "."
+        elif action == "connect_exchange":
+            provider = str(form.get("exchange_provider", ""))
+            api_key = str(form.get("exchange_key", ""))
+            api_secret = str(form.get("exchange_secret", ""))
+            sandbox = str(form.get("exchange_sandbox", "true")).lower() == "true"
+            if provider and api_key:
+                ok, err = exchange_service.connect(user_email, provider, api_key, api_secret, sandbox=sandbox)
+                if ok:
+                    message = f"Биржа {provider} подключена."
+                else:
+                    message = f"Ошибка подключения: {err}"
+            else:
+                message = "Укажите биржу и API ключ."
+            exchanges = exchange_service.list_connected(user_email)
+        elif action == "disconnect_exchange":
+            provider = str(form.get("exchange_provider", ""))
+            exchange_service.disconnect(user_email)
+            exchanges = exchange_service.list_connected(user_email)
+            message = f"Биржа {provider} отключена."
+        ctx["message"] = message
+    ctx.update({
+        "user_id": user_email,
+        "user": db_user,
+        "wallet": wallet,
+        "exchanges": exchanges,
+        "message": message,
+        "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
+        "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
+    })
+    return templates.TemplateResponse(request, "profile.html", ctx)
+
 @app.get("/logout", name="logout")
 async def logout(request: Request):
     request.session.clear()
@@ -1153,9 +1257,21 @@ def manual_trade(payload: ManualTradePayload, request: Request):
     fee_rate = float(strategy_manager.config.get("fee_rate", 0.001))
     fee = payload.price * payload.amount * fee_rate
     new_balance = max(0.0, payload.balance - fee)
+    mode = current_mode()
+    if mode == "live" and not LIVE_CONTROL_STATE.allows(bot_id="manual", ai_bot_id=None):
+        return {"status": "blocked", "reason": "LIVE trading disabled by global kill switch.", "fee": round(fee, 6), "balance": round(new_balance, 2)}
+    # NEVER report FILLED until exchange confirms. Use 'submitted' semantics for LIVE.
+    status = "submitted" if mode == "live" else "executed"
+    order_id = None
+    if mode == "live":
+        try:
+            order_id = submit_real_order(email, payload.pair, payload.side, payload.price, payload.amount)
+            status = "submitted"
+        except Exception as exc:
+            return {"status": "rejected", "reason": safe_exception_message(exc, "manual_trade"), "fee": round(fee, 6), "balance": round(new_balance, 2)}
     engine.record_trade(email, payload.pair, "manual", payload.side, -fee, new_balance)
-    engine.record_audit("manual_trade", f"{payload.side} {payload.pair}", email)
-    return {"status": "executed", "fee": round(fee, 6), "balance": round(new_balance, 2)}
+    engine.record_audit("manual_trade", f"{payload.side} {payload.pair} ({status})", email)
+    return {"status": status, "fee": round(fee, 6), "balance": round(new_balance, 2), "order_id": order_id}
 
 @app.get("/api/trading/history")
 def trading_history(request: Request, limit: int = 50):
@@ -1184,17 +1300,18 @@ def purchase_strategy(payload: PluginActionPayload, request: Request):
         raise HTTPException(status_code=502, detail=f"Не удалось проверить месячную доходность: {exc}") from exc
     result = performance.get(payload.plugin_name)
     if not result or result["price_eur"] <= 0:
-        return engine.purchase_plugin(email, payload.plugin_name, 0.0)
+        engine.purchase_plugin(email, payload.plugin_name, 0.0, payload.duration_days)
+        return {"status": "free", "plugin": payload.plugin_name, "duration_days": payload.duration_days}
     try:
         purchase_price = price_for_duration(result["price_eur"], payload.duration_days)
-        purchase = engine.purchase_plugin(
-            email, payload.plugin_name, purchase_price, payload.duration_days
-        )
+        purchase = engine.purchase_plugin(email, payload.plugin_name, purchase_price, payload.duration_days)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not purchase:
         raise HTTPException(status_code=404, detail="Стратегия не найдена.")
-    return purchase
+    # Durable CMSC debit ledger
+    engine.record_payment(email, purchase_price, currency="CMSC", type="purchase", reference=f"plugin:{payload.plugin_name}")
+    return {**purchase, "status": "purchased", "ledger": True}
 
 
 @app.get("/api/strategies/performance")
@@ -1223,12 +1340,22 @@ def activate_strategy(payload: PluginActionPayload, request: Request):
         performance = _strategy_performance()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось проверить цену стратегии: {exc}") from exc
-    if performance.get(plugin.name, {}).get("price_eur", 0) > 0 and not engine.set_plugin_active(
-        email, plugin.name, True
-    ):
-        raise HTTPException(status_code=402, detail="Сначала купите стратегию.")
+    owned = engine.user_plugins(email)
+    owned_item = next((x for x in owned if x["name"] == plugin.name), None)
+    price = performance.get(plugin.name, {}).get("price_eur", float(plugin.price))
+    if not owned_item:
+        # Free strategy or trial grant: create access record
+        engine.purchase_plugin(email, plugin.name, max(0.0, price) if payload.trial else price, 15)
+        if price > 0 and not payload.trial:
+            ledger = engine.record_payment(email, price, currency="CMSC", type="purchase", reference=f"plugin:{plugin.name}")
+            if ledger["status"] != "completed":
+                raise HTTPException(status_code=402, detail=ledger["reason"])
+    if not engine.set_plugin_active(email, plugin.name, True):
+        raise HTTPException(status_code=402, detail="Сначала купите стратегию или активируйте trial.")
     strategy_manager.config["strategy"] = plugin.name
-    return {"status": "active", "strategy": plugin.name}
+    # Persist active strategy so it survives restart/serverless
+    engine.set_active_strategy(email, plugin.name)
+    return {"status": "active", "strategy": plugin.name, "persisted": True}
 
 
 @app.get("/api/market/data")
@@ -1243,8 +1370,13 @@ def market_data(request: Request, pair: str = "BTC/USDT", exchange: str = "binan
         ticker = client.fetch_ticker(pair)
         order_book = client.fetch_order_book(pair, limit=10)
         candles = refresh_candles(MARKET_DATABASE, client, exchange, pair, timeframe="1h")
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Не удалось получить данные рынка: {exc}") from exc
+    except Exception:
+        cached = cached_get(f"market_data:{pair}:{exchange}")
+        if cached is None:
+            raise HTTPException(status_code=502, detail="Не удалось получить данные рынка. Проверьте подключение к бирже.")
+        exchange, pair, ticker, order_book, candles = cached
+    result = (exchange, pair, ticker, order_book, candles)
+    cached_fetch(f"market_data:{pair}:{exchange}", 5, lambda: result)
     return {
         "exchange": exchange,
         "pair": pair,
@@ -1371,33 +1503,61 @@ def trading_status(request: Request):
     return bot.status()
 
 @app.post("/api/bot/start")
-def start_bot(request: Request):
-    _require_admin(request)
-    if risk_manager.kill_switch:
+def start_bot(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+    email = _require_admin(request)
+    # Unified kill switch: block if either the RiskManager or LiveControlState blocks LIVE
+    if risk_manager.kill_switch or LIVE_CONTROL_STATE.global_kill_switch:
         raise HTTPException(status_code=423, detail="Сначала отключите аварийный выключатель.")
-    leverage = float(strategy_manager.config.get("leverage", 1.0))
+    leverage = float(strategy_manager.config.get("leverage", 1.5))
     risk_score = risk_manager.calculate_risk_score(leverage=leverage)
     allowed, reason = risk_manager.check_risk_score(risk_score)
     if not allowed:
         raise HTTPException(status_code=429, detail=reason)
+    engine.ensure_demo_session(email)
     result = bot.start()
-    result["risk_score"] = risk_score
-    engine.record_audit("bot_started", user_id=request.session.get("user_email"))
+    rt = bot_runtime.start(email, pair=pair, exchange=exchange)
+    result.update({"risk_score": risk_score, "lifecycle": bot_runtime.lifecycle})
+    engine.record_audit("bot_started", f"{pair}@{exchange}", email)
     engine.record_bot_stat("bot_status", "started")
     return result
 
 @app.post("/api/bot/stop")
 def stop_bot(request: Request):
     email = _require_admin(request)
+    rt = bot_runtime.stop(email)
     result = bot.stop()
     engine.record_audit("bot_stopped", user_id=email)
     engine.record_bot_stat("bot_status", "stopped")
-    return result
+    return {"status": result["status"], "lifecycle": rt["lifecycle"]}
+
+
+@app.post("/api/bot/pause")
+def pause_bot(request: Request):
+    _require_user(request)
+    return bot_runtime.pause()
+
+
+@app.post("/api/bot/resume")
+def resume_bot(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+    email = _require_user(request)
+    return bot_runtime.resume(email, pair=pair, exchange=exchange)
+
+
+@app.post("/api/bot/emergency-stop")
+def emergency_stop_bot(request: Request):
+    """Emergency stop: engages unified kill switch + runtime emergency stop."""
+    email = _require_admin(request)
+    LIVE_CONTROL_STATE.set_global_kill_switch(enabled=True, actor=email)
+    risk_manager.set_kill_switch(True)
+    engine.record_audit("emergency_stop", "kill_switch engaged", email)
+    return bot_runtime.emergency_stop(email)
 
 @app.get("/api/bot/status")
 def bot_status(request: Request):
-    _require_user(request)
-    return bot.status()
+    email = _require_user(request)
+    status = bot.status()
+    status.update(bot_runtime.status(email))
+    return status
 
 @app.post("/api/bot/backtest")
 def bot_backtest(payload: BacktestPayload, request: Request):
@@ -1501,10 +1661,14 @@ def calculate_risk_score(request: Request, leverage: float = 1.0, volatility: fl
 
 @app.post("/api/risk/kill-switch")
 def set_kill_switch(payload: KillSwitchPayload, request: Request):
+    """Unified kill switch: syncs RiskManager + LiveControlState."""
     email = _require_admin(request)
+    # Global kill switch engages both the risk layer and the LIVE control layer
+    if not payload.enabled:
+        LIVE_CONTROL_STATE.set_global_kill_switch(enabled=False, actor=email)
     risk_manager.set_kill_switch(payload.enabled)
     engine.record_audit("kill_switch", str(payload.enabled), email)
-    return risk_manager.status()
+    return {**risk_manager.status(), "global_kill_switch": LIVE_CONTROL_STATE.global_kill_switch, "bot_live": dict(LIVE_CONTROL_STATE.bot_live), "ai_bot_live": dict(LIVE_CONTROL_STATE.ai_bot_live)}
 
 
 # ─── Недостающие API (fix 404 "file not found") ───────────────────

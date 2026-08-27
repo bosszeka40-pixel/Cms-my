@@ -35,6 +35,10 @@
                 <a href="{{ url_for('settings') }}" class="btn btn-sm btn-outline">Профиль → Настройки</a>
             {% endif %}
         </div>
+        <div style="margin-top:.5rem;">
+            <button class="btn btn-primary btn-sm" id="generate-btn" onclick="generateStrategies()">🤖 Сгенерировать стратегии</button>
+            <span id="gen-status" class="muted" style="margin-left:.5rem;"></span>
+        </div>
     </section>
 
     <!-- Featured sections -->
@@ -84,6 +88,7 @@
                         <span class="badge badge-success">Бесплатно</span>
                     {% else %}
                         <span class="badge badge-accent">{{ plugin.category }}</span>
+                        {% if plugin.free_trial_days %}<span class="badge badge-success">{{ plugin.free_trial_days }} дней free</span>{% endif %}
                     {% endif %}
                 </header>
                 <p class="market-description muted">{{ plugin.description }}</p>
@@ -93,6 +98,23 @@
                     <div><dt>Винрейт</dt><dd>{{ '%.1f'|format(plugin.win_rate_pct or 0) }}%</dd></div>
                     <div><dt>Категория</dt><dd>{{ plugin.category }}</dd></div>
                 </dl>
+                <!-- Strategy Parameters -->
+                <div class="market-params" style="display:none;" data-plugin="{{ plugin.name }}">
+                    <details>
+                        <summary style="cursor:pointer;color:var(--accent);font-size:.82rem;margin-top:.5rem;">📊 Параметры стратегии</summary>
+                        <div style="margin-top:.5rem;padding:.5rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:.75rem;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem;">
+                                <div><span class="muted">Сигнал:</span> <span id="param-signal-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Леверидж:</span> <span id="param-lev-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Риск:</span> <span id="param-risk-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Stop Loss:</span> <span id="param-sl-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Take Profit:</span> <span id="param-tp-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Таймфрейм:</span> <span id="param-tf-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Пары:</span> <span id="param-pairs-{{ plugin.name }}"></span></div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
                 <footer class="market-card-footer">
                     {% if plugin.price_eur > 0 %}
                         <strong class="price">€{{ '%.2f'|format(plugin.price_eur) }}<small>/15 дн.</small></strong>
@@ -164,11 +186,59 @@
   }));
   search.addEventListener('input', applyFilters);
 
-  document.querySelectorAll('.activate-btn').forEach(btn => {
+  // Strategy parameters (shared with bot_management)
+const STRATEGY_PARAMS = {
+    pure_harvester: {name: 'Pure Harvester', signal: 'Направление тренда', leverage: '1.0-1.5x', risk: 'Низкий', stop_loss: '2-3%', take_profit: '3-5%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    high_frequency_momentum: {name: 'HFT Momentum', signal: 'Сила импульса', leverage: '1.5-2.0x', risk: 'Высокий', stop_loss: '1-2%', take_profit: '1-3%', timeframe: '1m-15m', pairs: 'BTC/USDT, ETH/USDT'},
+    compound_defender: {name: 'Compound Defender', signal: 'Против тренда', leverage: '0.8-1.0x', risk: 'Низкий', stop_loss: '3-5%', take_profit: '2-4%', timeframe: '4h-1d', pairs: 'BTC/USDT'},
+    trend_breakout_compound: {name: 'Trend Breakout', signal: 'Пробой уровня', leverage: '1.2-1.8x', risk: 'Средний', stop_loss: '2-4%', take_profit: '4-8%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT, SOL/USDT'},
+    multi_sentiment_scalper: {name: 'Multi Sentiment', signal: 'Sentiment + Price', leverage: '1.5-2.0x', risk: 'Высокий', stop_loss: '1-2%', take_profit: '2-5%', timeframe: '15m-1h', pairs: 'BTC/USDT, ETH/USDT'},
+    ai_adaptive_momentum: {name: 'AI Adaptive', signal: 'AI порог', leverage: '1.0-1.5x', risk: 'Средний', stop_loss: '2-3%', take_profit: '3-6%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    quantum_grid_trader: {name: 'Quantum Grid', signal: 'Сетка + Sentiment', leverage: '1.0-1.2x', risk: 'Низкий', stop_loss: '3-5%', take_profit: '1-3%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    neural_pattern_recognition: {name: 'Neural Pattern', signal: 'Pattern Score', leverage: '1.0-1.5x', risk: 'Средний', stop_loss: '2-4%', take_profit: '3-6%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    delta_neutral_hedger: {name: 'Delta Neutral', signal: 'Против изменения', leverage: '0.8-1.0x', risk: 'Минимальный', stop_loss: '5-8%', take_profit: '2-4%', timeframe: '4h-1d', pairs: 'BTC/USDT'},
+    volatility_harvest: {name: 'Volatility Harvest', signal: 'Абс. волатильность', leverage: '1.5-1.8x', risk: 'Высокий', stop_loss: '2-3%', take_profit: '3-7%', timeframe: '15m-1h', pairs: 'BTC/USDT, ETH/USDT, SOL/USDT'},
+};
+
+function populateStrategyParams(pluginName) {
+    const p = STRATEGY_PARAMS[pluginName];
+    if (!p) return;
+    document.getElementById('param-signal-' + pluginName).textContent = p.signal;
+    document.getElementById('param-lev-' + pluginName).textContent = p.leverage;
+    const riskEl = document.getElementById('param-risk-' + pluginName);
+    riskEl.textContent = p.risk;
+    riskEl.style.color = p.risk === 'Высокий' ? 'var(--danger)' : p.risk === 'Низкий' || p.risk === 'Минимальный' ? 'var(--success)' : 'var(--warning)';
+    document.getElementById('param-sl-' + pluginName).textContent = p.stop_loss;
+    document.getElementById('param-tp-' + pluginName).textContent = p.take_profit;
+    document.getElementById('param-tf-' + pluginName).textContent = p.timeframe;
+    document.getElementById('param-pairs-' + pluginName).textContent = p.pairs;
+}
+
+document.querySelectorAll('.market-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+        const pluginName = card.querySelector('[data-plugin]')?.dataset.plugin;
+        if (pluginName) {
+            const paramsDiv = card.querySelector('.market-params');
+            if (paramsDiv && paramsDiv.style.display === 'none') {
+                populateStrategyParams(pluginName);
+                paramsDiv.style.display = 'block';
+            } else if (paramsDiv) {
+                paramsDiv.style.display = 'none';
+            }
+        }
+    });
+});
+
+document.querySelectorAll('.activate-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const pluginName = btn.dataset.plugin;
-      const resp = await fetch('/api/strategies/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({plugin_name: pluginName, duration_days: 15})});
+      const card = btn.closest('.market-card');
+      const isPaid = parseFloat(card.querySelector('.price')?.textContent || '0') > 0;
+      const resp = await fetch('/api/strategies/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({plugin_name: pluginName, duration_days: 15, trial: isPaid})});
+      const data = await resp.json().catch(()=>null);
       if (resp.ok) { btn.textContent = 'Уже активна'; btn.disabled = true; }
+      else { alert(data?.detail || 'Ошибка активации'); }
     });
   });
 })();

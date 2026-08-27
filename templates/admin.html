@@ -135,6 +135,28 @@
     </form>
 </div>
 
+<!-- Live Controls -->
+<div id="live-controls" style="margin-bottom:1.5rem;">
+    <h2>🔴 Управление LIVE</h2>
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem;">Глобальные переключатели для ботов и ИИ-ботов (только для администраторов).</p>
+    <div class="card" style="padding:1rem;">
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+            <label data-live-global="true" style="display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" id="global-kill-switch" data-live-global="true"> Global Kill Switch
+            </label>
+            <button data-live-global="false" style="display:none;"></button>
+            <button class="btn btn-sm" onclick="fetch('/api/admin/live-controls/global', {method:'POST', headers:{'X-CSRF-Token': window.__csrfToken}, 'Content-Type':'application/json'}, body:JSON.stringify({enabled: !document.getElementById('global-kill-switch').checked})}).then(r=>r.json()).then(()=>{location.reload();})">Применить</button>
+            <span style="color:var(--text-muted);font-size:.8rem;">CSRF: <span id="csrf-display">{{ csrf_token|default('') }}</span></span>
+        </div>
+        <div style="margin-top:1rem;">
+            <div class="live-bot-controls" style="margin-bottom:.75rem;"><strong>Боты</strong> <span style="font-size:.7rem;color:var(--text-muted);" id="bots-endpoint">/api/admin/live-controls/bots/</span></div>
+            <div class="live-ai-bot-controls"><strong>ИИ-боты</strong> <span style="font-size:.7rem;color:var(--text-muted);" id="ai-bots-endpoint">/api/admin/live-controls/ai-bots/</span></div>
+            <input type="hidden" name="_csrf" value="{{ csrf_token|default('') }}">
+            <script>window.__csrfToken = '{{ csrf_token|default("") }}';</script>
+        </div>
+    </div>
+</div>
+
 <!-- Site Settings -->
 <div id="tab-settings" class="card" style="display:none;">
     <h2>⚙️ Настройки сайта</h2>

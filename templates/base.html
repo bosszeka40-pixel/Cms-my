@@ -66,6 +66,9 @@
                         <span>🛡️</span> Админ<span data-info="admin"></span>
                     </a>
                 {% endif %}
+                <a class="nav-link {% if request.url.path == '/profile' %}active{% endif %}" href="{{ url_for('profile_page') }}">
+                    <span>👤</span> Профиль<span data-info="profile"></span>
+                </a>
             {% else %}
                 <div class="nav-group">Аккаунт</div>
                 <a class="nav-link {% if request.url.path == '/login' %}active{% endif %}" href="{{ url_for('login') }}">
@@ -195,6 +198,7 @@ const CMS_INFO = {
     "wallet": "Кошелёк: CMSC баланс, пополнение, крипто/карточные выплаты.",
     "notifications": "Уведомления: сигналы бота, арбитраж, ошибки, достижения.",
     "settings": "Настройки: тема, профиль, безопасность, уведомления, язык.",
+    "profile": "Профиль: аккаунт, торговые предпочтения, переключатель DEMO/PAPER/LIVE, подключения бирж, CMSC.",
     "admin": "Админ: пользователи, плагины, риск, настройки сайта, выплаты.",
     "risk_score": "Risk Score: нормализованный показатель риска 0-100. Максимум для запуска: 60.",
     "signal": "Сигнал: рекомендация ИИ/бота для входа/выхода. Источник: бот, ИИ или ИИ+бот.",

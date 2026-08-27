@@ -88,6 +88,18 @@ class Trade(Base):
     balance = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class PaymentLedger(Base):
+    __tablename__ = "payment_ledger"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    plugin_id = Column(Integer, ForeignKey("plugins.id"), nullable=True)
+    amount = Column(Float, nullable=False)
+    currency = Column(String, default="CMSC")
+    type = Column(String, default="purchase")
+    reference = Column(String, default="")
+    status = Column(String, default="completed")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class SiteSetting(Base):
     __tablename__ = "site_settings"
     key = Column(String, primary_key=True)
@@ -449,6 +461,7 @@ class CMSEngine:
             session.close()
 
     def set_plugin_active(self, email: str, plugin_name: str, active: bool):
+        """Set plugin active. Free/trial plugins bypass access_until check."""
         session = self.SessionLocal()
         try:
             user = session.query(User).filter(User.email == email).first()
@@ -457,12 +470,18 @@ class CMSEngine:
                 return False
             purchase = session.query(UserPlugin).filter_by(user_id=user.id, plugin_id=plugin.id).first()
             if not purchase:
-                return False
-            if purchase.access_until and purchase.access_until <= datetime.utcnow():
+                purchase = UserPlugin(user_id=user.id, plugin_id=plugin.id, active=False, access_until=datetime.utcnow() + timedelta(days=15))
+                session.add(purchase)
+            # Free plugins (price=0) or trial grants bypass the expiry check
+            is_free = (plugin.price or 0) == 0
+            if not is_free and purchase.access_until and purchase.access_until <= datetime.utcnow():
                 purchase.active = False
                 session.commit()
                 return False
             purchase.active = active
+            # If free/trial, always renew access_until
+            if is_free:
+                purchase.access_until = datetime.utcnow() + timedelta(days=15)
             session.commit()
             return True
         finally:
@@ -570,6 +589,60 @@ class CMSEngine:
             session.commit()
             session.refresh(wallet)
             return self._wallet_to_dict(wallet)
+        finally:
+            session.close()
+
+    def record_payment(self, email: str, amount: float, currency: str = "CMSC", type: str = "purchase", reference: str = "") -> dict:
+        """Append a durable payment ledger record for audit / CMSC debit trail."""
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"status": "failed", "reason": "user not found"}
+            # Debit wallet credits atomically when this is a CMSC debit
+            wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
+            if not wallet:
+                wallet = Wallet(user_id=user.id)
+                session.add(wallet)
+                session.flush()
+            if type == "purchase" and currency == "CMSC" and amount > 0:
+                if (wallet.credits or 0.0) < amount:
+                    return {"status": "failed", "reason": "insufficient CMSC credits"}
+                wallet.credits = max(0.0, (wallet.credits or 0.0) - amount)
+            txn = PaymentLedger(user_id=user.id, amount=float(amount), currency=currency, type=type, reference=reference, status="completed")
+            session.add(txn)
+            session.commit()
+            session.refresh(txn)
+            return {"status": "completed", "ledger_id": txn.id, "wallet_credits": round(wallet.credits or 0.0, 2)}
+        finally:
+            session.close()
+
+    def set_active_strategy(self, email: str, strategy_name: str) -> bool:
+        """Persist the active strategy per-user in site_settings (survives restart)."""
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return False
+            key = f"active_strategy:{email}"
+            setting = session.query(SiteSetting).filter(SiteSetting.key == key).first()
+            if not setting:
+                setting = SiteSetting(key=key, value=strategy_name)
+                session.add(setting)
+            else:
+                setting.value = strategy_name
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def get_active_strategy(self, email: str) -> str | None:
+        """Return the persisted active strategy for a user, if any."""
+        session = self.SessionLocal()
+        try:
+            key = f"active_strategy:{email}"
+            setting = session.query(SiteSetting).filter(SiteSetting.key == key).first()
+            return setting.value if setting else None
         finally:
             session.close()
 
