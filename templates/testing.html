@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% block title %}Тесты стратегий — CMS Trading{% endblock %}
+{% block breadcrumb %}Тестирование / Стратегии{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Backtesting</span>
+        <h1 class="page-title">Тестирование стратегий</h1>
+        <p class="lead">Тесты на реальных данных live. Без знания будущего — только прошлые свечи.</p>
+    </div>
+    <span class="term-demo-badge">DEMO MODE</span>
+</div>
+
+<!-- Config -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>⚙️ Настройки теста</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;">
+        <div class="field-group">
+            <label>Пара</label>
+            <select id="test-pair">
+                {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Биржа</label>
+            <select id="test-exchange">
+                {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Начальный баланс (€)</label>
+            <input type="number" id="test-balance" value="100" min="10" max="10000">
+        </div>
+        <div class="field-group">
+            <label>Стратегия</label>
+            <select id="test-strategy">
+                <option value="all">Все стратегии</option>
+                <option value="pure_harvester">Pure Harvester</option>
+                <option value="high_frequency_momentum">HFT Momentum</option>
+                <option value="compound_defender">Compound Defender</option>
+                <option value="trend_breakout_compound">Trend Breakout</option>
+                <option value="multi_sentiment_scalper">Multi Sentiment</option>
+                <option value="ai_adaptive_momentum">AI Adaptive</option>
+                <option value="quantum_grid_trader">Quantum Grid</option>
+                <option value="neural_pattern_recognition">Neural Pattern</option>
+                <option value="delta_neutral_hedger">Delta Neutral</option>
+                <option value="volatility_harvest">Volatility Harvest</option>
+            </select>
+        </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn btn-success" id="run-backtest" onclick="runBacktest()">🔬 Запустить тест</button>
+        <button class="btn btn-outline" id="run-hft-test" onclick="runHFTTest()">⚡ HFT тест</button>
+        <span id="test-status" style="padding:.5rem;font-size:.82rem;color:var(--text-muted);"></span>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📊 Результаты</h2>
+    <div id="test-results" class="term-results-grid" style="min-height:60px;">
+        <div class="term-empty">Нажмите «Запустить тест» для запуска backtesting</div>
+    </div>
+</div>
+
+<!-- Chart -->
+<div class="card">
+    <h2>📈 График результатов</h2>
+    <div id="test-chart" style="width:100%;height:300px;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runBacktest() {
+    const statusEl = document.getElementById('test-status');
+    const resultsEl = document.getElementById('test-results');
+    const btn = document.getElementById('run-backtest');
+    btn.disabled = true;
+    statusEl.textContent = '⏳ Загрузка рыночных данных и тестирование...';
+    resultsEl.innerHTML = '';
+
+    try {
+        const resp = await fetch('/api/bot/backtest', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                pair: document.getElementById('test-pair').value,
+                exchange: document.getElementById('test-exchange').value,
+                initial_balance: parseFloat(document.getElementById('test-balance').value) || 100
+            })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.results) {
+            resultsEl.innerHTML = data.results.map(r => `
+                <div class="term-result-card">
+                    <div style="font-size:.72rem;color:var(--accent);margin-bottom:.25rem;font-weight:600;">${r.strategy}</div>
+                    <div class="value ${(r.pnl||0)>=0?'up':'down'}" style="color:${(r.pnl||0)>=0?'var(--success)':'var(--danger)'};">${(r.pnl||0)>=0?'+':''}${(r.pnl||0).toFixed(2)}€</div>
+                    <div class="label">P/L (${(r.roi||0).toFixed(1)}%)</div>
+                    <div style="font-size:.68rem;color:var(--text-muted);margin-top:.25rem;">${r.trades||0} сделок · ${r.wins||0} побед · Финал: ${(r.final_balance||0).toFixed(2)}€</div>
+                </div>
+            `).join('') || '<div class="term-empty">Нет данных</div>';
+            statusEl.textContent = '✅ Тест завершён';
+        } else {
+            statusEl.textContent = '❌ ' + (data.detail || 'Ошибка');
+            resultsEl.innerHTML = `<div class="term-empty">${data.detail || 'Ошибка теста'}</div>`;
+        }
+    } catch(e) {
+        statusEl.textContent = '❌ Ошибка соединения';
+        resultsEl.innerHTML = `<div class="term-empty">Ошибка: ${e.message}</div>`;
+    }
+    btn.disabled = false;
+}
+
+async function runHFTTest() {
+    const statusEl = document.getElementById('test-status');
+    const resultsEl = document.getElementById('test-results');
+    const btn = document.getElementById('run-hft-test');
+    btn.disabled = true;
+    statusEl.textContent = '⏳ HFT тест на live данных...';
+
+    try {
+        const pair = document.getElementById('test-pair').value;
+        const resp = await fetch('/api/market/history?pair=' + encodeURIComponent(pair) + '&exchange=' + document.getElementById('test-exchange').value + '&timeframe=1h&limit=200');
+        const data = await resp.json();
+        if (resp.ok && data.candles) {
+            const prices = data.candles.map(c => c.close);
+            const aiStream = prices.map(() => Math.random());
+            const simResp = await fetch('/api/bot/simulate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({market_data: prices, ai_stream: aiStream})
+            });
+            const simData = await simResp.json();
+            if (simResp.ok) {
+                resultsEl.innerHTML = `
+                    <div class="term-result-card">
+                        <div style="font-size:.72rem;color:var(--accent);">HFT Brain</div>
+                        <div class="value" style="color:${simData.capital>=100?'var(--success)':'var(--danger)'};">${simData.capital.toFixed(2)}€</div>
+                        <div class="label">Финальный капитал</div>
+                    </div>
+                    <div class="term-result-card">
+                        <div class="value">${simData.trades}</div>
+                        <div class="label">Сделок</div>
+                    </div>
+                `;
+                statusEl.textContent = '✅ HFT тест завершён';
+            } else {
+                statusEl.textContent = '❌ ' + (simData.detail || 'Ошибка');
+            }
+        } else {
+            statusEl.textContent = '❌ Нет рыночных данных';
+        }
+    } catch(e) {
+        statusEl.textContent = '❌ Ошибка: ' + e.message;
+    }
+    btn.disabled = false;
+}
+</script>
+{% endblock %}

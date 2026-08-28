@@ -2,57 +2,250 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>{% block title %}CMS Trading Platform{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=8-mobile">
+<link rel="stylesheet" href="{{ url_for('static', filename='terminal.css') }}?v=8-mobile">
+<link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}?v=8-mobile">
+<link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}?v=8-mobile">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    {% block head %}{% endblock %}
 </head>
-<body class="{{ theme|default('light') }}">
-    <header>
-        <div class="brand"><span class="win-logo" aria-hidden="true">▦</span><h2>Super CMS V12</h2></div>
-        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu">
-            <span aria-hidden="true">☰</span> Меню
-        </button>
-        <nav id="main-menu">
-            <a href="{{ url_for('index') }}"><span class="nav-icon" aria-hidden="true">⌂</span>Главная</a>
+<body class="{{ theme|default('dark') }}">
+<div class="app-shell">
+    <aside class="sidebar" id="main-menu" aria-label="Навигация">
+        <div class="sidebar-brand">
+            <span class="win-logo" aria-hidden="true">₿</span>
+            <div><strong>CMS Trading</strong><small>Pro Platform</small></div>
+        </div>
+
+        <nav class="sidebar-nav">
             {% if user_id %}
-                <a href="{{ url_for('dashboard') }}"><span class="nav-icon" aria-hidden="true">▣</span>Дашборд</a>
-                <a href="{{ url_for('wallet_page') }}"><span class="nav-icon" aria-hidden="true">▤</span>Кошелёк</a>
-                <a href="{{ url_for('marketplace') }}"><span class="nav-icon" aria-hidden="true">▦</span>Маркетплейс</a>
-                <a href="{{ url_for('bot_management') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Бот</a>
-                <a href="{{ url_for('settings') }}"><span class="nav-icon" aria-hidden="true">⚙</span>Настройки</a>
+                <div class="nav-group">Обзор</div>
+                <a class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                    <span>📊</span> Дашборд<span data-info="dashboard"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/marketplace' %}active{% endif %}" href="{{ url_for('marketplace') }}">
+                    <span>🏪</span> Маркет<span data-info="marketplace"></span>
+                </a>
+
+                <div class="nav-group">Торговля</div>
+                <a class="nav-link {% if request.url.path == '/bot-management' %}active{% endif %}" href="{{ url_for('bot_management') }}">
+                    <span>🤖</span> Бот<span data-info="bots"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/manual-trading' %}active{% endif %}" href="{{ url_for('manual_trading') }}">
+                    <span>📈</span> Терминал<span data-info="trade"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/copy-trading' %}active{% endif %}" href="{{ url_for('copy_trading_page') }}">
+                    <span>👥</span> Копитрейдинг<span data-info="copy_trading"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/arbitrage' %}active{% endif %}" href="{{ url_for('arbitrage_page') }}">
+                    <span>🔄</span> Арбитраж<span data-info="arbitrage"></span>
+                </a>
+
+                <div class="nav-group">Тестирование</div>
+                <a class="nav-link {% if request.url.path == '/strategies' %}active{% endif %}" href="{{ url_for('strategies_page') }}">
+                    <span>🧬</span> Стратегии<span data-info="strategies"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/testing' %}active{% endif %}" href="{{ url_for('testing_page') }}">
+                    <span>🔬</span> Тесты<span data-info="backtest"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/demo' %}active{% endif %}" href="{{ url_for('demo_page') }}">
+                    <span>🎯</span> Демо<span data-info="demo"></span>
+                </a>
+
+                <div class="nav-group">Аккаунт</div>
+                <a class="nav-link {% if request.url.path == '/wallet' %}active{% endif %}" href="{{ url_for('wallet_page') }}">
+                    <span>💰</span> Кошелёк<span data-info="wallet"></span>
+                </a>
+                <a class="nav-link {% if request.url.path == '/settings' %}active{% endif %}" href="{{ url_for('settings') }}">
+                    <span>⚙️</span> Настройки<span data-info="settings"></span>
+                </a>
                 {% if is_admin %}
-                    <a href="{{ url_for('admin_panel') }}"><span class="nav-icon" aria-hidden="true">★</span>Админ</a>
+                    <a class="nav-link {% if request.url.path == '/admin' %}active{% endif %}" href="{{ url_for('admin_panel') }}">
+                        <span>🛡️</span> Админ<span data-info="admin"></span>
+                    </a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}"><span class="nav-icon" aria-hidden="true">↪</span>Выйти</a>
-                <form class="theme-switcher" method="post" action="{{ url_for('dashboard') }}">
-                    <input type="hidden" name="action" value="save_theme">
-                    <input type="hidden" name="theme" value="{{ 'dark' if theme|default('light') == 'light' else 'light' }}">
-                    <button class="theme-button" type="submit" title="Переключить тему">
-                        {{ '☀ Светлая' if theme|default('light') == 'dark' else '☾ Тёмная' }}
-                    </button>
-                </form>
+                <a class="nav-link {% if request.url.path == '/profile' %}active{% endif %}" href="{{ url_for('profile_page') }}">
+                    <span>👤</span> Профиль<span data-info="profile"></span>
+                </a>
             {% else %}
-                <a href="{{ url_for('login') }}"><span class="nav-icon" aria-hidden="true">➜</span>Войти</a>
-                <a href="{{ url_for('register') }}"><span class="nav-icon" aria-hidden="true">✚</span>Регистрация</a>
+                <div class="nav-group">Аккаунт</div>
+                <a class="nav-link {% if request.url.path == '/login' %}active{% endif %}" href="{{ url_for('login') }}">
+                    <span>🔑</span> Войти
+                </a>
+                <a class="nav-link {% if request.url.path == '/register' %}active{% endif %}" href="{{ url_for('register') }}">
+                    <span>➕</span> Регистрация
+                </a>
             {% endif %}
         </nav>
-    </header>
-    <div class="container">
-        {% block content %}{% endblock %}
+
+        <div class="sidebar-footer">
+            {% if user_id %}
+                <span class="user-chip" title="{{ user_id }}">{{ (username or user_id)[:16] }}</span>
+                <a class="btn btn-outline btn-sm" href="{{ url_for('logout') }}">Выйти</a>
+            {% else %}
+                <span class="version-note">v12 · secure</span>
+            {% endif %}
+        </div>
+    </aside>
+
+    <div class="app-main">
+        <header class="topbar">
+            <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-menu" aria-label="Меню">☰</button>
+            <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
+
+            <div class="topbar-actions">
+                {% if user_id %}
+                    <span class="status-pill active">Risk ≤ 60</span>
+                    <span class="status-pill">Demo 100€</span>
+                    <span class="status-pill">LIVE guard</span>
+                    <select id="theme-select" class="theme-switcher" style="padding:.3rem .5rem;font-size:.75rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;width:auto;">
+                        <option value="dark" {% if theme|default('dark') == 'dark' %}selected{% endif %}>🌙 Тёмная</option>
+                        <option value="light" {% if theme|default('dark') == 'light' %}selected{% endif %}>☀️ Светлая</option>
+                        <option value="auto" {% if theme|default('dark') == 'auto' %}selected{% endif %}>🖥️ Авто</option>
+                    </select>
+                    <span class="topbar-avatar" aria-hidden="true">{{ (username or user_id)[:1]|upper }}</span>
+                {% else %}
+                    <a class="btn btn-sm" href="{{ url_for('login') }}">Войти</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <main class="cms-content">
+            {% block content %}{% endblock %}
+        </main>
     </div>
-    {% block scripts %}{% endblock %}
-    <script src="{{ url_for('static', filename='market_terminal.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='market_live.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='market_terminal_patch.js') }}" defer></script>
-    <script>
-        const menuToggle = document.querySelector('.menu-toggle');
-        const mainMenu = document.getElementById('main-menu');
-        menuToggle?.addEventListener('click', () => {
-            const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
-            menuToggle.setAttribute('aria-expanded', String(!expanded));
-            mainMenu.classList.toggle('is-open', !expanded);
-        });
-    </script>
+</div>
+
+{% block scripts %}{% endblock %}
+
+<!-- Info Tooltip System -->
+<style>
+.info-tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+    color: var(--text-muted);
+    font-size: 0.8em;
+    margin-left: 4px;
+}
+.info-tooltip .info-icon {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+}
+.info-tooltip .info-text {
+    visibility: hidden;
+    width: 250px;
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -125px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 12px;
+    line-height: 1.4;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.info-tooltip:hover .info-text {
+    visibility: visible;
+    opacity: 1;
+}
+.info-tooltip .info-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: var(--border) transparent transparent transparent;
+}
+</style>
+
+<script>
+const CMS_INFO = {
+    "dashboard": "Обзор портфеля: баланс, P/L, активные боты, текущая стратегия, риск-скор, уведомления.",
+    "markets": "Рыночные данные: тикеры, стакан, свечи, объемы, новости и.sentiment анализ.",
+    "trade": "Ручная торговля: ордера (market/limit), сигналы ИИ, Apply Signal для быстрого входа.",
+    "bots": "Управление ботами: запуск/остановка, стратегии, AI-мозг, память, логи.",
+    "strategies": "Стратегии: 10+ встроенных, генерация новых, backtest, активация, Risk Score.",
+    "arbitrage": "Арбитраж: треугольный, межбиржевой, статистический, funding-rate. Два API ключа.",
+    "copy_trading": "Копитрейдинг: копируйте стратегии трейдеров с настройками риска.",
+    "backtest": "Тестирование стратегий на исторических данных. Без знания будущего.",
+    "demo": "Демо-режим: торговля на реальных данных с балансом 100 EUR. Идентичен LIVE.",
+    "paper": "Paper Trading: виртуальная торговля без реальных денег, но с реальными ценами.",
+    "ai": "AI-ассистент: анализ рынка, рекомендации стратегий, сигналы для торговли.",
+    "portfolio": "Портфель: открытые позиции, P/L, распределение активов.",
+    "orders": "Ордера: история ордеров, ожидающие, выполненные, отмененные.",
+    "positions": "Позиции: открытые, закрытые, P/L по каждой позиции.",
+    "history": "История: все сделки, боты, арбитраж, копитрейдинг.",
+    "analytics": "Аналитика: статистика стратегий, волатильность, тренды.",
+    "risk": "Риск-менеджмент: Risk Score (макс 60), лимиты, kill switch, дневные лимиты.",
+    "marketplace": "Маркетплейс: стратегии и модули. 15 дней бесплатно для платиновых.",
+    "exchanges": "Биржи: подключение API, sandbox/live, capabilities, второй ключ для арбитража.",
+    "wallet": "Кошелёк: CMSC баланс, пополнение, крипто/карточные выплаты.",
+    "notifications": "Уведомления: сигналы бота, арбитраж, ошибки, достижения.",
+    "settings": "Настройки: тема, профиль, безопасность, уведомления, язык.",
+    "profile": "Профиль: аккаунт, торговые предпочтения, переключатель DEMO/PAPER/LIVE, подключения бирж, CMSC.",
+    "admin": "Админ: пользователи, плагины, риск, настройки сайта, выплаты.",
+    "risk_score": "Risk Score: нормализованный показатель риска 0-100. Максимум для запуска: 60.",
+    "signal": "Сигнал: рекомендация ИИ/бота для входа/выхода. Источник: бот, ИИ или ИИ+бот.",
+    "apply_signal": "Apply Signal: применить сигнал к текущей сделке. Автоматически выставляет ордер.",
+    "live_trading": "LIVE Trading: реальная торговля через API биржи. Требует подключения биржи.",
+    "risk_limit": "Лимит риска: стратегии с Risk Score > 60 блокируются. Защита от потерь.",
+};
+document.querySelectorAll("[data-info]").forEach(el => {
+    const key = el.getAttribute("data-info");
+    if (CMS_INFO[key]) {
+        const tooltip = document.createElement("span");
+        tooltip.className = "info-tooltip";
+        tooltip.innerHTML = `<span class="info-icon">?</span><span class="info-text">${CMS_INFO[key]}</span>`;
+        el.appendChild(tooltip);
+    }
+});
+</script>
+
+<script>
+(() => {
+    const menuToggle = document.querySelector('.menu-toggle');
+    const sidebar = document.getElementById('main-menu');
+    const closeMenu = () => {
+        document.body.classList.remove('menu-open');
+        menuToggle?.setAttribute('aria-expanded', 'false');
+    };
+    menuToggle?.addEventListener('click', () => {
+        const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+        document.body.classList.toggle('menu-open', !expanded);
+        menuToggle.setAttribute('aria-expanded', String(!expanded));
+    });
+    document.addEventListener('click', event => {
+        if (window.innerWidth <= 768 && !sidebar?.contains(event.target) && !menuToggle?.contains(event.target)) closeMenu();
+    });
+    window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); });
+
+    const themeSelect = document.getElementById('theme-select');
+    themeSelect?.addEventListener('change', async () => {
+        document.body.className = themeSelect.value;
+        try {
+            await fetch('/settings', {method:'POST', body: new URLSearchParams({action:'save_theme', theme: themeSelect.value})});
+        } catch(e) {}
+    });
+})();
+</script>
 </body>
 </html>

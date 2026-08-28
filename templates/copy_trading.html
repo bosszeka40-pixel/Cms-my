@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Копитрейдинг — CMS Trading{% endblock %}
+{% block breadcrumb %}Торговля / Копитрейдинг{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Социальная торговля</span>
+        <h1 class="page-title">Копитрейдинг</h1>
+        <p class="lead">Копируйте стратегии успешных трейдеров автоматически. Как на Pionex.</p>
+    </div>
+</div>
+
+<!-- Copy Trading Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:1.5rem;">
+    <div class="card stat-tile">
+        <div class="stat-value">{{ traders|length }}</div>
+        <div class="stat-label">Трейдеров</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value text-success">+{{ '%.1f'|format(avg_return|default(0)) }}%</div>
+        <div class="stat-label">Средняя доходность</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ copying_count|default(0) }}</div>
+        <div class="stat-label">Копируется</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value" style="font-size:.82rem;">100€</div>
+        <div class="stat-label">Демо баланс</div>
+    </div>
+</div>
+
+<!-- Top Traders -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>🏆 Топ трейдеров</h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:1rem;">Стратегии автоматически генерируются ботом и публикуются в маркет. 15 дней бесплатно.</p>
+    <div id="traders-list" style="display:flex;flex-direction:column;gap:.5rem;">
+        {% for t in traders %}
+        <div style="display:grid;grid-template-columns:40px 1fr auto auto auto;gap:1rem;align-items:center;padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="width:40px;height:40px;display:grid;place-items:center;background:var(--primary-bg);border:1px solid var(--primary);border-radius:50%;font-weight:700;color:var(--primary);">{{ t.name[:1] }}</div>
+            <div>
+                <div style="font-weight:600;font-size:.85rem;">{{ t.name }}</div>
+                <div style="font-size:.72rem;color:var(--text-secondary);">{{ t.strategy }} · {{ t.trades }} сделок</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:.9rem;font-weight:700;color:{% if t.return_pct > 0 %}var(--success){% else %}var(--danger){% endif %};">{% if t.return_pct > 0 %}+{% endif %}{{ '%.1f'|format(t.return_pct) }}%</div>
+                <div style="font-size:.68rem;color:var(--text-muted);">доходность</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:.82rem;font-weight:600;">{{ t.win_rate }}%</div>
+                <div style="font-size:.68rem;color:var(--text-muted);">винрейт</div>
+            </div>
+            <button class="btn btn-sm {% if t.copied %}btn-outline{% else %}btn-success{% endif %}" onclick="toggleCopy('{{ t.name }}', this)">
+                {{ '✓ Копируется' if t.copied else 'Копировать' }}
+            </button>
+        </div>
+        {% else %}
+        <div class="term-empty" style="padding:2rem;">Нет доступных трейдеров. Запустите бота для генерации стратегий.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Copy Settings -->
+<div class="card">
+    <h2>⚙️ Настройки копирования</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="field-group">
+            <label>Макс. сумма на сделку (€)</label>
+            <input type="number" id="copy-amount" value="10" min="1" max="100">
+        </div>
+        <div class="field-group">
+            <label>Макс. убыток (% от баланса)</label>
+            <input type="number" id="copy-max-loss" value="5" min="1" max="50">
+        </div>
+        <div class="field-group">
+            <label>Копировать</label>
+            <select id="copy-mode">
+                <option value="demo">Демо (100€)</option>
+                <option value="live" disabled>Live (недоступно)</option>
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Стратегия</label>
+            <select id="copy-strategy">
+                <option value="auto">Авто (бот выбирает)</option>
+                <option value="momentum">Моментум</option>
+                <option value="mean_reversion">Возврат к среднему</option>
+                <option value="scalping">Скальпинг</option>
+                <option value="grid">Сетка</option>
+            </select>
+        </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:.5rem;">
+        <button class="btn btn-success" onclick="saveCopySettings()">Сохранить настройки</button>
+        <button class="btn btn-outline" onclick="resetCopies()">Сбросить все копирования</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function toggleCopy(traderName, btn) {
+    try {
+        const resp = await fetch('/api/copy-trading/toggle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({trader: traderName})
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            location.reload();
+        }
+    } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+async function saveCopySettings() {
+    const settings = {
+        amount: document.getElementById('copy-amount').value,
+        max_loss: document.getElementById('copy-max-loss').value,
+        mode: document.getElementById('copy-mode').value,
+        strategy: document.getElementById('copy-strategy').value,
+    };
+    try {
+        const resp = await fetch('/api/copy-trading/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(settings)
+        });
+        if (resp.ok) alert('Настройки сохранены');
+    } catch(e) { alert('Ошибка'); }
+}
+
+async function resetCopies() {
+    if (!confirm('Сбросить все копирования?')) return;
+    try {
+        await fetch('/api/copy-trading/reset', {method: 'POST'});
+        location.reload();
+    } catch(e) {}
+}
+</script>
+{% endblock %}

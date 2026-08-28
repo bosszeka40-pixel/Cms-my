@@ -71,6 +71,9 @@ class Wallet(Base):
     exchange_provider = Column(String, nullable=True)
     exchange_key_masked = Column(String, nullable=True)
     exchange_sandbox = Column(Boolean, default=True)
+    exchange_provider_arb = Column(String, nullable=True)
+    exchange_key_masked_arb = Column(String, nullable=True)
+    exchange_sandbox_arb = Column(Boolean, default=True)
     telegram_username = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -85,10 +88,50 @@ class Trade(Base):
     balance = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class PaymentLedger(Base):
+    __tablename__ = "payment_ledger"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    plugin_id = Column(Integer, ForeignKey("plugins.id"), nullable=True)
+    amount = Column(Float, nullable=False)
+    currency = Column(String, default="CMSC")
+    type = Column(String, default="purchase")
+    reference = Column(String, default="")
+    status = Column(String, default="completed")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class SiteSetting(Base):
     __tablename__ = "site_settings"
     key = Column(String, primary_key=True)
     value = Column(Text, default="")
+
+
+class DemoSession(Base):
+    __tablename__ = "demo_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    demo_active = Column(Boolean, default=False)
+    demo_balance = Column(Float, default=100.0)
+    demo_pnl = Column(Float, default=0.0)
+    demo_trades_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class StrategyTemplate(Base):
+    __tablename__ = "strategy_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, default="")
+    strategy_type = Column(String, default="pure_harvester")
+    leverage = Column(Float, default=1.5)
+    risk_tolerance = Column(Float, default=0.03)
+    fee_rate = Column(Float, default=0.001)
+    parameters = Column(Text, default="{}")
+    is_public = Column(Boolean, default=False)
+    trial_days = Column(Integer, default=15)
+    price_eur = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class CMSEngine:
     def __init__(self, db_name: str = "cms_core.db"):
@@ -105,6 +148,168 @@ class CMSEngine:
         Base.metadata.create_all(bind=self.engine)
         self.ensure_user_plugin_access_column()
         self.ensure_strategy_plugins()
+        self._ensure_demo_column()
+
+
+    def ensure_demo_session(self, email: str):
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return
+            existing = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not existing:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+                session.commit()
+        finally:
+            session.close()
+
+    def get_demo_session(self, email: str) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0, "demo_pnl": 0.0, "demo_trades_count": 0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+                session.commit()
+                session.refresh(demo)
+            return {
+                "demo_active": demo.demo_active,
+                "demo_balance": demo.demo_balance,
+                "demo_pnl": demo.demo_pnl,
+                "demo_trades_count": demo.demo_trades_count,
+            }
+        finally:
+            session.close()
+
+    def toggle_demo_mode(self, email: str, active: bool) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=active, demo_balance=100.0)
+                session.add(demo)
+            else:
+                demo.demo_active = active
+            session.commit()
+            session.refresh(demo)
+            return {"demo_active": demo.demo_active, "demo_balance": demo.demo_balance}
+        finally:
+            session.close()
+
+    def update_demo_balance(self, email: str, pnl: float) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+            demo.demo_balance = max(0.0, demo.demo_balance + pnl)
+            demo.demo_pnl = demo.demo_pnl + pnl
+            demo.demo_trades_count = demo.demo_trades_count + 1
+            session.commit()
+            session.refresh(demo)
+            return {
+                "demo_active": demo.demo_active,
+                "demo_balance": demo.demo_balance,
+                "demo_pnl": demo.demo_pnl,
+                "demo_trades_count": demo.demo_trades_count,
+            }
+        finally:
+            session.close()
+
+    def reset_demo_balance(self, email: str) -> dict:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"demo_active": False, "demo_balance": 100.0}
+            demo = session.query(DemoSession).filter(DemoSession.user_id == user.id).first()
+            if not demo:
+                demo = DemoSession(user_id=user.id, demo_active=True, demo_balance=100.0)
+                session.add(demo)
+            else:
+                demo.demo_balance = 100.0
+                demo.demo_pnl = 0.0
+                demo.demo_trades_count = 0
+            session.commit()
+            session.refresh(demo)
+            return {"demo_active": demo.demo_active, "demo_balance": demo.demo_balance}
+        finally:
+            session.close()
+
+    def create_strategy(self, email: str, name: str, description: str, strategy_type: str,
+                       leverage: float = 1.5, risk_tolerance: float = 0.03, fee_rate: float = 0.001,
+                       is_public: bool = False, price_eur: float = 0.0) -> dict | None:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return None
+            template = StrategyTemplate(
+                user_id=user.id, name=name, description=description,
+                strategy_type=strategy_type, leverage=leverage,
+                risk_tolerance=risk_tolerance, fee_rate=fee_rate,
+                is_public=is_public, price_eur=price_eur,
+            )
+            session.add(template)
+            session.commit()
+            session.refresh(template)
+            if is_public:
+                plugin_name = f"user_{user.id}_{template.id}"
+                existing = session.query(Plugin).filter(Plugin.name == plugin_name).first()
+                if not existing:
+                    session.add(Plugin(name=plugin_name, price=price_eur, description=f"{name}: {description}"))
+                    session.commit()
+            return {"id": template.id, "name": name, "strategy_type": strategy_type, "is_public": is_public}
+        finally:
+            session.close()
+
+    def list_user_strategies(self, email: str) -> list:
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return []
+            templates = session.query(StrategyTemplate).filter(StrategyTemplate.user_id == user.id).all()
+            return [
+                {"id": t.id, "name": t.name, "description": t.description, "strategy_type": t.strategy_type,
+                 "leverage": t.leverage, "risk_tolerance": t.risk_tolerance, "fee_rate": t.fee_rate,
+                 "is_public": t.is_public, "price_eur": t.price_eur, "trial_days": t.trial_days,
+                 "created_at": t.created_at.isoformat()}
+                for t in templates
+            ]
+        finally:
+            session.close()
+
+    def list_public_strategies(self) -> list:
+        session = self.SessionLocal()
+        try:
+            templates = session.query(StrategyTemplate).filter(StrategyTemplate.is_public == True).all()
+            return [
+                {"id": t.id, "name": t.name, "description": t.description, "strategy_type": t.strategy_type,
+                 "leverage": t.leverage, "price_eur": t.price_eur, "trial_days": t.trial_days}
+                for t in templates
+            ]
+        finally:
+            session.close()
+
+    def _ensure_demo_column(self):
+        with self.engine.begin() as connection:
+            try:
+                connection.exec_driver_sql("PRAGMA table_info(demo_sessions)")
+            except Exception:
+                pass
 
     def ensure_user_plugin_access_column(self):
         with self.engine.begin() as connection:
@@ -213,7 +418,18 @@ class CMSEngine:
             session.close()
 
     def ensure_strategy_plugins(self):
-        defaults = [("pure_harvester", 0.0, "Базовая стратегия сбора прибыли."), ("high_frequency_momentum", 0.0, "Моментум-стратегия для тестового режима."), ("compound_defender", 0.0, "Защитная стратегия сложного процента.")]
+        defaults = [
+            ("pure_harvester", 0.0, "Базовая стратегия сбора прибыли. Идеально для начала."),
+            ("high_frequency_momentum", 0.0, "Моментум-стратегия для быстрых сделок."),
+            ("compound_defender", 0.0, "Защитная стратегия сложного процента."),
+            ("trend_breakout_compound", 2.5, "Прорыв тренда с компаундированием. Платиновая стратегия."),
+            ("multi_sentiment_scalper", 4.0, "Мульти-сентимент скальпинг. Платиновая стратегия."),
+            ("ai_adaptive_momentum", 7.5, "ИИ-адаптивный моментум. Модуль с обучением на рынке."),
+            ("quantum_grid_trader", 12.0, "Квантовый сеточный трейдер. Премиум модуль."),
+            ("neural_pattern_recognition", 15.0, "Нейросетевой анализ паттернов. Премиум модуль."),
+            ("delta_neutral_hedger", 10.0, "Дельта-нейтральный хеджер. Институциональный модуль."),
+            ("volatility_harvest", 8.0, "Сбор волатильности. Платиновая стратегия."),
+        ]
         session = self.SessionLocal()
         try:
             existing = {plugin.name for plugin in session.query(Plugin).all()}
@@ -245,6 +461,7 @@ class CMSEngine:
             session.close()
 
     def set_plugin_active(self, email: str, plugin_name: str, active: bool):
+        """Set plugin active. Free/trial plugins bypass access_until check."""
         session = self.SessionLocal()
         try:
             user = session.query(User).filter(User.email == email).first()
@@ -253,12 +470,18 @@ class CMSEngine:
                 return False
             purchase = session.query(UserPlugin).filter_by(user_id=user.id, plugin_id=plugin.id).first()
             if not purchase:
-                return False
-            if purchase.access_until and purchase.access_until <= datetime.utcnow():
+                purchase = UserPlugin(user_id=user.id, plugin_id=plugin.id, active=False, access_until=datetime.utcnow() + timedelta(days=15))
+                session.add(purchase)
+            # Free plugins (price=0) or trial grants bypass the expiry check
+            is_free = (plugin.price or 0) == 0
+            if not is_free and purchase.access_until and purchase.access_until <= datetime.utcnow():
                 purchase.active = False
                 session.commit()
                 return False
             purchase.active = active
+            # If free/trial, always renew access_until
+            if is_free:
+                purchase.access_until = datetime.utcnow() + timedelta(days=15)
             session.commit()
             return True
         finally:
@@ -348,8 +571,8 @@ class CMSEngine:
     @staticmethod
     def _wallet_to_dict(wallet) -> dict:
         if not wallet:
-            return {"credits": 0.0, "balance": 0.0, "provider": None, "address": None, "exchange_provider": None, "exchange_address": None, "telegram": None}
-        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "telegram": wallet.telegram_username}
+            return {"credits": 0.0, "balance": 0.0, "provider": None, "address": None, "exchange_provider": None, "exchange_address": None, "telegram": None, "exchange_provider_arb": None, "exchange_key_masked_arb": None, "exchange_sandbox_arb": True}
+        return {"credits": wallet.credits or 0.0, "balance": wallet.credits or 0.0, "provider": wallet.wallet_provider, "address": wallet.wallet_address, "exchange_provider": wallet.exchange_provider, "exchange_address": wallet.exchange_key_masked, "exchange_sandbox": bool(wallet.exchange_sandbox), "telegram": wallet.telegram_username, "exchange_provider_arb": wallet.exchange_provider_arb, "exchange_key_masked_arb": wallet.exchange_key_masked_arb, "exchange_sandbox_arb": bool(wallet.exchange_sandbox_arb)}
 
     def update_wallet(self, email: str, **fields) -> dict:
         session = self.SessionLocal()
@@ -366,6 +589,60 @@ class CMSEngine:
             session.commit()
             session.refresh(wallet)
             return self._wallet_to_dict(wallet)
+        finally:
+            session.close()
+
+    def record_payment(self, email: str, amount: float, currency: str = "CMSC", type: str = "purchase", reference: str = "") -> dict:
+        """Append a durable payment ledger record for audit / CMSC debit trail."""
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return {"status": "failed", "reason": "user not found"}
+            # Debit wallet credits atomically when this is a CMSC debit
+            wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
+            if not wallet:
+                wallet = Wallet(user_id=user.id)
+                session.add(wallet)
+                session.flush()
+            if type == "purchase" and currency == "CMSC" and amount > 0:
+                if (wallet.credits or 0.0) < amount:
+                    return {"status": "failed", "reason": "insufficient CMSC credits"}
+                wallet.credits = max(0.0, (wallet.credits or 0.0) - amount)
+            txn = PaymentLedger(user_id=user.id, amount=float(amount), currency=currency, type=type, reference=reference, status="completed")
+            session.add(txn)
+            session.commit()
+            session.refresh(txn)
+            return {"status": "completed", "ledger_id": txn.id, "wallet_credits": round(wallet.credits or 0.0, 2)}
+        finally:
+            session.close()
+
+    def set_active_strategy(self, email: str, strategy_name: str) -> bool:
+        """Persist the active strategy per-user in site_settings (survives restart)."""
+        session = self.SessionLocal()
+        try:
+            user = session.query(User).filter(User.email == email).first()
+            if not user:
+                return False
+            key = f"active_strategy:{email}"
+            setting = session.query(SiteSetting).filter(SiteSetting.key == key).first()
+            if not setting:
+                setting = SiteSetting(key=key, value=strategy_name)
+                session.add(setting)
+            else:
+                setting.value = strategy_name
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def get_active_strategy(self, email: str) -> str | None:
+        """Return the persisted active strategy for a user, if any."""
+        session = self.SessionLocal()
+        try:
+            key = f"active_strategy:{email}"
+            setting = session.query(SiteSetting).filter(SiteSetting.key == key).first()
+            return setting.value if setting else None
         finally:
             session.close()
 

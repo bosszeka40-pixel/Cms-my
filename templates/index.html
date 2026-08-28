@@ -1,32 +1,46 @@
-{% extends 'base.html' %}
-
-{% block content %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CMS Trading Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=8-mobile">
+</head>
+<body class="dark">
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;">
+    <span style="font-size:4rem;">₿</span>
+    <h1 style="font-size:2.5rem;font-weight:700;margin:1rem 0 .5rem;">CMS Trading Platform</h1>
+    <p style="font-size:1.1rem;color:var(--text-secondary);max-width:500px;margin-bottom:2rem;">Профессиональная платформа для автоматической торговли с AI-ботами, копитрейдингом и маркетплейсом стратегий.</p>
     {% if user_id %}
-        <h1 class="page-title">Добро пожаловать обратно, {{ user_name or 'Пользователь' }}!</h1>
-        <p class="lead">Вы уже в системе. Перейдите в дашборд, маркетплейс или управление ботом.</p>
-        <div class="button-row">
-            <a class="btn" href="{{ url_for('dashboard') }}">Дашборд</a>
-            <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
-            <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
-            <a class="btn" href="{{ url_for('logout') }}">Выйти</a>
-        </div>
+        <a class="btn" href="{{ url_for('dashboard') }}" style="font-size:1rem;padding:.75rem 2rem;">Перейти в кабинет</a>
     {% else %}
-        <div class="hero">
-            <div>
-                <span class="eyebrow">CMS TRADING CONTROL</span>
-                <h1 class="page-title">Управляйте торговлей безопасно</h1>
-                <p class="lead">Публичные котировки, sandbox-проверки и контролируемые live-ордера в одном интерфейсе.</p>
-            </div>
-            <div class="hero-badge"><strong>DRY-RUN</strong><span>по умолчанию</span></div>
-        </div>
-        <div class="feature-grid">
-            <div class="card"><h2>Проверка API</h2><p class="muted">Ключи проверяются без сохранения секретов в базе данных.</p></div>
-            <div class="card"><h2>Sandbox first</h2><p class="muted">Сначала тестовая сеть, затем отдельное подтверждение live-режима.</p></div>
-            <div class="card"><h2>Контроль риска</h2><p class="muted">Лимит номинала сделки и журнал операций защищают ручные действия.</p></div>
-        </div>
-        <div class="button-row">
-            <a class="btn" href="{{ url_for('login') }}">Войти</a>
-            <a class="btn" href="{{ url_for('register') }}">Регистрация</a>
+        <div style="display:flex;gap:1rem;">
+            <a class="btn" href="{{ url_for('login') }}" style="font-size:1rem;padding:.75rem 2rem;">Войти</a>
+            <a class="btn btn-outline" href="{{ url_for('register') }}" style="font-size:1rem;padding:.75rem 2rem;">Регистрация</a>
         </div>
     {% endif %}
-{% endblock %}
+    <div style="margin-top:3rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;max-width:800px;width:100%;">
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">🤖</div>
+            <h3 style="font-size:.9rem;">AI Бот</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Автоматическая торговля с генерацией стратегий</p>
+        </div>
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">👥</div>
+            <h3 style="font-size:.9rem;">Копитрейдинг</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Копируйте стратегии успешных трейдеров</p>
+        </div>
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">🏪</div>
+            <h3 style="font-size:.9rem;">Маркетплейс</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Стратегии и модули с 15 днями бесплатно</p>
+        </div>
+        <div class="card" style="text-align:center;">
+            <div style="font-size:1.5rem;margin-bottom:.5rem;">📈</div>
+            <h3 style="font-size:.9rem;">Live Терминал</h3>
+            <p style="font-size:.78rem;color:var(--text-secondary);">Торговля на реальных данных в реальном времени</p>
+        </div>
+    </div>
+</div>
+</body>
+</html>

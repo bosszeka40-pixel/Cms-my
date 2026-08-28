@@ -1,43 +1,49 @@
 :root {
-  --chart-grid: #d7e0e8;
-  --chart-up: #16a34a;
-  --chart-down: #dc2626;
-  --chart-cross: #718096;
+    --chart-grid: #2b3139;
+    --chart-up: #0ecb81;
+    --chart-down: #f6465d;
+    --chart-cross: #848e9c;
 }
-body.dark {
-  --chart-grid: #355064;
-  --chart-up: #35c77a;
-  --chart-down: #ff6b6b;
-  --chart-cross: #8fa8ba;
+body.light {
+    --chart-grid: #e5e5e5;
+    --chart-up: #0ecb81;
+    --chart-down: #f6465d;
+    --chart-cross: #707a8a;
+}
+body.auto {
+    --chart-grid: #d7e0e8;
+    --chart-up: #16a34a;
+    --chart-down: #dc2626;
+    --chart-cross: #718096;
 }
 .market-chart-wrap {
-  position: relative;
-  margin-top: .75rem;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
+    position: relative;
+    margin-top: .75rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
 }
 .market-chart {
-  display: block;
-  width: 100%;
-  height: 480px;
-  margin: 0;
-  cursor: crosshair;
+    display: block;
+    width: 100%;
+    height: 480px;
+    margin: 0;
+    cursor: crosshair;
 }
 .market-chart-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: .75rem;
-  min-height: 34px;
-  padding: .35rem .6rem;
-  color: var(--muted);
-  font-size: .78rem;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: 6px 6px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem;
+    min-height: 34px;
+    padding: .35rem .6rem;
+    color: var(--text-muted);
+    font-size: .78rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--radius) var(--radius) 0 0;
 }
 .chart-legend { display: inline-flex; align-items: center; gap: .35rem; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -45,22 +51,22 @@ body.dark {
 .legend-dot.down { background: var(--chart-down); margin-left: .35rem; }
 .chart-ohlc { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .market-chart-tooltip {
-  position: absolute;
-  z-index: 3;
-  max-width: 220px;
-  padding: .45rem .6rem;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: 0 4px 14px var(--shadow);
-  font-size: .75rem;
-  line-height: 1.45;
-  pointer-events: none;
+    position: absolute;
+    z-index: 3;
+    max-width: 220px;
+    padding: .45rem .6rem;
+    color: var(--text);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    font-size: .75rem;
+    line-height: 1.45;
+    pointer-events: none;
 }
 .market-chart-tooltip[hidden] { display: none; }
 @media (max-width: 700px) {
-  .market-chart { height: 360px; }
-  .chart-legend { display: none; }
-  .market-chart-toolbar { justify-content: flex-end; }
+    .market-chart { height: 360px; }
+    .chart-legend { display: none; }
+    .market-chart-toolbar { justify-content: flex-end; }
 }

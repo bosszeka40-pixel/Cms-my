@@ -1,117 +1,195 @@
 {% extends 'base.html' %}
+{% block title %}Дашборд — CMS Trading{% endblock %}
+{% block breadcrumb %}Дашборд{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Личный кабинет</h1>
-    <p class="lead">Добро пожаловать, <strong>{{ username }}</strong>!</p>
-    {% if message %}<div class="message success">{{ message }}</div>{% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Баланс CMSC</h2>
-            <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.credits) }} CMSC</p>
-            <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
-            <p>Адрес кошелька: {{ wallet.address or 'Не указан' }}</p>
-            <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>
-            <div class="button-row">
-                <a class="btn" href="{{ url_for('marketplace') }}">Кошелек и биржи</a>
-                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
-            </div>
-        </div>
-        <div class="card account-settings">
-            <h2>Аккаунт и оформление</h2>
-            <p class="muted">Выберите тему интерфейса для этого аккаунта.</p>
-            <form method="post">
-                <input type="hidden" name="action" value="save_theme">
-                <div class="field-group">
-                    <label for="theme">Тема</label>
-                    <select id="theme" name="theme">
-                        <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Светлая</option>
-                        <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Тёмная</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn">Сохранить оформление</button>
-            </form>
-        </div>
-        <div class="card">
-            <h2>ИИ-ассистент</h2>
-            <p>Чат использует сохранённую память тестов и рекомендации по стратегиям.</p>
-            <div id="chat-history" class="small-note" role="log"></div>
-            <form id="chat-form">
-                <textarea id="chat-message" style="height: 80px;" required
-                    placeholder="Например: какую стратегию протестировать?"></textarea>
-                <button class="btn" style="margin-top: 10px;">Отправить запрос</button>
-            </form>
-        </div>
-        <div class="card">
-            <h2>Плагины и управление</h2>
-            <p>Здесь будут доступные системные плагины и управление ботом.</p>
-            <div class="button-row">
-                <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
-                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
-            </div>
-        </div>
-        <div class="card">
-            <h2>Статистика активности</h2>
-            <p class="muted">Последние тесты стратегий и результаты из памяти бота.</p>
-            <canvas id="memory-chart" height="120" aria-label="График последних результатов"></canvas>
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>Дата</th><th>Действие</th><th>Результат</th></tr></thead>
-                    <tbody>
-                        {% for item in memories %}
-                            <tr><td>{{ item.created_at }}</td><td>{{ item.action }}</td><td>{{ '%.4f'|format(item.result) }}</td></tr>
-                        {% else %}
-                            <tr><td colspan="3">Пока нет сохранённых результатов. Запустите тест стратегии в разделе «Управление ботом».</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Личный кабинет</span>
+        <h1 class="page-title">Добро пожаловать, {{ username }}</h1>
+        <p class="lead">Обзор аккаунта, быстрые действия и статистика торговли.</p>
+    </div>
+    <div class="hero-badge">
+        <strong>{{ current_strategy|default('pure_harvester') }}</strong>
+        <span>{{ mode|default('demo')|upper }} · risk {{ risk_score|default(0) }}/60</span>
+    </div>
+</div>
+
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<div class="feature-grid" style="margin-bottom:1.1rem;">
+    <div class="card" style="background:linear-gradient(180deg, rgba(240,185,11,.14), rgba(22,26,30,.96));border-color:rgba(240,185,11,.35);">
+        <div class="eyebrow">Баланс</div>
+        <div class="stat-value" style="font-size:1.8rem;color:var(--primary);">{{ '%.2f'|format(wallet.credits) }} CMSC</div>
+        <p class="lead">Лицензии, плагин-покупки и внутренний платежный контур.</p>
+    </div>
+    <div class="card">
+        <div class="eyebrow">Демо</div>
+        <div class="stat-value" style="font-size:1.8rem;">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div>
+        <p class="lead">Сделки на реальных рыночных данных без реального риска.</p>
+    </div>
+    <div class="card">
+        <div class="eyebrow">Риск</div>
+        <div class="stat-value" style="font-size:1.8rem;color:{% if risk_score|default(0) <= 40 %}var(--success){% elif risk_score|default(0) <= 60 %}var(--warning){% else %}var(--danger){% endif %};">{{ risk_score|default(0) }}/60</div>
+        <p class="lead">Лимит запуска и блокировки живой торговли.</p>
+    </div>
+    <div class="card">
+        <div class="eyebrow">Бот</div>
+        <div class="stat-value" style="font-size:1.4rem;">{{ bot_runtime.lifecycle|default('STOPPED') }}</div>
+        <p class="lead">Фоновый runtime, журнал и защита kill switch.</p>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stat-grid" style="margin-bottom:1.5rem;">
+    <div class="card stat-tile">
+        <div class="stat-value text-primary" style="color:var(--primary);">{{ '%.2f'|format(wallet.credits) }}</div>
+        <div class="stat-label">CMSC Баланс</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value {% if demo.demo_pnl|default(0) >= 0 %}text-success{% else %}text-danger{% endif %}">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div>
+        <div class="stat-label">Демо Баланс</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ memories|length }}</div>
+        <div class="stat-label">Тестов</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value" style="color:{% if wallet.exchange_provider %}var(--success){% else %}var(--text-muted){% endif %};">{% if wallet.exchange_provider %}✓{% else %}—{% endif %}</div>
+        <div class="stat-label">{{ wallet.exchange_provider or 'Биржа не подключена' }}</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value" id="bot-status-val" style="font-size:.9rem;">{% if bot_active %}🟢 ON{% else %}🔴 OFF{% endif %}</div>
+        <div class="stat-label">Бот</div>
+    </div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid">
+    <!-- Bot Activity -->
+    <div class="card">
+        <h2>🤖 Активность бота</h2>
+        <div id="dash-bot-activity" style="max-height:300px;overflow-y:auto;font-size:.82rem;">
+            <div class="term-empty">Загрузка...</div>
         </div>
     </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+        <h2>⚡ Быстрый доступ</h2>
+        <div class="quick-actions">
+            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('bot_management') }}">🤖 Управление ботом</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('manual_trading') }}">📈 Терминал</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('copy_trading_page') }}">👥 Копитрейдинг</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('strategies_page') }}">🧬 Стратегии</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('demo_page') }}">🎯 Демо-торговля</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('marketplace') }}">🏪 Маркетплейс</a>
+            <a class="btn btn-outline btn-sm btn-block" href="{{ url_for('settings') }}">⚙️ Настройки</a>
+        </div>
+    </div>
+
+    <!-- AI Assistant -->
+    <div class="card">
+        <h2>🧠 ИИ-ассистент</h2>
+        <p class="muted" style="font-size:.8rem;margin-bottom:.75rem;">Чат для анализа стратегий и рыночных данных.</p>
+        <div id="chat-history" style="max-height:200px;overflow-y:auto;margin-bottom:.5rem;font-size:.8rem;"></div>
+        <form id="chat-form">
+            <textarea id="chat-message" style="height:60px;resize:vertical;font-size:.82rem;" required placeholder="Какую стратегию протестировать?"></textarea>
+            <button class="btn btn-sm btn-block" style="margin-top:.35rem;">Отправить</button>
+        </form>
+    </div>
+
+    <!-- Exchange Info -->
+    <div class="card">
+        <h2>🔗 Подключения</h2>
+        <div style="display:flex;flex-direction:column;gap:.5rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">
+                <span style="font-size:.82rem;color:var(--text-secondary);">Биржа</span>
+                <span style="font-size:.82rem;font-weight:600;color:{% if wallet.exchange_provider %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.exchange_provider or 'Не подключена' }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">
+                <span style="font-size:.82rem;color:var(--text-secondary);">Кошелёк</span>
+                <span style="font-size:.82rem;font-weight:600;color:{% if wallet.provider %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.provider or 'Не подключён' }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">
+                <span style="font-size:.82rem;color:var(--text-secondary);">Telegram</span>
+                <span style="font-size:.82rem;font-weight:600;color:{% if wallet.telegram %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.telegram or 'Не подключён' }}</span>
+            </div>
+        </div>
+        <a class="btn btn-outline btn-sm btn-block" style="margin-top:.75rem;" href="{{ url_for('settings') }}">Настроить подключения</a>
+    </div>
+
+    <!-- Activity History -->
+    <div class="card" style="grid-column:1/-1;">
+        <h2>📊 История активности</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Дата</th><th>Действие</th><th>Результат</th><th>Контекст</th></tr></thead>
+                <tbody>
+                    {% for item in memories %}
+                        <tr>
+                            <td>{{ item.created_at[:16]|replace('T',' ') }}</td>
+                            <td><span class="badge badge-accent">{{ item.action }}</span></td>
+                            <td style="font-family:var(--font-mono);{% if item.result > 0 %}color:var(--success){% elif item.result < 0 %}color:var(--danger){% endif %}">{{ '%.4f'|format(item.result) }}</td>
+                            <td class="text-muted" style="font-size:.75rem;">{{ item.context[:60] if item.context else '—' }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="4" class="term-empty">Пока нет результатов. Запустите тест в разделе «Стратегии».</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {% endblock %}
+
 {% block scripts %}
 <script>
-document.getElementById('chat-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
+document.getElementById('chat-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
     const input = document.getElementById('chat-message');
     const history = document.getElementById('chat-history');
-    const message = input.value.trim();
-    if (!message) return;
-    const addMessage = (author, text) => {
-        const row = document.createElement('p');
-        const label = document.createElement('strong');
-        label.textContent = `${author}:`;
-        row.append(label, ` ${text}`);
-        history.appendChild(row);
+    const msg = input.value.trim();
+    if (!msg) return;
+    const addMsg = (who, text) => {
+        const p = document.createElement('p');
+        p.innerHTML = `<strong style="color:${who==='Вы'?'var(--primary)':'var(--success)'}">${who}:</strong> ${text}`;
+        history.appendChild(p);
+        history.scrollTop = history.scrollHeight;
     };
-    addMessage('Вы', message);
+    addMsg('Вы', msg);
     input.value = '';
-    const response = await fetch('/api/chat', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({message})
-    });
-    const data = await response.json();
-    addMessage('Бот', response.ok ? data.answer : (data.detail || 'Ошибка чата'));
+    try {
+        const resp = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:msg})});
+        const data = await resp.json();
+        addMsg('Бот', resp.ok ? data.answer : (data.detail || 'Ошибка'));
+    } catch(e) { addMsg('Бот', 'Ошибка соединения'); }
 });
-(function drawMemoryChart() {
-    const canvas = document.getElementById('memory-chart');
-    const context = canvas.getContext('2d');
-    const width = canvas.clientWidth || 400;
-    canvas.width = width * 2;
-    canvas.height = 120;
-    const points = {{ memories|reverse|list|tojson }};
-    if (!points.length) { context.clearRect(0, 0, canvas.width, canvas.height); return; }
-    const values = points.map(item => Number(item.result));
-    const maxAbs = Math.max(...values.map(Math.abs), 1e-9);
-    const slot = canvas.width / points.length;
-    const barWidth = Math.max(2, slot * 0.6);
-    const mid = canvas.height / 2;
-    values.forEach((value, index) => {
-        const x = index * slot + slot / 2;
-        const barHeight = (Math.abs(value) / maxAbs) * (canvas.height / 2 - 8);
-        context.fillStyle = value >= 0 ? '#16a34a' : '#dc2626';
-        if (value >= 0) context.fillRect(x - barWidth / 2, mid - barHeight, barWidth, barHeight);
-        else context.fillRect(x - barWidth / 2, mid, barWidth, barHeight);
-    });
-})();
+
+async function loadBotActivity() {
+    try {
+        const resp = await fetch('/api/bot/status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const el = document.getElementById('dash-bot-activity');
+        const statusEl = document.getElementById('bot-status-val');
+        if (statusEl) statusEl.innerHTML = data.active ? '🟢 ON' : '🔴 OFF';
+        if (data.activity_log && data.activity_log.length) {
+            el.innerHTML = data.activity_log.map(a =>
+                `<div style="padding:.5rem;border-bottom:1px solid var(--border);">` +
+                `<div style="display:flex;justify-content:space-between;align-items:center;">` +
+                `<span style="font-weight:600;font-size:.82rem;">${a.event || '—'}</span>` +
+                `<span style="font-size:.68rem;color:var(--text-muted);">${(a.time||'').substring(11,19)}</span>` +
+                `</div>` +
+                `<div style="color:var(--text-secondary);font-size:.78rem;margin-top:.15rem;">${a.detail || a.strategy || ''}</div>` +
+                `</div>`
+            ).join('');
+        } else {
+            el.innerHTML = '<div class="term-empty">Бот не активен</div>';
+        }
+    } catch(_) {}
+}
+loadBotActivity();
+setInterval(loadBotActivity, 8000);
 </script>
 {% endblock %}

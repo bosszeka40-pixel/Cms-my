@@ -20,25 +20,49 @@ def pricing_for_return(monthly_return_pct: float) -> tuple[str, float]:
     if monthly_return_pct < 0:
         return "Неудачные", 0.0
     if monthly_return_pct < 5:
-        return "Безубыточные", 0.0
+        return "Бесплатные", 0.0
     if monthly_return_pct < 15:
-        return "Стабильные", 1.0
+        return "Базовые", 0.0
     if monthly_return_pct < 30:
-        return "Прибыльные", 1.5
+        return "Платиновые", 2.5
     if monthly_return_pct < 50:
-        return "Высокоприбыльные", 2.25
+        return "Платиновые", 4.0
     if monthly_return_pct < 100:
-        return "Очень прибыльные", 5.0
-    return "Исключительно прибыльные", 10.0
+        return "Премиум модули", 7.5
+    if monthly_return_pct < 200:
+        return "Премиум модули", 12.0
+    return "Премиум модули", 15.0
 
 
 def _signal(strategy: str, previous_change: float) -> int:
-    if strategy in {"compound_defender", "trend_breakout_compound"}:
+    if strategy in {"compound_defender", "trend_breakout_compound", "delta_neutral_hedger"}:
         return -1 if previous_change > 0 else 1
+    if strategy in {"multi_sentiment_scalper", "volatility_harvest"}:
+        return 1 if abs(previous_change) > 0.02 else -1
+    if strategy in {"ai_adaptive_momentum", "neural_pattern_recognition"}:
+        return 1 if previous_change > 0.01 else (-1 if previous_change < -0.01 else 0)
+    if strategy == "quantum_grid_trader":
+        return 1 if previous_change > 0 else -1
     return 1 if previous_change > 0 else -1
 
 
-def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
+def _leverage_for_strategy(strategy: str) -> float:
+    leverages = {
+        "pure_harvester": 1.5,
+        "high_frequency_momentum": 2.0,
+        "compound_defender": 1.0,
+        "trend_breakout_compound": 1.8,
+        "multi_sentiment_scalper": 2.0,
+        "ai_adaptive_momentum": 1.5,
+        "quantum_grid_trader": 1.2,
+        "neural_pattern_recognition": 1.5,
+        "delta_neutral_hedger": 1.0,
+        "volatility_harvest": 1.8,
+    }
+    return leverages.get(strategy, 1.5)
+
+
+def evaluate_strategy(strategy: str, candles: list[dict], fee_rate: float = TRADING_FEE_RATE) -> dict:
     """Backtest one strategy using only the preceding closed daily candle."""
     balance = INITIAL_BALANCE_EUR
     trades = 0
@@ -46,6 +70,7 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
     returns = []
     peak = INITIAL_BALANCE_EUR
     max_drawdown = 0.0
+    leverage = _leverage_for_strategy(strategy)
     for index in range(1, len(candles)):
         previous_close = float(candles[index - 1]["close"])
         current_close = float(candles[index]["close"])
@@ -58,8 +83,8 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
             else 0.0
         )
         signal = _signal(strategy, previous_change)
-        trade_return = signal * ((current_close - previous_close) / previous_close)
-        net_return = trade_return - TRADING_FEE_RATE
+        trade_return = signal * ((current_close - previous_close) / previous_close) * leverage
+        net_return = trade_return - max(0.0, float(fee_rate)) * 2
         balance = max(0.0, balance * (1 + net_return))
         returns.append(net_return)
         peak = max(peak, balance)
@@ -99,5 +124,5 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
     }
 
 
-def evaluate_strategies(candles: list[dict], strategy_names: list[str]) -> dict[str, dict]:
-    return {name: evaluate_strategy(name, candles) for name in strategy_names}
+def evaluate_strategies(candles: list[dict], strategy_names: list[str], fee_rate: float = TRADING_FEE_RATE) -> dict[str, dict]:
+    return {name: evaluate_strategy(name, candles, fee_rate=fee_rate) for name in strategy_names}

@@ -77,6 +77,12 @@ class ExchangeService:
             "live_trading_enabled": real_execution_allowed(),
         }
 
+    def list_connected(self, user_id):
+        """Возвращает подключённые биржи пользователя для UI."""
+        with self._lock:
+            conns = list(self._clients.values())
+        return [{"name": c["name"], "sandbox": c["sandbox"], "api_key_hint": c["api_key_hint"]} for c in conns]
+
     def disconnect(self, user_id):
         with self._lock:
             self._clients.pop(user_id, None)

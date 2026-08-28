@@ -1,40 +1,44 @@
 {% extends 'base.html' %}
+{% block title %}Кошелёк — CMS Trading{% endblock %}
+{% block breadcrumb %}Кошелёк{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Кошелёк</h1>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Финансы</span>
+        <h1 class="page-title">Кошелёк</h1>
+        <p class="lead">Управление CMSC балансом и платежами.</p>
+    </div>
+    <div class="hero-badge"><strong>{{ '%.2f'|format(wallet.credits) }}</strong><span>CMSC</span></div>
+</div>
+
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<div class="grid">
     <div class="card">
-        <h2>Баланс</h2>
-        <p style="font-size: 24px; font-weight: bold;">{{ '%.2f'|format(wallet.balance) }} CMSC</p>
-        <p>Подключённый провайдер: {{ wallet.provider or '—' }}</p>
-        <p>Подключённая биржа: {{ wallet.exchange_provider or '—' }}</p>
-        <p>Telegram: {{ wallet.telegram or '—' }}</p>
+        <h2>💰 Баланс</h2>
+        <div style="text-align:center;padding:1.5rem;">
+            <div style="font-size:2rem;font-weight:700;color:var(--primary);">{{ '%.2f'|format(wallet.credits) }}</div>
+            <div style="font-size:.82rem;color:var(--text-secondary);">CMS Credits (CMSC)</div>
+        </div>
     </div>
     <div class="card">
-        <h2>CMS Credits (CMSC)</h2>
-        <p class="muted">1 CMSC = €1.00. Для оплаты в другой валюте применяется актуальный биржевой курс.</p>
+        <h2>💳 Пополнение</h2>
+        <p class="muted" style="font-size:.82rem;margin-bottom:1rem;">Платёжный шлюз ещё не подключён. Обратитесь в поддержку.</p>
         <form method="post">
             <input type="hidden" name="action" value="buy_credits">
             <div class="field-group">
-                <label for="amount">Количество CMSC</label>
-                <input type="number" min="1" step="1" id="amount" name="amount" placeholder="100">
+                <label>Количество CMSC</label>
+                <input type="number" name="amount" value="100" min="1">
             </div>
             <div class="field-group">
-                <label for="currency">Валюта оплаты</label>
-                <select id="currency" name="currency">
-                    {% for currency in payment_currencies %}
-                        <option value="{{ currency }}">{{ currency }}</option>
-                    {% endfor %}
+                <label>Валюта оплаты</label>
+                <select name="currency">
+                    {% for c in payment_currencies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn">Купить CMSC</button>
+            <button class="btn btn-block" type="submit" disabled>Пополнить (скоро)</button>
         </form>
     </div>
-    <div class="card">
-        <h2>Реферальная программа</h2>
-        <p>Ваш код: <strong>{{ user_email|replace('@', '-') }}</strong></p>
-        <p class="muted">Приглашайте пользователей и получайте CMSC-бонусы.</p>
-    </div>
+</div>
 {% endblock %}

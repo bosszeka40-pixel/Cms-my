@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+{% block title %}Стратегии — Live{% endblock %}
+{% block breadcrumb %}Проверка / Стратегии{% endblock %}
+
+{% block content %}
+<div class="terminal-page">
+<div class="container">
+
+    <div class="term-header">
+        <div class="term-pair-info">
+            <select id="test-pair" class="term-strategy-select" style="width:auto;min-width:120px;">
+                {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
+            </select>
+            <span class="term-pair-price up" id="test-price">—</span>
+            <span class="term-pair-change up" id="test-change">—</span>
+        </div>
+        <div class="term-stats">
+            <div class="term-stat"><div class="term-stat-label">Стратегия</div><div class="term-stat-value">{{ current_strategy }}</div></div>
+            <div class="term-stat"><div class="term-stat-label">Баланс</div><div class="term-stat-value" id="test-bal">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div></div>
+            <div class="term-stat"><div class="term-stat-label">P/L</div><div class="term-stat-value" id="test-pnl">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</div></div>
+        </div>
+        <span class="term-demo-badge">LIVE DATA</span>
+    </div>
+
+    <div class="term-timeframes">
+        {% for tf in ['1m','5m','15m','1h','4h','1d'] %}
+        <button class="term-tf-btn {% if tf == '1h' %}active{% endif %}" data-tf="{{ tf }}">{{ tf }}</button>
+        {% endfor %}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:0;min-height:calc(100vh - 150px);">
+        <!-- Left: Chart + Backtest -->
+        <div style="border-right:1px solid var(--border);display:flex;flex-direction:column;">
+            <div class="term-ohlcv" id="test-ohlcv">
+                <span>O <b>—</b></span><span>H <b>—</b></span><span>L <b>—</b></span><span>C <b>—</b></span><span>Vol —</span>
+            </div>
+            <div style="flex:1;min-height:350px;position:relative;">
+                <div id="test-chart" style="width:100%;height:100%;"></div>
+            </div>
+
+            <!-- Backtest section -->
+            <div style="border-top:1px solid var(--border);padding:.75rem;">
+                <div class="term-section-title" style="padding:0 0 .5rem 0;">Backtest стратегий</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:end;">
+                    <div class="term-field">
+                        <label>Стратегия</label>
+                        <select id="bt-strategy" class="term-strategy-select">
+                            {% for s in ['pure_harvester','high_frequency_momentum','compound_defender','trend_breakout_compound','multi_sentiment_scalper','neural_pattern_recognizer','delta_neutral_hedger','volatility_harvest'] %}
+                            <option value="{{ s }}" {% if s == current_strategy %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="term-field">
+                        <label>Начальный баланс €</label>
+                        <input id="bt-balance" type="number" value="100" step="1" min="1">
+                    </div>
+                    <div class="term-field">
+                        <label>Пара</label>
+                        <select id="bt-exchange" class="term-strategy-select">
+                            {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <button class="term-buy-btn" id="run-backtest" style="width:auto;padding:.55rem 1rem;">Запустить</button>
+                </div>
+                <div id="bt-result" style="margin-top:.5rem;font-size:.82rem;"></div>
+                <div class="term-results-grid" id="bt-results" style="display:none;padding:.5rem 0;"></div>
+                <!-- Strategy Parameters Display -->
+                <div id="strategy-params" class="card" style="margin-top:1rem;padding:1rem;background:linear-gradient(180deg, rgba(18,22,28,.92), rgba(22,26,30,.98));border-color:var(--border);font-size:.82rem;">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;">
+                        <div><span class="muted">Сигнал:</span> <span id="st-param-signal"></span></div>
+                        <div><span class="muted">Леверидж:</span> <span id="st-param-lev"></span></div>
+                        <div><span class="muted">Риск:</span> <span id="st-param-risk"></span></div>
+                        <div><span class="muted">Stop Loss:</span> <span id="st-param-sl"></span></div>
+                        <div><span class="muted">Take Profit:</span> <span id="st-param-tp"></span></div>
+                        <div><span class="muted">Таймфрейм:</span> <span id="st-param-tf"></span></div>
+                        <div><span class="muted">Пары:</span> <span id="st-param-pairs"></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Bot Activity -->
+        <div style="display:flex;flex-direction:column;background:var(--bg-secondary);">
+            <div class="term-section-title">Активность бота</div>
+            <div id="bot-activity" style="flex:1;overflow-y:auto;padding:.5rem;font-size:.75rem;max-height:calc(100vh - 220px);">
+                <div class="term-empty">Загрузка...</div>
+            </div>
+            <div style="border-top:1px solid var(--border);padding:.5rem .75rem;font-size:.75rem;">
+                <div style="display:flex;justify-content:space-between;">
+                    <span class="muted">Сделок</span><span id="bot-trades">{{ bot_status.trade_count|default(0) }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                    <span class="muted">Винрейт</span><span id="bot-wr">{{ bot_status.win_rate|default(0) }}%</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                    <span class="muted">P/L</span><span id="bot-pnl" style="color:{{ 'var(--success)' if bot_status.total_pnl|default(0) >= 0 else 'var(--danger)' }}">{{ '%.4f'|format(bot_status.total_pnl|default(0)) }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                    <span class="muted">Баланс</span><span id="bot-bal">{{ '%.2f'|format(bot_status.current_balance|default(100)) }}€</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
+<script>
+(() => {
+    const pairEl = document.getElementById('test-pair');
+    const exchange = '{{ trading_exchanges[0] if trading_exchanges else "binance" }}';
+    let currentTf = '1h';
+
+    // Init chart
+    initTradingChart('test-chart');
+    loadChartData(pairEl.value, exchange, currentTf);
+    startLivePrice(pairEl.value, exchange);
+
+    // Timeframe buttons
+    document.querySelectorAll('.term-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTf = btn.dataset.tf;
+            loadChartData(pairEl.value, exchange, currentTf);
+        });
+    });
+
+    // Pair change
+    pairEl.addEventListener('change', () => {
+        loadChartData(pairEl.value, exchange, currentTf);
+        startLivePrice(pairEl.value, exchange);
+    });
+
+    // Load bot activity
+    async function loadActivity() {
+        try {
+            const resp = await fetch('/api/bot/status');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const el = document.getElementById('bot-activity');
+            if (data.activity_log && data.activity_log.length) {
+                el.innerHTML = data.activity_log.map(a =>
+                    `<div style="padding:.35rem .5rem;border-bottom:1px solid var(--border);">` +
+                    `<div style="font-size:.68rem;color:var(--muted);">${(a.time||'').substring(11,19)}</div>` +
+                    `<div style="font-weight:600;">${a.event || '—'}</div>` +
+                    `<div style="color:var(--muted);">${a.detail || a.strategy || ''}</div>` +
+                    `</div>`
+                ).join('');
+            } else {
+                el.innerHTML = '<div class="term-empty">Бот не активен. Запустите в разделе «Бот».</div>';
+            }
+            // Update stats
+            document.getElementById('bot-trades').textContent = data.trade_count || 0;
+            document.getElementById('bot-wr').textContent = (data.win_rate || 0) + '%';
+            document.getElementById('bot-pnl').textContent = (data.total_pnl || 0).toFixed(4);
+            document.getElementById('bot-bal').textContent = (data.current_balance || 100).toFixed(2) + '€';
+        } catch(_) {}
+    }
+    loadActivity();
+    setInterval(loadActivity, 5000);
+
+// Strategy params (same as bot_management)
+const STRATEGY_PARAMS = {
+    pure_harvester: {name: 'Pure Harvester', signal: 'Направление тренда', leverage: '1.0-1.5x', risk: 'Низкий', stop_loss: '2-3%', take_profit: '3-5%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    high_frequency_momentum: {name: 'HFT Momentum', signal: 'Сила импульса', leverage: '1.5-2.0x', risk: 'Высокий', stop_loss: '1-2%', take_profit: '1-3%', timeframe: '1m-15m', pairs: 'BTC/USDT, ETH/USDT'},
+    compound_defender: {name: 'Compound Defender', signal: 'Против тренда', leverage: '0.8-1.0x', risk: 'Низкий', stop_loss: '3-5%', take_profit: '2-4%', timeframe: '4h-1d', pairs: 'BTC/USDT'},
+    trend_breakout_compound: {name: 'Trend Breakout', signal: 'Пробой уровня', leverage: '1.2-1.8x', risk: 'Средний', stop_loss: '2-4%', take_profit: '4-8%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT, SOL/USDT'},
+    multi_sentiment_scalper: {name: 'Multi Sentiment', signal: 'Sentiment + Price', leverage: '1.5-2.0x', risk: 'Высокий', stop_loss: '1-2%', take_profit: '2-5%', timeframe: '15m-1h', pairs: 'BTC/USDT, ETH/USDT'},
+    ai_adaptive_momentum: {name: 'AI Adaptive', signal: 'AI порог', leverage: '1.0-1.5x', risk: 'Средний', stop_loss: '2-3%', take_profit: '3-6%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    quantum_grid_trader: {name: 'Quantum Grid', signal: 'Сетка + Sentiment', leverage: '1.0-1.2x', risk: 'Низкий', stop_loss: '3-5%', take_profit: '1-3%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    neural_pattern_recognition: {name: 'Neural Pattern', signal: 'Pattern Score', leverage: '1.0-1.5x', risk: 'Средний', stop_loss: '2-4%', take_profit: '3-6%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    delta_neutral_hedger: {name: 'Delta Neutral', signal: 'Против изменения', leverage: '0.8-1.0x', risk: 'Минимальный', stop_loss: '5-8%', take_profit: '2-4%', timeframe: '4h-1d', pairs: 'BTC/USDT'},
+    volatility_harvest: {name: 'Volatility Harvest', signal: 'Абс. волатильность', leverage: '1.5-1.8x', risk: 'Высокий', stop_loss: '2-3%', take_profit: '3-7%', timeframe: '15m-1h', pairs: 'BTC/USDT, ETH/USDT, SOL/USDT'},
+};
+
+function populateStrategyParams(strategy) {
+    const p = STRATEGY_PARAMS[strategy];
+    if (!p) return;
+    document.getElementById('st-param-signal').textContent = p.signal;
+    document.getElementById('st-param-lev').textContent = p.leverage;
+    const riskEl = document.getElementById('st-param-risk');
+    riskEl.textContent = p.risk;
+    riskEl.style.color = p.risk === 'Высокий' ? 'var(--danger)' : p.risk === 'Низкий' || p.risk === 'Минимальный' ? 'var(--success)' : 'var(--warning)';
+    document.getElementById('st-param-sl').textContent = p.stop_loss;
+    document.getElementById('st-param-tp').textContent = p.take_profit;
+    document.getElementById('st-param-tf').textContent = p.timeframe;
+    document.getElementById('st-param-pairs').textContent = p.pairs;
+}
+
+// Initialize on load
+populateStrategyParams(document.getElementById('bt-strategy').value);
+
+// Update params when strategy changes
+document.getElementById('bt-strategy').addEventListener('change', (e) => {
+    populateStrategyParams(e.target.value);
+});
+
+    // Backtest
+    document.getElementById('run-backtest').addEventListener('click', async () => {
+        const resultEl = document.getElementById('bt-result');
+        const resultsEl = document.getElementById('bt-results');
+        const balance = parseFloat(document.getElementById('bt-balance').value) || 100;
+        resultEl.innerHTML = '<span style="color:var(--warning);">⏳ Выполняется backtest...</span>';
+        resultsEl.style.display = 'none';
+        try {
+            const resp = await fetch('/api/bot/backtest', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ pair: pairEl.value, exchange: document.getElementById('bt-exchange').value, initial_balance: balance })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                resultEl.innerHTML = '<span style="color:var(--success);">✓ Backtest завершён</span>';
+                resultsEl.style.display = '';
+                resultsEl.innerHTML = (data.results || []).map(r =>
+                    `<div class="term-result-card">` +
+                    `<div style="font-size:.72rem;color:var(--primary);margin-bottom:.25rem;">${r.strategy}</div>` +
+                    `<div class="value ${r.pnl >= 0 ? 'up' : 'down'}">${r.pnl >= 0 ? '+' : ''}${(r.pnl || 0).toFixed(2)}€</div>` +
+                    `<div class="label">P/L (${(r.roi || 0).toFixed(1)}%)</div>` +
+                    `<div style="font-size:.68rem;color:var(--muted);margin-top:.25rem;">${r.trades || 0} сделок · ${r.wins || 0} побед · Баланс: ${(r.final_balance || 0).toFixed(2)}€</div>` +
+                    `</div>`
+                ).join('') || '<div class="term-empty">Нет данных</div>';
+            } else {
+                resultEl.innerHTML = `<span style="color:var(--danger);">Ошибка: ${data.detail || 'неизвестная'}</span>`;
+            }
+        } catch (err) {
+            resultEl.innerHTML = '<span style="color:var(--danger);">Ошибка соединения</span>';
+        }
+    });
+})();
+</script>
+{% endblock %}

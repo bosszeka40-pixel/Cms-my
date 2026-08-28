@@ -1,358 +1,544 @@
 {% extends 'base.html' %}
+{% block title %}Управление ботом — CMS Trading{% endblock %}
+{% block breadcrumb %}Торговля / Бот{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Управление ботом</h1>
-    <p class="lead">Запустите или остановите вашего торгового бота и настройте стратегию.</p>
-    <div class="terminal-grid">
-        <div class="card">
-            <h2>Рынок <span id="market-source" class="status-pill">нет данных</span></h2>
-            <div class="field-group">
-                <label for="market-pair">Пара</label>
-                <select id="market-pair">{% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}</select>
-            </div>
-            <div class="field-group">
-                <label for="market-exchange">Биржа</label>
-                <select id="market-exchange">{% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}</select>
-            </div>
-            <div class="field-group">
-                <label for="market-timeframe">Таймфрейм свечей</label>
-                <select id="market-timeframe">{% for tf in chart_timeframes %}<option {% if tf == '1h' %}selected{% endif %}>{{ tf }}</option>{% endfor %}</select>
-            </div>
-            <div class="button-row">
-                <button class="btn" id="refresh-market" type="button">Загрузить котировки</button>
-                <button class="btn" id="get-signal" type="button">Получить сигнал</button>
-            </div>
-            <div id="ticker" class="market-stats muted">Нажмите для получения данных с публичного API биржи.</div>
-            <div id="signal-result" class="small-note" role="status"></div>
-            <canvas id="price-chart" height="260" aria-label="График свечей"></canvas>
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Автоматизация</span>
+        <h1 class="page-title">Управление ботом</h1>
+        <p class="lead">Стратегия, запуск, параметры, AI и авто-генерация.</p>
+    </div>
+    <div class="hero-badge" style="{% if bot_status.active %}border-color:var(--success){% endif %}">
+        <strong style="color:{% if bot_status.active %}var(--success){% else %}var(--text-muted){% endif %};">{{ 'ON' if bot_status.active else 'OFF' }}</strong>
+        <span>статус</span>
+    </div>
+        <div class="hero-badge" style="margin-left:.5rem;">
+            <strong style="color:var(--accent);">{{ bot_status.lifecycle|default('STOPPED') }}</strong>
+            <span>lifecycle</span>
         </div>
-        <div class="card">
-            <h2>Стакан</h2>
-            <div class="order-book">
-                <div><strong>Покупки</strong><div id="bids">—</div></div>
-                <div><strong>Продажи</strong><div id="asks">—</div></div>
-            </div>
-        </div>
-        <div class="card">
-            <h2>Ручная торговля</h2>
-            <p class="muted">Симуляция исполнения, реальные ордера не отправляются.</p>
-            <form id="manual-trade-form">
-                <div class="field-group"><label for="manual-side">Направление</label><select id="manual-side"><option value="buy">Купить</option><option value="sell">Продать</option></select></div>
-                <div class="field-group"><label for="manual-price">Цена</label><input id="manual-price" type="number" min="0" step="any" required></div>
-                <div class="field-group"><label for="manual-amount">Количество</label><input id="manual-amount" type="number" min="0" step="any" required></div>
-                <div class="field-group"><label for="manual-balance">Баланс</label><input id="manual-balance" type="number" min="0" step="any" value="100" required></div>
-                <button class="btn" type="submit">Исполнить симуляцию</button>
-            </form>
-            <div id="manual-result" class="small-note" role="status"></div>
+</div>
+
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<!-- Bot Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:1rem;">
+    <div class="card stat-tile">
+        <div class="stat-value" style="font-size:.9rem;">{{ '🟢' if bot_status.active else '🔴' }}</div>
+        <div class="stat-label">Статус</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ bot_status.trade_count|default(0) }}</div>
+        <div class="stat-label">Сделок</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ bot_status.win_rate|default(0) }}%</div>
+        <div class="stat-label">Винрейт</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value" style="color:{% if bot_status.total_pnl|default(0) > 0 %}var(--success){% elif bot_status.total_pnl|default(0) < 0 %}var(--danger){% endif %};">{{ '%.4f'|format(bot_status.total_pnl|default(0)) }}€</div>
+        <div class="stat-label">P/L</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ '%.2f'|format(bot_status.current_balance|default(100)) }}€</div>
+        <div class="stat-label">Баланс</div>
+    </div>
+    <div class="card stat-tile">
+        <div class="stat-value">{{ bot_status.strategies_generated|default(0) }}</div>
+        <div class="stat-label">Сгенерировано</div>
+    </div>
+</div>
+
+<!-- Start/Stop -->
+<div class="card" style="margin-bottom:1rem;">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-success" onclick="botAction('start')">▶ Запустить</button>
+        <button class="btn btn-danger" onclick="botAction('stop')">⏹ Остановить</button>
+        <button class="btn btn-outline" onclick="botAction('pause')">⏸ Пауза</button>
+        <button class="btn btn-outline" onclick="botAction('resume')">▶ Продолжить</button>
+        <button class="btn btn-danger" onclick="botAction('emergency-stop')" style="border-color:var(--danger);">🚨 Аварийная остановка</button>
+        <button class="btn btn-outline" onclick="location.reload()">🔄 Обновить</button>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-left:.5rem;">Текущая стратегия: <strong style="color:var(--primary);">{{ current_strategy }}</strong></span>
+    </div>
+</div>
+
+<!-- Market Chart (same as Terminal: live) + Orderbook + Trades -->
+<div class="card" style="margin-bottom:1rem;padding:.75rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+        <h2 style="margin:0;">📈 Рынок <span id="bot-market-pair" style="color:var(--text-muted);font-size:.9rem;"></span></h2>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+            <select id="bot-chart-pair" style="width:auto;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+                <option value="BTC/USDT">BTC/USDT</option>
+                <option value="ETH/USDT">ETH/USDT</option>
+                <option value="SOL/USDT">SOL/USDT</option>
+                <option value="BNB/USDT">BNB/USDT</option>
+                <option value="XRP/USDT">XRP/USDT</option>
+            </select>
+            <button class="btn btn-sm btn-outline" type="button" id="bot-chart-refresh">Обновить</button>
         </div>
     </div>
-    {% if message %}
-        <div class="message">{{ message }}</div>
-    {% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Рыночные новости <span id="news-sentiment" class="status-pill">нет данных</span></h2>
-            <p class="muted">Сохранённая история новостей и агрегированный сентимент.</p>
-            <button class="btn" id="refresh-news" type="button">Обновить новости</button>
-            <div id="news-list" class="small-note">Нажмите «Обновить новости», чтобы загрузить последние заголовки.</div>
+    <div class="term-timeframes" style="padding:.35rem .5rem;gap:.25rem;margin-bottom:.5rem;">
+        <button class="term-tf-btn" data-tf="1m">1m</button>
+        <button class="term-tf-btn" data-tf="5m">5m</button>
+        <button class="term-tf-btn" data-tf="15m">15m</button>
+        <button class="term-tf-btn active" data-tf="1h">1h</button>
+        <button class="term-tf-btn" data-tf="1d">1d</button>
+        <button class="term-tf-btn" data-tf="live">● LIVE</button>
+    </div>
+    <div class="bot-market-grid" style="display:grid;grid-template-columns:1fr 260px;gap:.75rem;">
+        <div class="bot-chart-panel" style="max-width:100%;">
+            <div id="bot-chart" style="width:100%;height:400px;min-height:320px;"></div>
         </div>
-        <div class="card">
-            <h2>Риск-менеджмент <span id="risk-kill-switch" class="status-pill">нет данных</span></h2>
-            <p class="muted">Лимиты и дневной P/L применяются администратором ко всем пользователям.</p>
-            <div id="risk-status">Загружаем статус риска...</div>
+        <div class="bot-book-panel">
+            <div style="display:flex;justify-content:space-between;font-size:.68rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:.25rem;">
+                <span>Цена</span><span>Сумма</span>
+            </div>
+            <div id="bot-orderbook-asks" style="font-size:.78rem;margin-bottom:.5rem;"></div>
+            <div id="bot-last-price" style="text-align:center;font-weight:700;font-size:1.1rem;padding:.35rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);"></div>
+            <div id="bot-orderbook-bids" style="font-size:.78rem;margin-top:.5rem;"></div>
         </div>
     </div>
-    <div class="card">
-        <h2>Статус бота</h2>
-        <p>Активность: <strong id="bot-active">{{ 'запущен' if bot_status.active else 'остановлен' }}</strong></p>
-        <p>Событий: <strong id="bot-runs">{{ bot_status.runs }}</strong></p>
-        <div class="button-row">
-            <button class="btn" onclick="document.getElementById('start-form').submit();">Запустить бота</button>
-            <button class="btn" onclick="document.getElementById('stop-form').submit();">Остановить бота</button>
+    <div class="table-wrap" style="max-height:240px;margin-top:.75rem;">
+        <table>
+            <thead><tr><th>Время</th><th>Пара</th><th>Режим</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead>
+            <tbody id="bot-trades-body">
+                <tr><td colspan="6" class="term-empty">Загрузка сделок...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Strategy + Parameters -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📊 Выбор стратегии и параметры</h2>
+    <form method="post" id="strategy-form">
+        <input type="hidden" name="action" value="save_strategy">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;">
+            <div class="field-group">
+                <label>Стратегия</label>
+                <select id="strategy-select" name="strategy" onchange="showStrategyParams(this.value)">
+                    <optgroup label="Базовые">
+                        <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                        <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
+                        <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
+                    </optgroup>
+                    <optgroup label="Продвинутые">
+                        <option value="trend_breakout_compound" {% if current_strategy == 'trend_breakout_compound' %}selected{% endif %}>Trend Breakout</option>
+                        <option value="multi_sentiment_scalper" {% if current_strategy == 'multi_sentiment_scalper' %}selected{% endif %}>Multi Sentiment Scalper</option>
+                        <option value="ai_adaptive_momentum" {% if current_strategy == 'ai_adaptive_momentum' %}selected{% endif %}>AI Adaptive Momentum</option>
+                    </optgroup>
+                    <optgroup label="Экспертные">
+                        <option value="quantum_grid_trader" {% if current_strategy == 'quantum_grid_trader' %}selected{% endif %}>Quantum Grid Trader</option>
+                        <option value="neural_pattern_recognition" {% if current_strategy == 'neural_pattern_recognition' %}selected{% endif %}>Neural Pattern Recognition</option>
+                        <option value="delta_neutral_hedger" {% if current_strategy == 'delta_neutral_hedger' %}selected{% endif %}>Delta Neutral Hedger</option>
+                        <option value="volatility_harvest" {% if current_strategy == 'volatility_harvest' %}selected{% endif %}>Volatility Harvest</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Режим бота</label>
+                <select name="bot_mode" id="bot-mode">
+                    <option value="strategy">Вы стратегию — бот следует</option>
+                    <option value="full_auto">Full Auto — бот сам меняет стратегии</option>
+                </select>
+            </div>
         </div>
-        <h3>Журнал событий бота</h3>
-        <div id="bot-log" class="small-note">
-            {% for event in bot_status.stats[-10:]|reverse %}
-                <p>{{ event.time }} — {{ event.event }}{% if event.pair %}: {{ event.pair }} сигнал {{ event.signal }}, P/L {{ '%.4f'|format(event.pl) }}{% endif %}</p>
-            {% else %}
-                <p class="muted">Событий пока нет. Запустите бота или тест стратегии.</p>
+
+        <!-- Signal Source Settings -->
+        <div style="margin:1rem 0;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <h4 style="margin:0 0 .5rem 0;font-size:.9rem;">Настройки сигналов<span data-info="signal"></span></h4>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;">
+                <div class="field-group">
+                    <label>Источник сигналов</label>
+                    <select name="signal_source" id="signal-source">
+                        <option value="bot">Только бот (стратегия)</option>
+                        <option value="ai">Только ИИ (AI анализ)</option>
+                        <option value="ai_bot">ИИ + Бот (комбинированный)</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label>Порог уверенности (%)</label>
+                    <input type="number" name="signal_confidence" value="60" min="0" max="100" step="5">
+                </div>
+                <div class="field-group">
+                    <label>Auto-Apply сигналов</label>
+                    <select name="auto_apply">
+                        <option value="off">Выключено</option>
+                        <option value="demo">Только демо</option>
+                        <option value="live">Демо + LIVE</option>
+                    </select>
+                </div>
+            </div>
+            <p style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0 0 0;">
+                Бот: стратегия определяет сигнал. ИИ: анализирует рынок. ИИ+бот: комбинирует оба подхода.
+                Auto-Apply: автоматически применять сигналы к сделкам.
+            </p>
+        </div>
+
+        <div style="margin:1rem 0;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;">
+                <h4 style="margin:0;font-size:.9rem;">Сигналы по всем парам</h4>
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                    <select id="bot-signals-source" style="width:auto;">
+                        <option value="bot">Bot</option>
+                        <option value="ai">AI</option>
+                        <option value="ai_bot">AI + Bot</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline" type="button" id="refresh-bot-signals">Обновить</button>
+                </div>
+            </div>
+            <div class="table-wrap" style="max-height:220px;margin-top:.75rem;">
+                <table>
+                    <thead><tr><th>Пара</th><th>Сигнал</th><th>Уверенность</th><th>Стратегия</th></tr></thead>
+                    <tbody id="bot-signals-body">
+                        <tr><td colspan="4" class="term-empty">Нажмите «Обновить»</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Strategy Parameters Panel -->
+        <div id="strategy-params" style="margin:1rem 0;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div id="params-content"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;">
+            <div class="field-group">
+                <label>Леверидж (x)</label>
+                <input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" min="0.1" max="2.0" step="0.1" id="leverage-input">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-top:.2rem;">Диапазон: 0.1x — 2.0x</div>
+            </div>
+            <div class="field-group">
+                <label>Риск-толерантность</label>
+                <input type="number" name="risk_tolerance" value="{{ config.risk_tolerance|default(0.03) }}" min="0.01" max="1.0" step="0.01" id="risk-input">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-top:.2rem;">Макс. потеря за сделку: 1-100%</div>
+            </div>
+            <div class="field-group">
+                <label>Комиссия</label>
+                <input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" min="0" max="0.05" step="0.0001" id="fee-input">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-top:.2rem;">Ставка: 0-5%</div>
+            </div>
+        </div>
+        <button class="btn" type="submit" style="margin-top:.5rem;">Сохранить стратегию</button>
+    </form>
+</div>
+
+<!-- Activity Log -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📋 Журнал активности</h2>
+    <div id="bot-activity-log" style="max-height:300px;overflow-y:auto;">
+        {% if bot_status.activity_log %}
+            {% for event in bot_status.activity_log %}
+            <div style="padding:.5rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <span style="font-weight:600;font-size:.82rem;">{{ event.event or '—' }}</span>
+                    <span style="font-size:.75rem;color:var(--text-secondary);margin-left:.5rem;">{{ event.detail or '' }}</span>
+                </div>
+                <span style="font-size:.68rem;color:var(--text-muted);">{{ event.time[:19]|replace('T',' ') if event.time else '' }}</span>
+            </div>
             {% endfor %}
-        </div>
+        {% else %}
+            <div class="term-empty">Бот не активен. Нажмите «Запустить».</div>
+        {% endif %}
     </div>
-    <form id="start-form" method="post" style="display:none;">
-        <input type="hidden" name="action" value="start_bot">
+</div>
+
+<!-- Auto Generate -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>🤖 Авто-генерация стратегий</h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:.75rem;">Бот генерирует, тестирует и публикует лучшие стратегии в маркет.</p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-success btn-sm" id="generate-btn" onclick="generateStrategies()">🧪 Сгенерировать сейчас</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleAutoGenerate()">{{ 'Отключить автогенерацию' if bot_status.auto_generate else 'Включить автогенерацию' }}</button>
+        <span style="font-size:.75rem;color:var(--text-muted);">Сгенерировано: {{ bot_status.strategies_generated|default(0) }} | Опубликовано: {{ bot_status.strategies_published|default(0) }}</span>
+    </div>
+    <div id="generation-result" style="margin-top:.75rem;font-size:.82rem;"></div>
+</div>
+
+<!-- User Strategies -->
+<div class="card">
+    <h2>📝 Мои стратегии</h2>
+    <form onsubmit="createStrategy(event)" style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:1rem;">
+        <input type="text" id="new-strategy-name" placeholder="Название" required style="margin:0;">
+        <input type="text" id="new-strategy-desc" placeholder="Описание" style="margin:0;">
+        <button class="btn btn-sm" type="submit">Создать</button>
     </form>
-    <form id="stop-form" method="post" style="display:none;">
-        <input type="hidden" name="action" value="stop_bot">
-    </form>
-    <div class="card">
-        <h2>Выбор стратегии</h2>
-        <form method="post">
-            <input type="hidden" name="action" value="save_strategy">
-            <div class="field-group">
-                <label for="strategy">Стратегия</label>
-                <select id="strategy" name="strategy">
-                    <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
-                    <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
-                    <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
-                </select>
-            </div>
-            <div class="field-group">
-                <label for="leverage">Леверидж</label>
-                <input type="text" id="leverage" name="leverage" value="{{ config.leverage }}">
-            </div>
-            <div class="field-group">
-                <label for="risk_tolerance">Риск</label>
-                <input type="text" id="risk_tolerance" name="risk_tolerance" value="{{ config.risk_tolerance }}">
-            </div>
-            <div class="field-group">
-                <label for="fee_rate">Комиссия за сделку (доля)</label>
-                <input type="text" id="fee_rate" name="fee_rate" value="{{ config.fee_rate }}">
-            </div>
-            <button type="submit" class="btn">Сохранить стратегию</button>
-        </form>
-    </div>
-    <div class="card">
-        <h2>Тест стратегии без перезагрузки</h2>
-        <p class="muted">Результат появится в этом окне и не запускает реальную сделку.</p>
-        <form id="trade-test-form">
-            <div class="field-group">
-                <label for="pair">Торговая пара</label>
-                <select id="pair" name="pair">
-                    {% for pair in trading_pairs %}<option value="{{ pair }}">{{ pair }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="field-group">
-                <label for="news_sentiment">Новостной сентимент</label>
-                <input type="number" step="0.01" id="news_sentiment" name="news_sentiment" value="0.0">
-            </div>
-            <div class="field-group">
-                <label for="price_change">Изменение цены (%)</label>
-                <input type="number" step="0.01" id="price_change" name="price_change" value="0.0">
-            </div>
-            <div class="field-group">
-                <label for="current_balance">Текущий баланс</label>
-                <input type="number" step="0.01" min="0" id="current_balance" name="current_balance" value="100.0">
-            </div>
-            <button class="btn" id="test-submit" type="submit">Запустить тест</button>
-        </form>
-        <div class="card" id="trade-result" hidden></div>
-    </div>
-    <div class="card">
-        <h2>График баланса</h2>
-        <p class="muted">Строится по реальной истории ручных и тестовых сделок текущего пользователя.</p>
-        <canvas id="balance-chart" height="200" aria-label="График баланса счёта"></canvas>
-    </div>
-    <div class="card">
-        <h2>История сделок</h2>
-        <p class="muted">Общая история ручных и бот-сделок.</p>
-        <div class="table-wrap"><table><thead><tr><th>Время</th><th>Режим</th><th>Пара</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead>
-        <tbody id="trade-history">{% for trade in trade_history %}<tr><td>{{ trade.created_at }}</td><td>{{ trade.mode }}</td><td>{{ trade.pair }}</td><td>{{ trade.strategy }}</td><td>{{ '%.4f'|format(trade.pnl) }}</td><td>{{ '%.2f'|format(trade.balance) }}</td></tr>{% else %}<tr><td colspan="6">Сделок пока нет.</td></tr>{% endfor %}</tbody></table></div>
-    </div>
-    <div class="card">
-        <h2>Исторический тест всех стратегий</h2>
-        <p class="muted">Тест использует сохранённую годовую историю дневных свечей. Сигнал строится только по данным, доступным до сделки.</p>
-        <button class="btn" id="run-backtest" type="button">Запустить backtest за 365 дней</button>
-        <div id="backtest-result" class="table-wrap"></div>
-    </div>
+    <div id="user-strategies" style="font-size:.82rem;"></div>
+</div>
 {% endblock %}
+
 {% block scripts %}
+<script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
 <script>
-const testForm = document.getElementById('trade-test-form');
-testForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const button = document.getElementById('test-submit');
-    const resultBox = document.getElementById('trade-result');
-    button.disabled = true;
-    button.textContent = 'Тестирование...';
-    resultBox.hidden = false;
-    resultBox.textContent = 'Рассчитываем результат...';
-    const payload = Object.fromEntries(new FormData(testForm));
-    ['news_sentiment', 'price_change', 'current_balance'].forEach(key => payload[key] = Number(payload[key]));
+const STRATEGY_PARAMS = {
+    pure_harvester: {
+        name: 'Pure Harvester', desc: 'Следование за трендом. Покупает при росте, продаёт при падении.',
+        signal: 'Направление тренда', leverage: '1.0-1.5x', risk: 'Низкий',
+        stop_loss: '2-3%', take_profit: '3-5%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Трендовый',
+    },
+    high_frequency_momentum: {
+        name: 'HFT Momentum', desc: 'Высокочастотная торговля на импульсе. Быстрые сделки.',
+        signal: 'Сила импульса', leverage: '1.5-2.0x', risk: 'Высокий',
+        stop_loss: '1-2%', take_profit: '1-3%', timeframe: '1m-15m',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Вolatile',
+    },
+    compound_defender: {
+        name: 'Compound Defender', desc: 'Защита капитала. Контртренд с низким плечом.',
+        signal: 'Против тренда', leverage: '0.8-1.0x', risk: 'Низкий',
+        stop_loss: '3-5%', take_profit: '2-4%', timeframe: '4h-1d',
+        pairs: 'BTC/USDT', best_market: 'Спокойный',
+    },
+    trend_breakout_compound: {
+        name: 'Trend Breakout', desc: 'Прорыв уровней поддержки/сопротивления.',
+        signal: 'Пробой уровня', leverage: '1.2-1.8x', risk: 'Средний',
+        stop_loss: '2-4%', take_profit: '4-8%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT, SOL/USDT', best_market: 'Пробойный',
+    },
+    multi_sentiment_scalper: {
+        name: 'Multi Sentiment', desc: 'Комбинирование новостного.sentiment и ценового изменения.',
+        signal: 'Sentiment + Price', leverage: '1.5-2.0x', risk: 'Высокий',
+        stop_loss: '1-2%', take_profit: '2-5%', timeframe: '15m-1h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Новостной',
+    },
+    ai_adaptive_momentum: {
+        name: 'AI Adaptive', desc: 'Адаптивный порог подстраивается под баланс и рынок.',
+        signal: 'AI порог', leverage: '1.0-1.5x', risk: 'Средний',
+        stop_loss: '2-3%', take_profit: '3-6%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Любой',
+    },
+    quantum_grid_trader: {
+        name: 'Quantum Grid', desc: 'Сеточная торговля с масштабированием по sentiment.',
+        signal: 'Сетка + Sentiment', leverage: '1.0-1.2x', risk: 'Низкий',
+        stop_loss: '3-5%', take_profit: '1-3%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Боковой',
+    },
+    neural_pattern_recognition: {
+        name: 'Neural Pattern', desc: 'Паттерн-анализ на основе нейросетевого score.',
+        signal: 'Pattern Score', leverage: '1.0-1.5x', risk: 'Средний',
+        stop_loss: '2-4%', take_profit: '3-6%', timeframe: '1h-4h',
+        pairs: 'BTC/USDT, ETH/USDT', best_market: 'Паттерный',
+    },
+    delta_neutral_hedger: {
+        name: 'Delta Neutral', desc: 'Хеджированная позиция. Минимальный риск, стабильный доход.',
+        signal: 'Против изменения', leverage: '0.8-1.0x', risk: 'Минимальный',
+        stop_loss: '5-8%', take_profit: '2-4%', timeframe: '4h-1d',
+        pairs: 'BTC/USDT', best_market: 'Стабильный',
+    },
+    volatility_harvest: {
+        name: 'Volatility Harvest', desc: 'Сбор дохода от волатильности. Агрессивный при сильных движениях.',
+        signal: 'Абс. волатильность', leverage: '1.5-1.8x', risk: 'Высокий',
+        stop_loss: '2-3%', take_profit: '3-7%', timeframe: '15m-1h',
+        pairs: 'BTC/USDT, ETH/USDT, SOL/USDT', best_market: 'Волатильный',
+    },
+};
+
+function showStrategyParams(strategy) {
+    const p = STRATEGY_PARAMS[strategy];
+    if (!p) return;
+    document.getElementById('params-content').innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;">
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Стратегия</div><div style="font-weight:600;">${p.name}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Описание</div><div style="font-size:.82rem;">${p.desc}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Сигнал</div><div style="font-weight:600;color:var(--accent);">${p.signal}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Леверидж</div><div style="font-weight:600;">${p.leverage}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Риск</div><div style="font-weight:600;color:${p.risk==='Высокий'?'var(--danger)':p.risk==='Низкий'?'var(--success)':'var(--warning)'};">${p.risk}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Stop Loss</div><div style="font-weight:600;color:var(--danger);">${p.stop_loss}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Take Profit</div><div style="font-weight:600;color:var(--success);">${p.take_profit}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Таймфрейм</div><div style="font-weight:600;">${p.timeframe}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Пары</div><div style="font-weight:600;">${p.pairs}</div></div>
+            <div><div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;">Лучший рынок</div><div style="font-weight:600;">${p.best_market}</div></div>
+        </div>
+    `;
+}
+showStrategyParams(document.getElementById('strategy-select').value);
+
+async function botAction(action) {
     try {
-        const response = await fetch('{{ url_for("trading_test") }}', {
-            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+        const resp = await fetch('/api/bot/' + action, {method: 'POST'});
+        if (resp.ok) location.reload();
+    } catch(e) {}
+}
+
+async function generateStrategies() {
+    const btn = document.getElementById('generate-btn');
+    const el = document.getElementById('generation-result');
+    btn.disabled = true; btn.textContent = '⏳ Генерация...';
+    try {
+        const resp = await fetch('/api/bot/generate', {method:'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            el.innerHTML = `<span style="color:var(--success);">✓ Сгенерировано: ${data.generated} | Победителей: ${data.winners} | Опубликовано: ${data.published}</span>`;
+        } else {
+            el.innerHTML = `<span style="color:var(--danger);">Ошибка: ${data.detail||'неизвестная'}</span>`;
+        }
+    } catch(e) { el.innerHTML = '<span style="color:var(--danger);">Ошибка сети</span>'; }
+    btn.disabled = false; btn.textContent = '🧪 Сгенерировать сейчас';
+}
+
+async function toggleAutoGenerate() {
+    const resp = await fetch('/api/bot/auto-generate?enabled=' + {{ 'false' if bot_status.auto_generate else 'true' }}, {method:'POST'});
+    if (resp.ok) location.reload();
+}
+
+async function loadBotSignals() {
+    const body = document.getElementById('bot-signals-body');
+    const source = document.getElementById('bot-signals-source').value;
+    body.innerHTML = '<tr><td colspan="4" class="term-empty">Загрузка...</td></tr>';
+    try {
+        const resp = await fetch('/api/market/signals?exchange=binance&source=' + encodeURIComponent(source));
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Не удалось получить сигналы');
+        const signals = data.signals || [];
+        body.innerHTML = signals.map(row => `
+            <tr>
+                <td>${row.pair}</td>
+                <td class="${row.signal > 0 ? 'up' : row.signal < 0 ? 'down' : ''}">${row.recommended_side.toUpperCase()}</td>
+                <td>${(row.confidence * 100).toFixed(1)}%</td>
+                <td>${row.strategy}</td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="4" class="term-empty">Ошибка: ' + err.message + '</td></tr>';
+    }
+}
+
+async function createStrategy(e) {
+    e.preventDefault();
+    const payload = {
+        name: document.getElementById('new-strategy-name').value,
+        description: document.getElementById('new-strategy-desc').value,
+        strategy_type: document.getElementById('strategy-select').value,
+        leverage: parseFloat(document.getElementById('leverage-input').value) || 1.5,
+        risk_tolerance: parseFloat(document.getElementById('risk-input').value) || 0.03,
+        is_public: false,
+    };
+    const resp = await fetch('/api/strategies/create', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    if (resp.ok) { document.getElementById('user-strategies').textContent = 'Стратегия создана!'; loadUserStrategies(); }
+}
+
+async function loadUserStrategies() {
+    const resp = await fetch('/api/strategies/user');
+    if (!resp.ok) return;
+    const strategies = await resp.json();
+    const el = document.getElementById('user-strategies');
+    if (!strategies.length) { el.textContent = 'Нет стратегий.'; return; }
+    el.innerHTML = strategies.map(s => '<div style="padding:.4rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;"><span>' + s.name + ' (' + s.strategy_type + ')</span><span style="color:var(--text-muted);">' + (s.created_at ? s.created_at.slice(0,10) : '') + '</span></div>').join('');
+}
+loadUserStrategies();
+
+setInterval(() => { fetch('/api/bot/status').then(r=>r.json()).then(d => {
+    document.querySelectorAll('.stat-value')[1].textContent = d.trade_count || 0;
+    document.querySelectorAll('.stat-value')[2].textContent = (d.win_rate||0) + '%';
+}).catch(()=>{}); }, 5000);
+document.getElementById('refresh-bot-signals')?.addEventListener('click', loadBotSignals);
+document.getElementById('bot-signals-source')?.addEventListener('change', loadBotSignals);
+loadBotSignals();
+
+/* ── Bot chart (same as Terminal: live mode) ── */
+let botCurrentTf = '1h';
+const botExchange = 'binance';
+const botPairEl = document.getElementById('bot-chart-pair');
+
+function fmtNum(n) {
+    const v = Number(n);
+    if (isNaN(v)) return '';
+    return v.toLocaleString('ru-RU', {maximumFractionDigits: 6});
+}
+function fmtPrice(n) {
+    const v = Number(n);
+    if (isNaN(v)) return '';
+    return v >= 100 ? v.toFixed(1) : v >= 1 ? v.toFixed(4) : v.toFixed(6);
+}
+
+/* Orderbook + last price refresh (chart itself uses trading_chart.js) */
+async function loadBotMarket() {
+    const pair = botPairEl.value;
+    const el = document.getElementById('bot-market-pair');
+    if (el) el.textContent = pair;
+    try {
+        const resp = await fetch('/api/market/data?pair=' + encodeURIComponent(pair) + '&exchange=binance');
+        if (!resp.ok) throw new Error('Не удалось получить рыночные данные');
+        const data = await resp.json();
+
+        const last = document.getElementById('bot-last-price');
+        if (last && data.ticker && data.ticker.last) {
+            last.textContent = fmtPrice(data.ticker.last) + ' USDT';
+            last.style.color = Number(data.ticker.change) >= 0 ? 'var(--success)' : 'var(--danger)';
+        }
+
+        const asks = document.getElementById('bot-orderbook-asks');
+        const bids = document.getElementById('bot-orderbook-bids');
+        if (data.order_book) {
+            asks.innerHTML = (data.order_book.asks || []).map(row =>
+                `<div style="display:flex;justify-content:space-between;color:var(--danger);">` +
+                `<span>${fmtPrice(row[0])}</span><span>${fmtNum(row[1])}</span></div>`).join('');
+            bids.innerHTML = (data.order_book.bids || []).map(row =>
+                `<div style="display:flex;justify-content:space-between;color:var(--success);">` +
+                `<span>${fmtPrice(row[0])}</span><span>${fmtNum(row[1])}</span></div>`).join('');
+        }
+    } catch (err) {
+        const panel = document.getElementById('bot-chart');
+        if (panel) panel.innerHTML = '<div class="term-empty">Ошибка: ' + err.message + '</div>';
+    }
+}
+
+/* Chart: same as manual terminal */
+initTradingChart('bot-chart');
+loadChartData(botPairEl.value, botExchange, botCurrentTf);
+startLivePrice(botPairEl.value, botExchange);
+
+const botTfBtnRow = document.querySelector('#bot-chart-tf-row, .term-timeframes');
+if (botTfBtnRow) {
+    botTfBtnRow.querySelectorAll('.term-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            botTfBtnRow.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            botCurrentTf = btn.dataset.tf;
+            stopLivePrice();
+            loadChartData(botPairEl.value, botExchange, botCurrentTf);
+            if (botCurrentTf === 'live') startLivePrice(botPairEl.value, botExchange);
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Ошибка теста');
-        resultBox.innerHTML = `<h3>Результат теста</h3><p>Пара: <strong>${data.pair}</strong></p><p>Сигнал: <strong>${data.signal}</strong></p><p>Баланс: <strong>${Number(data.next_balance).toFixed(2)}</strong></p><p>P/L: <strong>${Number(data.trade.pl).toFixed(2)}</strong></p>`;
-        loadHistory();
-        refreshBotStatus();
-    } catch (error) { resultBox.textContent = error.message; }
-    finally { button.disabled = false; button.textContent = 'Запустить тест'; }
+    });
+}
+
+botPairEl.addEventListener('change', () => {
+    stopLivePrice();
+    loadChartData(botPairEl.value, botExchange, botCurrentTf);
+    if (botCurrentTf === 'live') startLivePrice(botPairEl.value, botExchange);
+    loadBotMarket();
 });
 
-const pairSelect = document.getElementById('market-pair');
-const exchangeSelect = document.getElementById('market-exchange');
-const timeframeSelect = document.getElementById('market-timeframe');
-const renderLevels = (target, levels) => {
-    document.getElementById(target).innerHTML = (levels || []).map(level =>
-        `<div class="book-row"><span>${Number(level[0]).toFixed(2)}</span><span>${Number(level[1]).toFixed(5)}</span></div>`
-    ).join('') || 'Нет данных';
-};
-function drawCandles(candles) {
-    const canvas = document.getElementById('price-chart');
-    const context = canvas.getContext('2d');
-    const rows = (candles || []).filter(item => item && item.length >= 5);
-    const width = canvas.clientWidth || 600;
-    canvas.width = width * 2;
-    canvas.height = 520;
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    if (!rows.length) return;
-    const highs = rows.map(r => Number(r[2]));
-    const lows = rows.map(r => Number(r[3]));
-    const min = Math.min(...lows), max = Math.max(...highs);
-    const range = Math.max(max - min, 1e-9);
-    const slot = canvas.width / rows.length;
-    const bodyWidth = Math.max(2, slot * 0.6);
-    const toY = value => canvas.height - 10 - ((value - min) / range) * (canvas.height - 20);
-    rows.forEach((candle, index) => {
-        const [, open, high, low, close] = candle.map(Number);
-        const x = index * slot + slot / 2;
-        const up = close >= open;
-        context.strokeStyle = up ? '#16a34a' : '#dc2626';
-        context.fillStyle = up ? '#16a34a' : '#dc2626';
-        context.lineWidth = 2;
-        context.beginPath();
-        context.moveTo(x, toY(high));
-        context.lineTo(x, toY(low));
-        context.stroke();
-        const openY = toY(open), closeY = toY(close);
-        const top = Math.min(openY, closeY);
-        const height = Math.max(1, Math.abs(closeY - openY));
-        context.fillRect(x - bodyWidth / 2, top, bodyWidth, height);
-    });
-}
-async function loadMarketData() {
-    const pair = pairSelect.value, exchange = exchangeSelect.value, timeframe = timeframeSelect.value;
-    document.getElementById('ticker').textContent = 'Загружаем данные...';
+document.getElementById('bot-chart-refresh')?.addEventListener('click', () => { loadBotMarket(); loadBotTrades(); });
+
+async function loadBotTrades() {
+    const body = document.getElementById('bot-trades-body');
     try {
-        const [tickerResponse, historyResponse] = await Promise.all([
-            fetch(`/api/market/data?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}`),
-            fetch(`/api/market/history?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}&timeframe=${encodeURIComponent(timeframe)}`),
-        ]);
-        const tickerData = await tickerResponse.json();
-        if (!tickerResponse.ok) throw new Error(tickerData.detail || 'Ошибка загрузки котировок');
-        const historyData = await historyResponse.json();
-        if (!historyResponse.ok) throw new Error(historyData.detail || 'Ошибка загрузки свечей');
-        document.getElementById('market-source').textContent = `${tickerData.exchange} · live`;
-        document.getElementById('ticker').innerHTML = `Цена: <strong>${Number(tickerData.ticker.last).toFixed(2)}</strong> · Изменение: ${Number(tickerData.ticker.change || 0).toFixed(2)}%`;
-        document.getElementById('manual-price').value = tickerData.ticker.last || '';
-        renderLevels('bids', tickerData.order_book.bids);
-        renderLevels('asks', tickerData.order_book.asks);
-        drawCandles(historyData.candles);
-    } catch (error) {
-        document.getElementById('ticker').textContent = error.message;
+        const resp = await fetch('/api/trading/history?limit=50');
+        if (!resp.ok) throw new Error('Ошибка загрузки');
+        const data = await resp.json();
+        const trades = data.trades || [];
+        if (!trades.length) {
+            body.innerHTML = '<tr><td colspan="6" class="term-empty">Сделок пока нет</td></tr>';
+            return;
+        }
+        body.innerHTML = trades.map(t => `
+            <tr>
+                <td>${(t.created_at||'').slice(0,16).replace('T',' ')}</td>
+                <td>${t.pair || '—'}</td>
+                <td><span class="badge ${t.mode === 'manual' ? 'badge-accent' : ''}">${t.mode || 'bot'}</span></td>
+                <td>${t.strategy || '—'}</td>
+                <td style="font-family:var(--font-mono);color:${Number(t.pnl)>=0?'var(--success)':'var(--danger)'};">${Number(t.pnl).toFixed(4)}€</td>
+                <td>${Number(t.balance).toFixed(2)}€</td>
+            </tr>`).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6" class="term-empty">Ошибка: ' + err.message + '</td></tr>';
     }
 }
-document.getElementById('refresh-market').addEventListener('click', loadMarketData);
-function drawBalanceChart(trades) {
-    const canvas = document.getElementById('balance-chart');
-    const context = canvas.getContext('2d');
-    const width = canvas.clientWidth || 600;
-    canvas.width = width * 2;
-    canvas.height = 200;
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    const points = (trades || []).slice().reverse();
-    if (points.length < 2) return;
-    const values = points.map(point => Number(point.balance));
-    const min = Math.min(...values), max = Math.max(...values);
-    const range = Math.max(max - min, 1e-9);
-    const stepX = canvas.width / (points.length - 1);
-    const toY = value => canvas.height - 10 - ((value - min) / range) * (canvas.height - 20);
-    context.strokeStyle = '#3182ce';
-    context.lineWidth = 2;
-    context.beginPath();
-    points.forEach((point, index) => {
-        const x = index * stepX, y = toY(Number(point.balance));
-        if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-    });
-    context.stroke();
-}
-drawBalanceChart({{ trade_history|tojson }});
-document.getElementById('manual-trade-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const payload = {pair: pairSelect.value, side: document.getElementById('manual-side').value,
-        price: Number(document.getElementById('manual-price').value), amount: Number(document.getElementById('manual-amount').value),
-        balance: Number(document.getElementById('manual-balance').value)};
-    const response = await fetch('/api/trading/manual', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
-    const data = await response.json();
-    document.getElementById('manual-result').textContent = response.ok ? `Исполнено. Комиссия: ${Number(data.fee).toFixed(4)}. Баланс: ${Number(data.balance).toFixed(2)}` : (data.detail || 'Ошибка исполнения');
-    if (response.ok) loadHistory();
-});
-async function loadHistory() {
-    const response = await fetch('/api/trading/history');
-    if (!response.ok) return;
-    const data = await response.json();
-    document.getElementById('trade-history').innerHTML = data.trades.map(trade =>
-        `<tr><td>${trade.created_at}</td><td>${trade.mode}</td><td>${trade.pair}</td><td>${trade.strategy}</td><td>${Number(trade.pnl).toFixed(4)}</td><td>${Number(trade.balance).toFixed(2)}</td></tr>`
-    ).join('') || '<tr><td colspan="6">Сделок пока нет.</td></tr>';    drawBalanceChart(data.trades);}
-document.getElementById('run-backtest').addEventListener('click', async () => {
-    const response = await fetch('/api/bot/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({pair: pairSelect.value, exchange: exchangeSelect.value, initial_balance: 10})});
-    const data = await response.json();
-    document.getElementById('backtest-result').innerHTML = response.ok
-        ? `<table><thead><tr><th>Стратегия</th><th>Баланс</th><th>P/L</th><th>ROI</th><th>Победы</th></tr></thead><tbody>${data.results.map(item =>
-            `<tr><td>${item.strategy}</td><td>${item.final_balance.toFixed(2)}</td><td>${item.pnl.toFixed(2)}</td><td>${item.roi.toFixed(2)}%</td><td>${item.wins}/${item.trades}</td></tr>`).join('')}</tbody></table>`
-        : `<p class="message">${data.detail || 'Ошибка backtest'}</p>`;
-});
-document.getElementById('get-signal').addEventListener('click', async () => {
-    const signalBox = document.getElementById('signal-result');
-    signalBox.textContent = 'Рассчитываем сигнал...';
-    try {
-        const response = await fetch(`/api/market/signal?pair=${encodeURIComponent(pairSelect.value)}&exchange=${encodeURIComponent(exchangeSelect.value)}`);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Ошибка расчёта сигнала');
-        const direction = {1: 'ПОКУПКА', '-1': 'ПРОДАЖА', 0: 'ОЖИДАНИЕ'}[data.signal] || 'ОЖИДАНИЕ';
-        signalBox.innerHTML = `Сигнал: <strong>${direction}</strong> (${data.strategy}), уверенность ${Math.round(data.confidence * 100)}%. ${data.disclaimer}`;
-    } catch (error) {
-        signalBox.textContent = error.message;
-    }
-});
-async function loadNews() {
-    const list = document.getElementById('news-list');
-    list.textContent = 'Загружаем новости...';
-    try {
-        const response = await fetch('/api/market/news?limit=5');
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Ошибка загрузки новостей');
-        document.getElementById('news-sentiment').textContent = `сентимент ${Number(data.sentiment).toFixed(2)}`;
-        list.innerHTML = (data.news || []).map(item => `<p>${item.title}</p>`).join('') || 'Свежих новостей пока нет.';
-    } catch (error) {
-        list.textContent = error.message;
-    }
-}
-document.getElementById('refresh-news').addEventListener('click', loadNews);
-async function loadRiskStatus() {
-    const box = document.getElementById('risk-status');
-    try {
-        const response = await fetch('/api/risk/status');
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Ошибка загрузки риск-статуса');
-        document.getElementById('risk-kill-switch').textContent = data.kill_switch ? 'торговля остановлена' : 'торговля разрешена';
-        box.innerHTML = `Дневной P/L: <strong>${Number(data.daily_pnl).toFixed(4)}</strong> · Лимит убытка: ${(data.daily_loss_limit * 100).toFixed(1)}% · Макс. плечо: ${data.max_leverage}`;
-    } catch (error) {
-        box.textContent = error.message;
-    }
-}
-loadRiskStatus();
-async function refreshBotStatus() {
-    try {
-        const response = await fetch('/api/bot/status');
-        if (!response.ok) return;
-        const data = await response.json();
-        document.getElementById('bot-active').textContent = data.active ? 'запущен' : 'остановлен';
-        document.getElementById('bot-runs').textContent = data.runs;
-        const events = (data.stats || []).slice(-10).reverse();
-        document.getElementById('bot-log').innerHTML = events.map(event =>
-            `<p>${event.time} — ${event.event}${event.pair ? `: ${event.pair} сигнал ${event.signal}, P/L ${Number(event.pl).toFixed(4)}` : ''}</p>`
-        ).join('') || '<p class="muted">Событий пока нет.</p>';
-    } catch (error) { /* transient network error, keep last known state */ }
-}
-loadMarketData();
-loadHistory();
-loadNews();
-refreshBotStatus();
-setInterval(refreshBotStatus, 8000);
+
+loadBotMarket();
+loadBotTrades();
+setInterval(loadBotMarket, 15000);
+setInterval(loadBotTrades, 10000);
 </script>
 {% endblock %}

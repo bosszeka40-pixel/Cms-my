@@ -1,42 +1,191 @@
 {% extends 'base.html' %}
+{% block title %}Настройки — CMS Trading{% endblock %}
+{% block breadcrumb %}Настройки{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Настройки аккаунта</h1>
-    <p class="lead">Настройте внешний вид личного кабинета и быстро переходите к функциям CMS.</p>
-    {% if message %}
-        <div class="message success">{{ message }}</div>
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Профиль</span>
+        <h1 class="page-title">Настройки</h1>
+        <p class="lead">Подключения, настройки торговли, тема оформления.</p>
+    </div>
+</div>
+
+{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<!-- Exchange Connection -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>🔗 Подключение биржи</h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:1rem;">Функции доступные через API зависят от выбранной биржи.</p>
+    {% if wallet.exchange_provider %}
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;padding:.75rem;background:var(--success-bg);border:1px solid var(--success);border-radius:var(--radius-sm);">
+            <span style="font-size:1.2rem;">✓</span>
+            <div>
+                <div style="font-weight:600;">{{ wallet.exchange_provider|capitalize }} подключена</div>
+                <div style="font-size:.78rem;color:var(--text-secondary);">Ключ: {{ wallet.exchange_key_masked or '—' }}</div>
+            </div>
+            <form method="post" style="margin-left:auto;"><input type="hidden" name="action" value="disconnect_exchange"><button class="btn btn-danger btn-sm" type="submit">Отключить</button></form>
+        </div>
     {% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Профиль</h2>
-            <p><strong>Имя пользователя:</strong> {{ username }}</p>
-            <p><strong>Email:</strong> {{ email }}</p>
-            <p class="muted">Для изменения персональных данных обратитесь к администратору.</p>
-            {% if is_admin %}
-                <a class="btn" href="{{ url_for('admin_panel') }}">Админ панель</a>
-            {% endif %}
-        </div>
-        <div class="card">
-            <h2>Оформление</h2>
-            <form method="post">
-                <div class="field-group">
-                    <label for="theme">Тема интерфейса</label>
-                    <select id="theme" name="theme">
-                        <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Светлая</option>
-                        <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Тёмная</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn">Сохранить настройки</button>
-            </form>
-        </div>
-        <div class="card">
-            <h2>Разделы CMS</h2>
-            <div class="button-row">
-                <a class="btn" href="{{ url_for('dashboard') }}">Дашборд</a>
-                <a class="btn" href="{{ url_for('marketplace') }}">Маркетплейс</a>
-                <a class="btn" href="{{ url_for('bot_management') }}">Управление ботом</a>
-                <a class="btn" href="{{ url_for('wallet_page') }}">Кошелёк</a>
+    <form method="post">
+        <input type="hidden" name="action" value="connect_exchange">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Биржа</label>
+                <select name="exchange_name" id="exchange-select" onchange="updateExchangeFeatures(this.value)">
+                    <option value="">Выберите биржу</option>
+                    {% for ex in exchanges %}<option value="{{ ex }}" {% if wallet.exchange_provider == ex %}selected{% endif %}>{{ ex|capitalize }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Режим</label>
+                <label class="term-check-row"><input type="checkbox" name="sandbox" checked> Sandbox (тестовый)</label>
             </div>
         </div>
+        <div class="field-group">
+            <label>API Key</label>
+            <input type="text" name="api_key" placeholder="Ваш API Key" autocomplete="off">
+        </div>
+        <div class="field-group">
+            <label>API Secret</label>
+            <input type="password" name="api_secret" placeholder="Ваш API Secret" autocomplete="off">
+        </div>
+        <div class="field-group">
+            <label>Пароль (если требуется)</label>
+            <input type="password" name="api_password" placeholder="Для бирж с обязательным паролем" autocomplete="off">
+        </div>
+        <div id="exchange-features" style="margin:1rem 0;padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:.82rem;color:var(--text-secondary);display:none;"></div>
+        <button class="btn" type="submit">Подключить биржу</button>
+    </form>
+</div>
+
+<!-- Trading Settings -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📊 Настройки торговли</h2>
+    <form method="post">
+        <input type="hidden" name="action" value="save_strategy">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Стратегия</label>
+                <select name="strategy">
+                    <option value="pure_harvester">Pure Harvester</option>
+                    <option value="high_frequency_momentum">HFT Momentum</option>
+                    <option value="compound_defender">Compound Defender</option>
+                    <option value="trend_breakout_compound">Trend Breakout</option>
+                    <option value="multi_sentiment_scalper">Multi Sentiment</option>
+                    <option value="ai_adaptive_momentum">AI Adaptive</option>
+                    <option value="quantum_grid_trader">Quantum Grid</option>
+                    <option value="neural_pattern_recognition">Neural Pattern</option>
+                    <option value="delta_neutral_hedger">Delta Neutral</option>
+                    <option value="volatility_harvest">Volatility Harvest</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Леверидж (x)</label>
+                <input type="number" name="leverage" value="1.5" min="0.1" max="2.0" step="0.1">
+            </div>
+        </div>
+        <button class="btn" type="submit">Сохранить настройки</button>
+    </form>
+</div>
+
+<!-- Wallet -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>💰 Кошелёк</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);text-align:center;">
+            <div style="font-size:1.5rem;font-weight:700;color:var(--primary);">{{ '%.2f'|format(wallet.credits) }}</div>
+            <div style="font-size:.72rem;color:var(--text-muted);">CMSC Баланс</div>
+        </div>
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);text-align:center;">
+            <div style="font-size:1.5rem;font-weight:700;color:{% if demo.demo_active %}var(--success){% else %}var(--text-muted){% endif %};">{{ '100.00' if demo.demo_active else '—' }}€</div>
+            <div style="font-size:.72rem;color:var(--text-muted);">Демо Баланс</div>
+        </div>
     </div>
+    <form method="post">
+        <input type="hidden" name="action" value="connect_wallet">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Провайдер</label>
+                <select name="wallet_provider">
+                    {% for w in wallets %}<option value="{{ w }}">{{ w }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field-group">
+                <label>Адрес кошелька</label>
+                <input type="text" name="wallet_address" placeholder="0x...">
+            </div>
+        </div>
+        <button class="btn" type="submit">Подключить кошелёк</button>
+    </form>
+</div>
+
+<!-- Telegram -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>📱 Telegram</h2>
+    <form method="post">
+        <input type="hidden" name="action" value="connect_telegram">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="field-group">
+                <label>Username</label>
+                <input type="text" name="telegram_username" placeholder="@username">
+            </div>
+            <div class="field-group">
+                <label>Bot Token</label>
+                <input type="text" name="telegram_token" placeholder="123456:ABC-DEF">
+            </div>
+        </div>
+        <button class="btn" type="submit">Подключить Telegram</button>
+    </form>
+</div>
+
+<!-- Demo Mode -->
+<div class="card" style="margin-bottom:1rem;">
+    <h2>🎯 Демо-режим</h2>
+    <p class="muted" style="font-size:.82rem;margin-bottom:.75rem;">Демо работает на реальных данных live. Баланс: 100€.</p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+        <form method="post"><input type="hidden" name="action" value="toggle_demo"><input type="hidden" name="demo_active" value="{{ 'off' if demo.demo_active else 'on' }}"><button class="btn btn-sm {% if demo.demo_active %}btn-danger{% else %}btn-success{% endif %}" type="submit">{{ 'Отключить демо' if demo.demo_active else 'Включить демо' }}</button></form>
+        <form method="post"><input type="hidden" name="action" value="reset_demo"><button class="btn btn-outline btn-sm" type="submit">Сбросить баланс (100€)</button></form>
+    </div>
+</div>
+
+<!-- Theme -->
+<div class="card">
+    <h2>🎨 Тема оформления</h2>
+    <form method="post">
+        <input type="hidden" name="action" value="save_theme">
+        <div class="field-group">
+            <label>Тема</label>
+            <select name="theme">
+                <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>🌙 Тёмная</option>
+                <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>☀️ Светлая</option>
+                <option value="auto" {% if selected_theme == 'auto' %}selected{% endif %}>🖥️ Авто (системная)</option>
+            </select>
+        </div>
+        <button class="btn" type="submit">Сохранить тему</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EXCHANGE_FEATURES = {
+    binance: ['Фьючерсы', 'Спотовая торговля', 'Копитрейдинг', 'Grid Bot', 'Auto-invest', 'Staking'],
+    bybit: ['Фьючерсы', 'Спотовая торговля', 'Grid Bot', 'Copy Trading'],
+    kraken: ['Фьючерсы', 'Спотовая торговля', 'Staking', 'Margin'],
+    okx: ['Фьючерсы', 'Спотовая торговля', 'Grid Bot', 'Copy Trading', 'Earn'],
+    bitfinex: ['Фьючерсы', 'Спотовая торговля', 'Margin', 'Staking'],
+};
+
+function updateExchangeFeatures(name) {
+    const el = document.getElementById('exchange-features');
+    const features = EXCHANGE_FEATURES[name];
+    if (features) {
+        el.style.display = 'block';
+        el.innerHTML = '<strong>Поддерживаемые функции:</strong> ' + features.map(f => '<span class="badge badge-accent">' + f + '</span>').join(' ');
+    } else {
+        el.style.display = 'none';
+    }
+}
+</script>
 {% endblock %}

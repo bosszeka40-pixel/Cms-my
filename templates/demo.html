@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block title %}Демо-торговля — Live{% endblock %}
+{% block breadcrumb %}Проверка / Демо-торговля{% endblock %}
+
+{% block content %}
+<div class="terminal-page">
+<div class="container">
+    <div class="term-header">
+        <div class="term-pair-info">
+            <select id="test-pair" class="term-strategy-select" style="width:auto;min-width:120px;">
+                {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
+            </select>
+            <span class="term-pair-price up" id="test-price">—</span>
+            <span class="term-pair-change up" id="test-change">—</span>
+        </div>
+        <div class="term-stats">
+            <div class="term-stat"><div class="term-stat-label">Демо баланс</div><div class="term-stat-value" id="demo-bal">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div></div>
+            <div class="term-stat"><div class="term-stat-label">P/L</div><div class="term-stat-value" id="demo-pnl" style="color:{% if demo.demo_pnl|default(0) >= 0 %}var(--success){% else %}var(--danger){% endif %};">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</div></div>
+            <div class="term-stat"><div class="term-stat-label">Сделок</div><div class="term-stat-value" id="demo-trades">{{ demo.demo_trades_count|default(0) }}</div></div>
+        </div>
+        <span class="term-demo-badge">DEMO 100€</span>
+    </div>
+
+    <div class="term-timeframes">
+        {% for tf in ['1m','5m','15m','1h','4h','1d'] %}
+        <button class="term-tf-btn {% if tf == '1h' %}active{% endif %}" data-tf="{{ tf }}">{{ tf }}</button>
+        {% endfor %}
+    </div>
+
+    <div class="term-grid">
+        <!-- Chart -->
+        <div class="term-chart-area">
+            <div class="term-ohlcv" id="test-ohlcv">
+                <span>O <b>—</b></span><span>H <b>—</b></span><span>L <b>—</b></span><span>C <b>—</b></span><span>Vol —</span>
+            </div>
+            <div class="term-chart-container">
+                <div id="demo-chart" style="width:100%;height:100%;"></div>
+            </div>
+        </div>
+
+        <!-- Right: Trade Form -->
+        <div class="term-panel">
+            <div class="term-section-title">Демо-торговля (Live данные)</div>
+            <form id="demo-trade-form" class="term-order-form">
+                <div class="term-field">
+                    <label>Стратегия</label>
+                    <select id="demo-strategy" class="term-strategy-select">
+                        {% for s in ['pure_harvester','high_frequency_momentum','compound_defender','trend_breakout_compound','multi_sentiment_scalper','ai_adaptive_momentum','quantum_grid_trader','neural_pattern_recognition','delta_neutral_hedger','volatility_harvest'] %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="term-field">
+                    <label>Направление</label>
+                    <div style="display:flex;gap:.5rem;">
+                        <button type="button" class="term-buy-btn" id="demo-side-buy" onclick="setDemoSide('buy')" style="flex:1;">BUY</button>
+                        <button type="button" class="term-sell-btn" id="demo-side-sell" onclick="setDemoSide('sell')" style="flex:1;opacity:.4;">SELL</button>
+                    </div>
+                    <input type="hidden" id="demo-side" value="buy">
+                </div>
+                <div class="term-field">
+                    <label>Сентимент (-1...+1)</label>
+                    <input id="demo-sentiment" type="number" value="0.5" step="0.1" min="-1" max="1">
+                </div>
+                <div class="term-field">
+                    <label>Изменение цены %</label>
+                    <input id="demo-change" type="number" value="1.0" step="0.1">
+                </div>
+                <div class="term-field">
+                    <label>Сумма (€)</label>
+                    <input id="demo-amount" type="number" value="10" step="1" min="1">
+                </div>
+                <button class="term-buy-btn" type="submit" id="demo-submit">Выполнить сделку</button>
+                <div id="demo-result" style="margin-top:.5rem;font-size:.82rem;"></div>
+            </form>
+
+            <!-- Auto Trade -->
+            <div style="border-top:1px solid var(--border);padding:.75rem;">
+                <div class="term-section-title">Авто-торговля</div>
+                <p style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0;">Бот торгует автоматически на реальных данных. Режим: <strong>DEMO</strong></p>
+                <div style="display:flex;gap:.5rem;">
+                    <button class="btn btn-success btn-sm" onclick="startAutoDemo()">▶ Старт</button>
+                    <button class="btn btn-danger btn-sm" onclick="stopAutoDemo()">⏹ Стоп</button>
+                </div>
+                <div id="auto-demo-status" style="margin-top:.5rem;font-size:.78rem;"></div>
+            </div>
+
+            <!-- History -->
+            <div style="border-top:1px solid var(--border);padding:.5rem .75rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+                    <span style="font-size:.78rem;font-weight:600;">История сделок</span>
+                    <button class="btn btn-outline btn-sm" onclick="resetDemo()" id="reset-demo" style="font-size:.68rem;padding:.2rem .5rem;">Сброс (100€)</button>
+                </div>
+                <div style="max-height:200px;overflow-y:auto;">
+                    <table class="term-table">
+                        <thead><tr><th>Время</th><th>Стратегия</th><th>Сигнал</th><th>P/L</th></tr></thead>
+                        <tbody id="demo-history-body">
+                            <tr><td colspan="4" class="term-empty">Сделок пока нет</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let demoBalance = {{ demo.demo_balance|default(100) }};
+let demoPnl = {{ demo.demo_pnl|default(0) }};
+let demoHistory = [];
+let autoDemoInterval = null;
+
+function setDemoSide(side) {
+    document.getElementById('demo-side').value = side;
+    document.getElementById('demo-side-buy').style.opacity = side === 'buy' ? '1' : '.4';
+    document.getElementById('demo-side-sell').style.opacity = side === 'sell' ? '1' : '.4';
+}
+
+document.getElementById('demo-trade-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resultEl = document.getElementById('demo-result');
+    try {
+        const resp = await fetch('/api/demo/trade', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                pair: document.getElementById('test-pair').value,
+                strategy: document.getElementById('demo-strategy').value,
+                sentiment: parseFloat(document.getElementById('demo-sentiment').value),
+                price_change: parseFloat(document.getElementById('demo-change').value),
+            })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            demoBalance = data.balance;
+            demoPnl += data.pnl;
+            document.getElementById('demo-bal').textContent = demoBalance.toFixed(2) + '€';
+            document.getElementById('demo-pnl').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
+            document.getElementById('demo-pnl').style.color = demoPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+            document.getElementById('demo-trades').textContent = parseInt(document.getElementById('demo-trades').textContent || '0') + 1;
+            resultEl.innerHTML = '<span style="color:var(--success);">✓ ' + data.strategy + ' | P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€ | Сигнал: ' + (data.signal > 0 ? 'BUY' : 'SELL') + '</span>';
+            demoHistory.unshift({time: new Date().toLocaleTimeString(), strategy: data.strategy, signal: data.signal > 0 ? 'BUY' : 'SELL', pnl: data.pnl});
+            renderDemoHistory();
+        } else {
+            resultEl.innerHTML = '<span style="color:var(--danger);">Ошибка: ' + (data.detail||'неизвестная') + '</span>';
+        }
+    } catch(_) { resultEl.innerHTML = '<span style="color:var(--danger);">Ошибка соединения</span>'; }
+});
+
+function renderDemoHistory() {
+    const body = document.getElementById('demo-history-body');
+    if (!demoHistory.length) return;
+    body.innerHTML = demoHistory.slice(0, 20).map(h => '<tr><td>' + h.time + '</td><td>' + h.strategy + '</td><td>' + h.signal + '</td><td style="color:' + (h.pnl >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' + (h.pnl >= 0 ? '+' : '') + h.pnl.toFixed(4) + '€</td></tr>').join('');
+}
+
+async function startAutoDemo() {
+    const el = document.getElementById('auto-demo-status');
+    el.textContent = '⏳ Авто-торговля запущена (каждые 5 сек)...';
+    autoDemoInterval = setInterval(async () => {
+        try {
+            const pair = document.getElementById('test-pair').value;
+            const strategy = document.getElementById('demo-strategy').value;
+            const sentiment = (Math.random() * 2 - 1);
+            const priceChange = (Math.random() * 6 - 3);
+            const resp = await fetch('/api/demo/trade', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({pair, strategy, sentiment, price_change: priceChange})
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                demoBalance = data.balance;
+                demoPnl += data.pnl;
+                document.getElementById('demo-bal').textContent = demoBalance.toFixed(2) + '€';
+                document.getElementById('demo-pnl').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
+                document.getElementById('demo-pnl').style.color = demoPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+                document.getElementById('demo-trades').textContent = parseInt(document.getElementById('demo-trades').textContent || '0') + 1;
+                demoHistory.unshift({time: new Date().toLocaleTimeString(), strategy: data.strategy, signal: data.signal > 0 ? 'BUY' : 'SELL', pnl: data.pnl});
+                renderDemoHistory();
+            }
+        } catch(_) {}
+    }, 5000);
+}
+
+function stopAutoDemo() {
+    if (autoDemoInterval) { clearInterval(autoDemoInterval); autoDemoInterval = null; }
+    document.getElementById('auto-demo-status').textContent = '⏹ Авто-торговля остановлена.';
+}
+
+async function resetDemo() {
+    if (!confirm('Сбросить демо-баланс до 100€?')) return;
+    try {
+        await fetch('/api/demo/toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({active: true})});
+        demoBalance = 100; demoPnl = 0; demoHistory = [];
+        document.getElementById('demo-bal').textContent = '100.00€';
+        document.getElementById('demo-pnl').textContent = '0.00€';
+        document.getElementById('demo-trades').textContent = '0';
+        document.getElementById('demo-history-body').innerHTML = '<tr><td colspan="4" class="term-empty">Сделок пока нет</td></tr>';
+    } catch(_) {}
+}
+
+// Timeframe buttons
+document.querySelectorAll('.term-tf-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+});
+</script>
+{% endblock %}

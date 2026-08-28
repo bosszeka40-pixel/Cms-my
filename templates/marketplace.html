@@ -1,174 +1,246 @@
 {% extends 'base.html' %}
+{% block breadcrumb %}Обзор / Маркетплейс{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Маркетплейс</h1>
-    <p class="lead">Подключите биржу, кошелек и Telegram, а затем купите плагины или подключите стратегию.</p>
-    {% if message %}
-        <div class="message">{{ message }}</div>
+    <div class="page-head">
+        <div>
+            <span class="eyebrow">Магазин расширений</span>
+            <h1 class="page-title">Маркетплейс</h1>
+            <p class="lead">Стратегии и модули для бота. 15 дней бесплатно при первом доступе к платиновым и премиум.</p>
+        </div>
+        <div class="hero-badge"><strong>{{ '%.2f'|format(wallet.credits) }}</strong><span>CMSC на балансе</span></div>
+    </div>
+
+    {% if plugin_message %}
+        <div class="message success" style="margin-bottom:1rem;">{{ plugin_message }}</div>
     {% endif %}
-    <div class="grid">
-        <div class="card">
-            <h2>Баланс</h2>
-            <p><strong>{{ '%.2f'|format(wallet.credits) }} CMSC</strong></p>
-            <p class="muted">Цены стратегий указаны в евро (€), срок доступа к платной стратегии — 15 дней.</p>
-            <p>Подключенный кошелек: {{ wallet.provider or 'Не подключен' }}</p>
-            <p>Адрес: {{ wallet.address or 'Не указано' }}</p>
-            <p>Подключенная биржа: {{ wallet.exchange_provider or 'Не подключена' }}</p>
-            <p>API ключ (маскированный): {{ wallet.exchange_address or 'Не указано' }}</p>
-            <p>Telegram: {{ wallet.telegram or 'Не подключен' }}</p>
+
+    <section class="market-toolbar card">
+        <label class="search-box">
+            <span class="visually-hidden">Поиск стратегии</span>
+            <input id="marketplace-search" type="search" placeholder="Найти стратегию или описание..." autocomplete="off">
+        </label>
+        <div id="marketplace-categories" class="filter-row" aria-label="Категории">
+            <button class="filter-btn active" type="button" data-category="all">Все</button>
+            <button class="filter-btn" type="button" data-category="Бесплатные">Бесплатные</button>
+            <button class="filter-btn" type="button" data-category="Платиновые">Платиновые</button>
+            <button class="filter-btn" type="button" data-category="Премиум модули">Премиум</button>
+            <button class="filter-btn" type="button" data-category="Пользовательские">Мои стратегии</button>
         </div>
-        <div class="card">
-            <h2>Подключение биржи</h2>
-            {% if exchange_info %}
-                <div class="card" style="margin-bottom: 15px;">
-                    <p>{{ exchange_info }}</p>
-                </div>
+        <div class="connection-hint">
+            {% if wallet.exchange_provider or wallet.provider %}
+                {% if wallet.exchange_provider %}<span class="badge badge-success">Биржа: {{ wallet.exchange_provider }}</span>{% endif %}
+            {% else %}
+                <span class="badge badge-warning">Подключения в профиле</span>
+                <a href="{{ url_for('settings') }}" class="btn btn-sm btn-outline">Профиль → Настройки</a>
             {% endif %}
-            <p class="muted">Поддерживаемые биржи (ссылки на официальные сайты для регистрации):</p>
-            <ul class="exchange-links">
-                {% for ex in exchange_directory %}
-                    <li><a href="{{ ex.website }}" target="_blank" rel="noopener noreferrer">{{ ex.name }}</a></li>
-                {% endfor %}
-            </ul>
-            <form method="post">
-                <input type="hidden" name="action" value="connect_exchange">
-                <div class="field-group">
-                    <label for="exchange_name">Биржа</label>
-                    <select id="exchange_name" name="exchange_name">
-                        {% for ex in exchanges %}
-                            <option value="{{ ex }}">{{ ex }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="api_key">API Key</label>
-                    <input type="text" id="api_key" name="api_key" placeholder="API Key">
-                </div>
-                <div class="field-group">
-                    <label for="api_secret">API Secret</label>
-                    <input type="password" id="api_secret" name="api_secret" placeholder="API Secret">
-                    <label for="api_password">Passphrase (если требуется)</label>
-                    <input type="password" id="api_password" name="api_password" placeholder="Passphrase">
-                    <label><input type="checkbox" name="sandbox" checked> Использовать sandbox/testnet</label>
-                </div>
-                <button type="submit" class="btn">Подключить биржу</button>
-            </form>
         </div>
-        <div class="card">
-            <h2>Подключение кошелька</h2>
-            <form method="post">
-                <input type="hidden" name="action" value="connect_wallet">
-                <div class="field-group">
-                    <label for="wallet_provider">Провайдер кошелька</label>
-                    <select id="wallet_provider" name="wallet_provider">
-                        {% for wallet_provider in wallets %}
-                            <option value="{{ wallet_provider }}">{{ wallet_provider }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field-group">
-                    <label for="wallet_address">Адрес кошелька</label>
-                    <input type="text" id="wallet_address" name="wallet_address" placeholder="0x...">
-                </div>
-                <button type="submit" class="btn">Подключить кошелек</button>
-            </form>
+        <div style="margin-top:.5rem;">
+            <button class="btn btn-primary btn-sm" id="generate-btn" onclick="generateStrategies()">🤖 Сгенерировать стратегии</button>
+            <span id="gen-status" class="muted" style="margin-left:.5rem;"></span>
         </div>
-        <div class="card">
-            <h2>Подключение Telegram</h2>
-            <form method="post">
-                <input type="hidden" name="action" value="connect_telegram">
-                <div class="field-group">
-                    <label for="telegram_username">Telegram username</label>
-                    <input type="text" id="telegram_username" name="telegram_username" placeholder="@username">
+    </section>
+
+    <!-- Featured sections -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem;">
+        <!-- Platinum Section -->
+        <div class="card" style="border-color:var(--warning);">
+            <div style="padding:1rem;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+                    <span style="font-size:1.2rem;">💎</span>
+                    <h2 style="margin:0;font-size:1rem;">Платиновые стратегии</h2>
                 </div>
-                <div class="field-group">
-                    <label for="telegram_token">Bot token</label>
-                    <input type="text" id="telegram_token" name="telegram_token" placeholder="123456:ABC-DEF...">
+                <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;">Продвинутые стратегии с высокой доходностью. <strong>15 дней бесплатно</strong> при активации.</p>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <span class="badge badge-success">15 дн. бесплатно</span>
+                    <span class="badge badge-accent">HFT + ИИ</span>
+                    <span class="badge badge-accent">Auto-трейдинг</span>
                 </div>
-                <button type="submit" class="btn">Подключить Telegram</button>
-            </form>
+            </div>
+        </div>
+        <!-- Premium Modules -->
+        <div class="card" style="border-color:var(--primary);">
+            <div style="padding:1rem;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">
+                    <span style="font-size:1.2rem;">⚡</span>
+                    <h2 style="margin:0;font-size:1rem;">Премиум модули</h2>
+                </div>
+                <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;">Расширения для бота: анализ новостей, нейросетевой анализ, дельта-хеджирование.</p>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <span class="badge badge-success">15 дн. бесплатно</span>
+                    <span class="badge badge-accent">AI анализ</span>
+                    <span class="badge badge-accent">Риск-менеджмент</span>
+                </div>
+            </div>
         </div>
     </div>
-    {% if plugin_message %}
-        <div class="message">{{ plugin_message }}</div>
-    {% endif %}
-    <div class="card">
-        <h2>Плагины</h2>
+
+    <section id="marketplace-grid" class="market-grid">
         {% for plugin in plugins %}
-            <div class="card" style="margin-bottom: 15px;">
-                <h3>{{ plugin.name }}</h3>
-                <p>{{ plugin.description }}</p>
-                <p>Категория: <strong>{{ plugin.category }}</strong></p>
-                <p>Результат за 30 дней: <strong>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</strong>,
-                    баланс €100 → €{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</p>
-                <p>Цена: <strong>{% if plugin.price_eur %}€{{ '%.2f'|format(plugin.price_eur) }} / 15 дней{% else %}Бесплатно{% endif %}</strong></p>
-                <p>Статус:
+            <article class="card market-card" data-name="{{ plugin.name|lower }} {{ plugin.description|lower }}" data-category="{{ plugin.category }}">
+                <header class="market-card-head">
+                    <h3>{{ plugin.name }}</h3>
                     {% if plugin.active %}
-                        <strong class="status-pill">✔ активна{% if plugin.access_until %} до {{ plugin.access_until[:16]|replace('T', ' ') }}{% endif %}</strong>
+                        <span class="badge badge-success">Активна</span>
                     {% elif plugin.owned %}
-                        <strong class="status-pill">куплена, не активирована{% if plugin.access_until %} (доступ до {{ plugin.access_until[:16]|replace('T', ' ') }}){% endif %}</strong>
-                    {% elif plugin.available %}
-                        <strong class="status-pill">бесплатно доступна</strong>
+                        <span class="badge badge-warning">Куплена</span>
+                    {% elif plugin.available and plugin.price_eur == 0 %}
+                        <span class="badge badge-success">Бесплатно</span>
                     {% else %}
-                        <strong class="status-pill">требуется покупка</strong>
+                        <span class="badge badge-accent">{{ plugin.category }}</span>
+                        {% if plugin.free_trial_days %}<span class="badge badge-success">{{ plugin.free_trial_days }} дней free</span>{% endif %}
                     {% endif %}
-                </p>
-                {% if plugin.price_eur %}
-                    <form method="post" style="margin-top: 10px;">
-                        <input type="hidden" name="action" value="buy_plugin">
-                        <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
-                        {% if plugin.license_options %}
-                            <label for="duration-{{ plugin.name }}">Срок доступа</label>
-                            <select id="duration-{{ plugin.name }}" name="duration_days">
+                </header>
+                <p class="market-description muted">{{ plugin.description }}</p>
+                <dl class="market-metrics">
+                    <div><dt>30 дней</dt><dd>{{ '%.2f'|format(plugin.monthly_return_pct or 0) }}%</dd></div>
+                    <div><dt>€100 даёт</dt><dd>€{{ '%.2f'|format(plugin.final_balance_eur or 100) }}</dd></div>
+                    <div><dt>Винрейт</dt><dd>{{ '%.1f'|format(plugin.win_rate_pct or 0) }}%</dd></div>
+                    <div><dt>Категория</dt><dd>{{ plugin.category }}</dd></div>
+                </dl>
+                <!-- Strategy Parameters -->
+                <div class="market-params" style="display:none;" data-plugin="{{ plugin.name }}">
+                    <details>
+                        <summary style="cursor:pointer;color:var(--accent);font-size:.82rem;margin-top:.5rem;">📊 Параметры стратегии</summary>
+                        <div style="margin-top:.5rem;padding:.5rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:.75rem;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem;">
+                                <div><span class="muted">Сигнал:</span> <span id="param-signal-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Леверидж:</span> <span id="param-lev-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Риск:</span> <span id="param-risk-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Stop Loss:</span> <span id="param-sl-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Take Profit:</span> <span id="param-tp-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Таймфрейм:</span> <span id="param-tf-{{ plugin.name }}"></span></div>
+                                <div><span class="muted">Пары:</span> <span id="param-pairs-{{ plugin.name }}"></span></div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+                <footer class="market-card-footer">
+                    {% if plugin.price_eur > 0 %}
+                        <strong class="price">€{{ '%.2f'|format(plugin.price_eur) }}<small>/15 дн.</small></strong>
+                        <form method="post" class="license-form">
+                            <input type="hidden" name="action" value="buy_plugin">
+                            <input type="hidden" name="plugin_name" value="{{ plugin.name }}">
+                            <select name="duration_days" aria-label="Срок лицензии">
                                 {% for option in plugin.license_options %}
                                     <option value="{{ option.days }}">{{ option.days }} дн. — €{{ '%.2f'|format(option.price_eur) }}</option>
                                 {% endfor %}
                             </select>
-                        {% endif %}
-                        <button class="btn" type="submit">{{ 'Продлить доступ' if plugin.owned else 'Купить' }}</button>
-                    </form>
+                            <button class="btn btn-sm" type="submit">{{ 'Продлить' if plugin.owned else 'Купить' }}</button>
+                        </form>
+                    {% elif plugin.available %}
+                        <button class="btn btn-outline btn-sm activate-btn" type="button" data-plugin="{{ plugin.name }}" {% if plugin.active %}disabled{% endif %}>
+                            {{ 'Уже активна' if plugin.active else 'Активировать бесплатно' }}
+                        </button>
+                    {% else %}
+                        <strong class="price">€{{ '%.2f'|format(plugin.price_eur) }}</strong>
+                    {% endif %}
+                </footer>
+                {% if plugin.access_until and plugin.active %}
+                    <p class="expiry muted">до {{ plugin.access_until[:16]|replace('T',' ') }}</p>
                 {% endif %}
-                {% if plugin.available %}
-                    <button class="btn activate-btn" type="button" data-plugin="{{ plugin.name }}" {% if plugin.active %}disabled{% endif %} style="margin-top: 8px;">
-                        {{ 'Уже активна' if plugin.active else 'Активировать в боте' }}
-                    </button>
-                {% endif %}
-            </div>
-        {% endfor %}
-    </div>
-    <div class="card">
-        <h2>Покупки</h2>
-        {% if purchases %}
-            <ul>
-                {% for item in purchases %}
-                    <li>{{ item.name }} — {{ item.when }}</li>
-                {% endfor %}
-            </ul>
+            </article>
         {% else %}
-            <p>Пока нет покупок.</p>
-        {% endif %}
-    </div>
+            <article class="card empty-state"><h3>Товаров пока нет</h3><p class="muted">Маркетплейс обновляется администратором.</p></article>
+        {% endfor %}
+    </section>
+    <p id="marketplace-empty" class="empty-note muted" hidden>По выбранному фильтру ничего не найдено.</p>
+
+    {% if purchases %}
+    <section class="card purchase-history">
+        <h3>История покупок</h3>
+        <ul>
+            {% for item in purchases %}
+                <li>{{ item.name }} — {{ item.when }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
 {% endblock %}
+
 {% block scripts %}
 <script>
-document.querySelectorAll('.activate-btn').forEach(button => {
-    button.addEventListener('click', async () => {
-        button.disabled = true;
-        const pluginName = button.dataset.plugin;
-        try {
-            const response = await fetch('/api/strategies/activate', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({plugin_name: pluginName})
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Ошибка активации стратегии');
-            button.textContent = 'Уже активна';
-            location.reload();
-        } catch (error) {
-            button.disabled = false;
-            alert(error.message);
+(() => {
+  const search = document.getElementById('marketplace-search');
+  const categoryButtons = [...document.querySelectorAll('#marketplace-categories .filter-btn')];
+  const cards = [...document.querySelectorAll('.market-card')];
+  const emptyMessage = document.getElementById('marketplace-empty');
+  let category = 'all';
+
+  const applyFilters = () => {
+    const query = search.value.trim().toLowerCase();
+    let visible = 0;
+    cards.forEach((card) => {
+      const matches = (category === 'all' || card.dataset.category === category) && (!query || card.dataset.name.includes(query));
+      card.hidden = !matches;
+      visible += Number(matches);
+    });
+    emptyMessage.hidden = visible !== 0;
+  };
+
+  categoryButtons.forEach((button) => button.addEventListener('click', () => {
+    categoryButtons.forEach((item) => item.classList.remove('active'));
+    button.classList.add('active');
+    category = button.dataset.category;
+    applyFilters();
+  }));
+  search.addEventListener('input', applyFilters);
+
+  // Strategy parameters (shared with bot_management)
+const STRATEGY_PARAMS = {
+    pure_harvester: {name: 'Pure Harvester', signal: 'Направление тренда', leverage: '1.0-1.5x', risk: 'Низкий', stop_loss: '2-3%', take_profit: '3-5%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    high_frequency_momentum: {name: 'HFT Momentum', signal: 'Сила импульса', leverage: '1.5-2.0x', risk: 'Высокий', stop_loss: '1-2%', take_profit: '1-3%', timeframe: '1m-15m', pairs: 'BTC/USDT, ETH/USDT'},
+    compound_defender: {name: 'Compound Defender', signal: 'Против тренда', leverage: '0.8-1.0x', risk: 'Низкий', stop_loss: '3-5%', take_profit: '2-4%', timeframe: '4h-1d', pairs: 'BTC/USDT'},
+    trend_breakout_compound: {name: 'Trend Breakout', signal: 'Пробой уровня', leverage: '1.2-1.8x', risk: 'Средний', stop_loss: '2-4%', take_profit: '4-8%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT, SOL/USDT'},
+    multi_sentiment_scalper: {name: 'Multi Sentiment', signal: 'Sentiment + Price', leverage: '1.5-2.0x', risk: 'Высокий', stop_loss: '1-2%', take_profit: '2-5%', timeframe: '15m-1h', pairs: 'BTC/USDT, ETH/USDT'},
+    ai_adaptive_momentum: {name: 'AI Adaptive', signal: 'AI порог', leverage: '1.0-1.5x', risk: 'Средний', stop_loss: '2-3%', take_profit: '3-6%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    quantum_grid_trader: {name: 'Quantum Grid', signal: 'Сетка + Sentiment', leverage: '1.0-1.2x', risk: 'Низкий', stop_loss: '3-5%', take_profit: '1-3%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    neural_pattern_recognition: {name: 'Neural Pattern', signal: 'Pattern Score', leverage: '1.0-1.5x', risk: 'Средний', stop_loss: '2-4%', take_profit: '3-6%', timeframe: '1h-4h', pairs: 'BTC/USDT, ETH/USDT'},
+    delta_neutral_hedger: {name: 'Delta Neutral', signal: 'Против изменения', leverage: '0.8-1.0x', risk: 'Минимальный', stop_loss: '5-8%', take_profit: '2-4%', timeframe: '4h-1d', pairs: 'BTC/USDT'},
+    volatility_harvest: {name: 'Volatility Harvest', signal: 'Абс. волатильность', leverage: '1.5-1.8x', risk: 'Высокий', stop_loss: '2-3%', take_profit: '3-7%', timeframe: '15m-1h', pairs: 'BTC/USDT, ETH/USDT, SOL/USDT'},
+};
+
+function populateStrategyParams(pluginName) {
+    const p = STRATEGY_PARAMS[pluginName];
+    if (!p) return;
+    document.getElementById('param-signal-' + pluginName).textContent = p.signal;
+    document.getElementById('param-lev-' + pluginName).textContent = p.leverage;
+    const riskEl = document.getElementById('param-risk-' + pluginName);
+    riskEl.textContent = p.risk;
+    riskEl.style.color = p.risk === 'Высокий' ? 'var(--danger)' : p.risk === 'Низкий' || p.risk === 'Минимальный' ? 'var(--success)' : 'var(--warning)';
+    document.getElementById('param-sl-' + pluginName).textContent = p.stop_loss;
+    document.getElementById('param-tp-' + pluginName).textContent = p.take_profit;
+    document.getElementById('param-tf-' + pluginName).textContent = p.timeframe;
+    document.getElementById('param-pairs-' + pluginName).textContent = p.pairs;
+}
+
+document.querySelectorAll('.market-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+        const pluginName = card.querySelector('[data-plugin]')?.dataset.plugin;
+        if (pluginName) {
+            const paramsDiv = card.querySelector('.market-params');
+            if (paramsDiv && paramsDiv.style.display === 'none') {
+                populateStrategyParams(pluginName);
+                paramsDiv.style.display = 'block';
+            } else if (paramsDiv) {
+                paramsDiv.style.display = 'none';
+            }
         }
     });
 });
+
+document.querySelectorAll('.activate-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pluginName = btn.dataset.plugin;
+      const card = btn.closest('.market-card');
+      const isPaid = parseFloat(card.querySelector('.price')?.textContent || '0') > 0;
+      const resp = await fetch('/api/strategies/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({plugin_name: pluginName, duration_days: 15, trial: isPaid})});
+      const data = await resp.json().catch(()=>null);
+      if (resp.ok) { btn.textContent = 'Уже активна'; btn.disabled = true; }
+      else { alert(data?.detail || 'Ошибка активации'); }
+    });
+  });
+})();
 </script>
 {% endblock %}
