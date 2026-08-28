@@ -62,12 +62,58 @@
     </div>
 </div>
 
+<!-- Market Chart (same as Terminal: live) + Orderbook + Trades -->
+<div class="card" style="margin-bottom:1rem;padding:.75rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+        <h2 style="margin:0;">📈 Рынок <span id="bot-market-pair" style="color:var(--text-muted);font-size:.9rem;"></span></h2>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+            <select id="bot-chart-pair" style="width:auto;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+                <option value="BTC/USDT">BTC/USDT</option>
+                <option value="ETH/USDT">ETH/USDT</option>
+                <option value="SOL/USDT">SOL/USDT</option>
+                <option value="BNB/USDT">BNB/USDT</option>
+                <option value="XRP/USDT">XRP/USDT</option>
+            </select>
+            <button class="btn btn-sm btn-outline" type="button" id="bot-chart-refresh">Обновить</button>
+        </div>
+    </div>
+    <div class="term-timeframes" style="padding:.35rem .5rem;gap:.25rem;margin-bottom:.5rem;">
+        <button class="term-tf-btn" data-tf="1m">1m</button>
+        <button class="term-tf-btn" data-tf="5m">5m</button>
+        <button class="term-tf-btn" data-tf="15m">15m</button>
+        <button class="term-tf-btn active" data-tf="1h">1h</button>
+        <button class="term-tf-btn" data-tf="1d">1d</button>
+        <button class="term-tf-btn" data-tf="live">● LIVE</button>
+    </div>
+    <div class="bot-market-grid" style="display:grid;grid-template-columns:1fr 260px;gap:.75rem;">
+        <div class="bot-chart-panel" style="max-width:100%;">
+            <div id="bot-chart" style="width:100%;height:400px;min-height:320px;"></div>
+        </div>
+        <div class="bot-book-panel">
+            <div style="display:flex;justify-content:space-between;font-size:.68rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:.25rem;">
+                <span>Цена</span><span>Сумма</span>
+            </div>
+            <div id="bot-orderbook-asks" style="font-size:.78rem;margin-bottom:.5rem;"></div>
+            <div id="bot-last-price" style="text-align:center;font-weight:700;font-size:1.1rem;padding:.35rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);"></div>
+            <div id="bot-orderbook-bids" style="font-size:.78rem;margin-top:.5rem;"></div>
+        </div>
+    </div>
+    <div class="table-wrap" style="max-height:240px;margin-top:.75rem;">
+        <table>
+            <thead><tr><th>Время</th><th>Пара</th><th>Режим</th><th>Стратегия</th><th>P/L</th><th>Баланс</th></tr></thead>
+            <tbody id="bot-trades-body">
+                <tr><td colspan="6" class="term-empty">Загрузка сделок...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- Strategy + Parameters -->
 <div class="card" style="margin-bottom:1rem;">
     <h2>📊 Выбор стратегии и параметры</h2>
     <form method="post" id="strategy-form">
         <input type="hidden" name="action" value="save_strategy">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;">
             <div class="field-group">
                 <label>Стратегия</label>
                 <select id="strategy-select" name="strategy" onchange="showStrategyParams(this.value)">
@@ -101,7 +147,7 @@
         <!-- Signal Source Settings -->
         <div style="margin:1rem 0;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
             <h4 style="margin:0 0 .5rem 0;font-size:.9rem;">Настройки сигналов<span data-info="signal"></span></h4>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;">
                 <div class="field-group">
                     <label>Источник сигналов</label>
                     <select name="signal_source" id="signal-source">
@@ -156,7 +202,7 @@
             <div id="params-content"></div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;">
             <div class="field-group">
                 <label>Леверидж (x)</label>
                 <input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" min="0.1" max="2.0" step="0.1" id="leverage-input">
@@ -222,6 +268,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
 <script>
 const STRATEGY_PARAMS = {
     pure_harvester: {
@@ -387,5 +434,111 @@ setInterval(() => { fetch('/api/bot/status').then(r=>r.json()).then(d => {
 document.getElementById('refresh-bot-signals')?.addEventListener('click', loadBotSignals);
 document.getElementById('bot-signals-source')?.addEventListener('change', loadBotSignals);
 loadBotSignals();
+
+/* ── Bot chart (same as Terminal: live mode) ── */
+let botCurrentTf = '1h';
+const botExchange = 'binance';
+const botPairEl = document.getElementById('bot-chart-pair');
+
+function fmtNum(n) {
+    const v = Number(n);
+    if (isNaN(v)) return '';
+    return v.toLocaleString('ru-RU', {maximumFractionDigits: 6});
+}
+function fmtPrice(n) {
+    const v = Number(n);
+    if (isNaN(v)) return '';
+    return v >= 100 ? v.toFixed(1) : v >= 1 ? v.toFixed(4) : v.toFixed(6);
+}
+
+/* Orderbook + last price refresh (chart itself uses trading_chart.js) */
+async function loadBotMarket() {
+    const pair = botPairEl.value;
+    const el = document.getElementById('bot-market-pair');
+    if (el) el.textContent = pair;
+    try {
+        const resp = await fetch('/api/market/data?pair=' + encodeURIComponent(pair) + '&exchange=binance');
+        if (!resp.ok) throw new Error('Не удалось получить рыночные данные');
+        const data = await resp.json();
+
+        const last = document.getElementById('bot-last-price');
+        if (last && data.ticker && data.ticker.last) {
+            last.textContent = fmtPrice(data.ticker.last) + ' USDT';
+            last.style.color = Number(data.ticker.change) >= 0 ? 'var(--success)' : 'var(--danger)';
+        }
+
+        const asks = document.getElementById('bot-orderbook-asks');
+        const bids = document.getElementById('bot-orderbook-bids');
+        if (data.order_book) {
+            asks.innerHTML = (data.order_book.asks || []).map(row =>
+                `<div style="display:flex;justify-content:space-between;color:var(--danger);">` +
+                `<span>${fmtPrice(row[0])}</span><span>${fmtNum(row[1])}</span></div>`).join('');
+            bids.innerHTML = (data.order_book.bids || []).map(row =>
+                `<div style="display:flex;justify-content:space-between;color:var(--success);">` +
+                `<span>${fmtPrice(row[0])}</span><span>${fmtNum(row[1])}</span></div>`).join('');
+        }
+    } catch (err) {
+        const panel = document.getElementById('bot-chart');
+        if (panel) panel.innerHTML = '<div class="term-empty">Ошибка: ' + err.message + '</div>';
+    }
+}
+
+/* Chart: same as manual terminal */
+initTradingChart('bot-chart');
+loadChartData(botPairEl.value, botExchange, botCurrentTf);
+startLivePrice(botPairEl.value, botExchange);
+
+const botTfBtnRow = document.querySelector('#bot-chart-tf-row, .term-timeframes');
+if (botTfBtnRow) {
+    botTfBtnRow.querySelectorAll('.term-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            botTfBtnRow.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            botCurrentTf = btn.dataset.tf;
+            stopLivePrice();
+            loadChartData(botPairEl.value, botExchange, botCurrentTf);
+            if (botCurrentTf === 'live') startLivePrice(botPairEl.value, botExchange);
+        });
+    });
+}
+
+botPairEl.addEventListener('change', () => {
+    stopLivePrice();
+    loadChartData(botPairEl.value, botExchange, botCurrentTf);
+    if (botCurrentTf === 'live') startLivePrice(botPairEl.value, botExchange);
+    loadBotMarket();
+});
+
+document.getElementById('bot-chart-refresh')?.addEventListener('click', () => { loadBotMarket(); loadBotTrades(); });
+
+async function loadBotTrades() {
+    const body = document.getElementById('bot-trades-body');
+    try {
+        const resp = await fetch('/api/trading/history?limit=50');
+        if (!resp.ok) throw new Error('Ошибка загрузки');
+        const data = await resp.json();
+        const trades = data.trades || [];
+        if (!trades.length) {
+            body.innerHTML = '<tr><td colspan="6" class="term-empty">Сделок пока нет</td></tr>';
+            return;
+        }
+        body.innerHTML = trades.map(t => `
+            <tr>
+                <td>${(t.created_at||'').slice(0,16).replace('T',' ')}</td>
+                <td>${t.pair || '—'}</td>
+                <td><span class="badge ${t.mode === 'manual' ? 'badge-accent' : ''}">${t.mode || 'bot'}</span></td>
+                <td>${t.strategy || '—'}</td>
+                <td style="font-family:var(--font-mono);color:${Number(t.pnl)>=0?'var(--success)':'var(--danger)'};">${Number(t.pnl).toFixed(4)}€</td>
+                <td>${Number(t.balance).toFixed(2)}€</td>
+            </tr>`).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6" class="term-empty">Ошибка: ' + err.message + '</td></tr>';
+    }
+}
+
+loadBotMarket();
+loadBotTrades();
+setInterval(loadBotMarket, 15000);
+setInterval(loadBotTrades, 10000);
 </script>
 {% endblock %}

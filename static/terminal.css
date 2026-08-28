@@ -81,6 +81,8 @@
     flex: 1;
     min-height: 400px;
     position: relative;
+    padding: .6rem .75rem;
+    box-sizing: border-box;
 }
 
 .term-ohlcv {
@@ -420,6 +422,7 @@
 .term-result-card .label { font-size: .68rem; color: var(--text-muted); text-transform: uppercase; margin-top: .15rem; }
 
 @media (max-width: 900px) {
+    .terminal-page { margin: 0; }
     .term-grid { grid-template-columns: 1fr; }
     .term-panel { max-height: none; }
     .term-chart-container { min-height: 300px; }

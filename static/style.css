@@ -42,6 +42,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body {
+    overflow-x: hidden;
+}
+
 body {
     min-height: 100vh;
     background: var(--bg-primary);
@@ -90,6 +94,8 @@ a:hover { color: var(--primary); }
 .app-shell {
     display: flex;
     min-height: 100vh;
+    max-width: 100vw;
+    overflow-x: clip;
 }
 
 /* Sidebar */
@@ -780,11 +786,11 @@ tr:hover td { background: var(--bg-hover); }
 /* ═══════ Mobile ═══════ */
 @media (max-width: 768px) {
     .sidebar {
-        transform: translateX(-100%);
+        transform: translateY(-100%);
     }
     
     .menu-open .sidebar {
-        transform: translateX(0);
+        transform: translateY(0);
     }
     
     .app-main {
@@ -846,12 +852,22 @@ tr:hover td { background: var(--bg-hover); }
 
 /* ═══════ Enhanced Mobile ═══════ */
 @media (max-width: 768px) {
-    .sidebar {
-        transform: translateX(-100%);
-        width: 240px;
+    body .sidebar {
+        position: fixed;
+        transform: translateY(-100%);
+        width: 100%;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: auto;
+        max-height: 100vh;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        box-shadow: none;
+        z-index: 1000;
     }
     body.menu-open .sidebar {
-        transform: translateX(0);
+        transform: translateY(0);
         box-shadow: var(--shadow-lg);
     }
     .app-main {
@@ -940,6 +956,43 @@ tr:hover td { background: var(--bg-hover); }
     }
     .term-order-form {
         padding: .5rem;
+    }
+    img, canvas, svg, iframe, video, object {
+        max-width: 100%;
+        height: auto;
+    }
+    pre, code, .log-box, .terminal-log {
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-width: 100%;
+    }
+    .topbar {
+        flex-wrap: wrap;
+    }
+    .topbar-actions {
+        flex-wrap: wrap;
+    }
+    .feature-grid,
+    .dashboard-grid,
+    .stat-grid {
+        grid-template-columns: 1fr 1fr !important;
+    }
+    .card, .panel, .term-panel, .market-toolbar, .page-head {
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+    table {
+        display: block;
+        width: max-content;
+        min-width: 100%;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+    .app-main > .cms-content,
+    .cms-content {
+        min-width: 0;
+        width: 100%;
     }
 }
 
@@ -1133,4 +1186,68 @@ body::after {
 
 .empty-state {
     background: linear-gradient(180deg, rgba(22,26,30,.88), rgba(16,20,24,.92));
+}
+
+/* Bot page chart + orderbook */
+.bot-chart-panel {
+    min-width: 0;
+    padding: .5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.bot-book-panel {
+    min-width: 0;
+    padding: .5rem;
+    max-height: 360px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+@media (max-width: 768px) {
+    .bot-market-grid {
+        grid-template-columns: 1fr !important;
+        gap: .75rem;
+    }
+    .bot-chart-panel, .bot-book-panel {
+        max-width: 100%;
+        min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .term-timeframes {
+        flex-wrap: wrap;
+        overflow-x: auto;
+    }
+    .app-main {
+        min-width: 0;
+    }
+    .term-grid,
+    .term-chart-area,
+    .term-bottom,
+    .term-bottom-content,
+    .term-ohlcv,
+    .term-panel,
+    .term-balance-info {
+        min-width: 0;
+        max-width: 100%;
+    }
+}
+
+/* ═══════ Desktop layout: sidebar fixed + content flush to menu ═══════ */
+@media (min-width: 769px) {
+    body .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 220px;
+        z-index: 100;
+    }
+    .cms-content {
+        max-width: none;
+        margin: 0;
+        width: 100%;
+    }
 }

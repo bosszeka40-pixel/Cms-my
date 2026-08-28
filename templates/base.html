@@ -2,12 +2,12 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{% block title %}CMS Trading Platform{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='terminal.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=8-mobile">
+<link rel="stylesheet" href="{{ url_for('static', filename='terminal.css') }}?v=8-mobile">
+<link rel="stylesheet" href="{{ url_for('static', filename='market_terminal.css') }}?v=8-mobile">
+<link rel="stylesheet" href="{{ url_for('static', filename='market_live.css') }}?v=8-mobile">
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     {% block head %}{% endblock %}
 </head>
