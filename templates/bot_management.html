@@ -9,12 +9,12 @@
         <h1 class="page-title">Управление ботом</h1>
         <p class="lead">Стратегия, запуск, параметры, AI и авто-генерация.</p>
     </div>
-    <div class="hero-badge" style="{% if bot_status.active %}border-color:var(--success){% endif %}">
-        <strong style="color:{% if bot_status.active %}var(--success){% else %}var(--text-muted){% endif %};">{{ 'ON' if bot_status.active else 'OFF' }}</strong>
+    <div class="hero-badge" id="bot-state-badge" style="{% if bot_status.active %}border-color:var(--success){% endif %}">
+        <strong id="bot-state-text" style="color:{% if bot_status.active %}var(--success){% else %}var(--text-muted){% endif %};">{{ 'ON' if bot_status.active else 'OFF' }}</strong>
         <span>статус</span>
     </div>
         <div class="hero-badge" style="margin-left:.5rem;">
-            <strong style="color:var(--accent);">{{ bot_status.lifecycle|default('STOPPED') }}</strong>
+            <strong id="bot-lifecycle-text" style="color:var(--accent);">{{ bot_status.lifecycle|default('STOPPED') }}</strong>
             <span>lifecycle</span>
         </div>
 </div>
@@ -52,10 +52,8 @@
 <!-- Start/Stop -->
 <div class="card" style="margin-bottom:1rem;">
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
-        <button class="btn btn-success" onclick="botAction('start')">▶ Запустить</button>
-        <button class="btn btn-danger" onclick="botAction('stop')">⏹ Остановить</button>
-        <button class="btn btn-outline" onclick="botAction('pause')">⏸ Пауза</button>
-        <button class="btn btn-outline" onclick="botAction('resume')">▶ Продолжить</button>
+        <button class="btn {% if bot_status.active %}btn-danger{% else %}btn-success{% endif %}" id="btn-bot-power" onclick="botAction('{{ 'stop' if bot_status.active else 'start' }}')">{{ '⏹ Остановить' if bot_status.active else '▶ Запустить' }}</button>
+        <button class="btn btn-outline" id="btn-bot-pause" onclick="botAction('{{ 'resume' if bot_status.lifecycle == 'PAUSED' else 'pause' }}')" {% if not bot_status.active %}style="display:none;"{% endif %}>{{ '▶ Продолжить' if bot_status.lifecycle == 'PAUSED' else '⏸ Пауза' }}</button>
         <button class="btn btn-danger" onclick="botAction('emergency-stop')" style="border-color:var(--danger);">🚨 Аварийная остановка</button>
         <button class="btn btn-outline" onclick="location.reload()">🔄 Обновить</button>
         <span style="font-size:.78rem;color:var(--text-muted);margin-left:.5rem;">Текущая стратегия: <strong style="color:var(--primary);">{{ current_strategy }}</strong></span>
@@ -354,9 +352,59 @@ function showStrategyParams(strategy) {
 showStrategyParams(document.getElementById('strategy-select').value);
 
 async function botAction(action) {
+    const btn = document.getElementById('btn-bot-power') || document.getElementById('btn-bot-pause');
+    if (btn) btn.disabled = true;
     try {
         const resp = await fetch('/api/bot/' + action, {method: 'POST'});
-        if (resp.ok) location.reload();
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            alert(data.detail || 'Ошибка: ' + action);
+            return;
+        }
+        if (action === 'emergency-stop') { setBotState(false, 'STOPPED'); setTimeout(() => location.reload(), 1200); return; }
+        let on = action !== 'stop';
+        if (typeof data.active !== 'undefined') on = !!data.active;
+        const lc = String(data.lifecycle || '').toUpperCase();
+        const paused = (lc.indexOf('PAUS') !== -1) || action === 'pause';
+        setBotState(on, paused ? 'PAUSED' : (on ? 'RUNNING' : 'STOPPED'));
+    } catch(e) { alert('Ошибка сети'); }
+    finally { if (btn) btn.disabled = false; }
+}
+
+function setBotState(on, lifecycle) {
+    if (typeof on !== 'boolean') on = false;
+    const paused = String(lifecycle || '').toUpperCase().indexOf('PAUS') !== -1;
+    const power = document.getElementById('btn-bot-power');
+    const pause = document.getElementById('btn-bot-pause');
+    if (on) {
+        if (power) { power.className = 'btn btn-danger'; power.textContent = '⏹ Остановить'; power.setAttribute('onclick', "botAction('stop')"); }
+        if (pause) {
+            pause.style.display = '';
+            if (paused) { pause.textContent = '▶ Продолжить'; pause.setAttribute('onclick', "botAction('resume')"); }
+            else { pause.textContent = '⏸ Пауза'; pause.setAttribute('onclick', "botAction('pause')"); }
+        }
+    } else {
+        if (power) { power.className = 'btn btn-success'; power.textContent = '▶ Запустить'; power.setAttribute('onclick', "botAction('start')"); }
+        if (pause) pause.style.display = 'none';
+    }
+    const stateText = document.getElementById('bot-state-text');
+    const stateBadge = document.getElementById('bot-state-badge');
+    const lifecycleText = document.getElementById('bot-lifecycle-text');
+    if (stateText) { stateText.textContent = on ? 'ON' : 'OFF'; stateText.style.color = on ? 'var(--success)' : 'var(--text-muted)'; }
+    if (stateBadge) stateBadge.style.borderColor = on ? 'var(--success)' : '';
+    if (lifecycleText) lifecycleText.textContent = lifecycle || 'STOPPED';
+}
+
+function updateBotStatus(data) {
+    if (!data || typeof data !== 'object') return;
+    const on = data.active === true || data.active === 'true' || data.active === 1;
+    setBotState(on, data.lifecycle);
+}
+
+async function pollBotStatus() {
+    try {
+        const resp = await fetch('/api/bot/status');
+        if (resp.ok) updateBotStatus(await resp.json());
     } catch(e) {}
 }
 
@@ -540,5 +588,7 @@ loadBotMarket();
 loadBotTrades();
 setInterval(loadBotMarket, 15000);
 setInterval(loadBotTrades, 10000);
+pollBotStatus();
+setInterval(pollBotStatus, 5000);
 </script>
 {% endblock %}
