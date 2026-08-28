@@ -97,6 +97,9 @@
 
             <div class="topbar-actions">
                 {% if user_id %}
+                    <span class="status-pill active">Risk ≤ 60</span>
+                    <span class="status-pill">Demo 100€</span>
+                    <span class="status-pill">LIVE guard</span>
                     <select id="theme-select" class="theme-switcher" style="padding:.3rem .5rem;font-size:.75rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;width:auto;">
                         <option value="dark" {% if theme|default('dark') == 'dark' %}selected{% endif %}>🌙 Тёмная</option>
                         <option value="light" {% if theme|default('dark') == 'light' %}selected{% endif %}>☀️ Светлая</option>

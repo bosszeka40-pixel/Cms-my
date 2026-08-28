@@ -62,7 +62,7 @@ def _leverage_for_strategy(strategy: str) -> float:
     return leverages.get(strategy, 1.5)
 
 
-def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
+def evaluate_strategy(strategy: str, candles: list[dict], fee_rate: float = TRADING_FEE_RATE) -> dict:
     """Backtest one strategy using only the preceding closed daily candle."""
     balance = INITIAL_BALANCE_EUR
     trades = 0
@@ -84,7 +84,7 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
         )
         signal = _signal(strategy, previous_change)
         trade_return = signal * ((current_close - previous_close) / previous_close) * leverage
-        net_return = trade_return - TRADING_FEE_RATE
+        net_return = trade_return - max(0.0, float(fee_rate)) * 2
         balance = max(0.0, balance * (1 + net_return))
         returns.append(net_return)
         peak = max(peak, balance)
@@ -124,5 +124,5 @@ def evaluate_strategy(strategy: str, candles: list[dict]) -> dict:
     }
 
 
-def evaluate_strategies(candles: list[dict], strategy_names: list[str]) -> dict[str, dict]:
-    return {name: evaluate_strategy(name, candles) for name in strategy_names}
+def evaluate_strategies(candles: list[dict], strategy_names: list[str], fee_rate: float = TRADING_FEE_RATE) -> dict[str, dict]:
+    return {name: evaluate_strategy(name, candles, fee_rate=fee_rate) for name in strategy_names}

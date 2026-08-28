@@ -145,6 +145,9 @@
                         <button class="term-sell-btn" id="submit-sell" type="button" style="display:none;">Продать {{ trading_pairs[0] }}</button>
                     </div>
                 </div>
+                <div style="font-size:.74rem;color:var(--text-muted);">
+                    Исполнение в демо-режиме учитывает сумму сделки и выбранное направление.
+                </div>
                 <div id="order-result" style="margin-top:.5rem;font-size:.78rem;"></div>
             </div>
             <!-- Signal Settings -->
@@ -169,6 +172,29 @@
                     Apply Signal<span data-info="apply_signal"></span>
                 </button>
                 <div id="signal-result" style="margin-top:.5rem;font-size:.75rem;"></div>
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding:.75rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;">
+                    <div class="term-section-title">Сигналы по всем парам</div>
+                    <button class="btn btn-outline btn-sm" type="button" id="refresh-signals-btn">Обновить</button>
+                </div>
+                <div class="term-field" style="margin:.5rem 0;">
+                    <label>Источник сигналов</label>
+                    <select id="signals-source">
+                        <option value="bot">Бот</option>
+                        <option value="ai">AI</option>
+                        <option value="ai_bot">AI + Bot</option>
+                    </select>
+                </div>
+                <div class="table-wrap" style="max-height:220px;">
+                    <table class="term-table">
+                        <thead><tr><th>Пара</th><th>Сигнал</th><th>Уверенность</th><th>Стратегия</th><th></th></tr></thead>
+                        <tbody id="signals-body">
+                            <tr><td colspan="5" class="term-empty">Нажмите «Обновить»</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div class="term-balance-info">
@@ -224,30 +250,78 @@
 
     /* Buy/Sell tabs */
     async function applySignal() {
-    const el = document.getElementById('signal-result');
-    el.innerHTML = '<span style="color:var(--text-muted);">⏳ Получение сигнала...</span>';
-    const source = document.getElementById('signal-source-trade').value;
-    const threshold = document.getElementById('signal-threshold').value;
-    const pair = document.getElementById('term-pair') ? document.getElementById('term-pair').value : 'BTC/USDT';
+        const el = document.getElementById('signal-result');
+        el.innerHTML = '<span style="color:var(--text-muted);">⏳ Получение сигнала...</span>';
+        const source = document.getElementById('signal-source-trade').value;
+        const threshold = parseFloat(document.getElementById('signal-threshold').value) || 0;
+        const pair = document.getElementById('term-pair') ? document.getElementById('term-pair').value : 'BTC/USDT';
 
-    try {
-        const resp = await fetch('/api/market/signal?pair=' + encodeURIComponent(pair) + '&exchange=binance');
-        const data = await resp.json();
-        if (resp.ok) {
-            const direction = data.signal === 1 ? 'BUY' : data.signal === -1 ? 'SELL' : 'HOLD';
-            const confidence = (data.confidence * 100).toFixed(1);
-            if (confidence >= threshold) {
-                el.innerHTML = '<span style="color:var(--success);">✓ Сигнал: ' + direction + ' (' + confidence + '%) | Источник: ' + source + '</span>';
+        try {
+            const resp = await fetch('/api/market/apply-signal', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({pair, exchange: 'binance', source, amount: parseFloat(document.getElementById('order-amount').value || '10'), mode: 'demo'})
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                const direction = data.recommended_side === 'buy' ? 'BUY' : data.recommended_side === 'sell' ? 'SELL' : 'HOLD';
+                const confidence = (data.confidence * 100).toFixed(1);
+                if (data.signal > 0) currentSide = 'buy';
+                else if (data.signal < 0) currentSide = 'sell';
+                document.getElementById('submit-buy').style.display = currentSide === 'buy' ? '' : 'none';
+                document.getElementById('submit-sell').style.display = currentSide === 'sell' ? '' : 'none';
+                document.getElementById('signal-source-trade').value = source;
+                if (confidence >= threshold) {
+                    el.innerHTML = '<span style="color:var(--success);">✓ Сигнал: ' + direction + ' (' + confidence + '%) | ' + data.strategy + ' | ' + pair + '</span>';
+                } else {
+                    el.innerHTML = '<span style="color:var(--warning);">⚠ Уверенность ' + confidence + '% < порога ' + threshold + '%. Сигнал подготовлен, но не применён автоматически.</span>';
+                }
             } else {
-                el.innerHTML = '<span style="color:var(--warning);">⚠ Уверенность ' + confidence + '% < порога ' + threshold + '%. Сигнал отклонён.</span>';
+                el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка: ' + (data.detail || 'неизвестная') + '</span>';
             }
-        } else {
-            el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка: ' + (data.detail || 'неизвестная') + '</span>';
+        } catch(e) {
+            el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка сети</span>';
         }
-    } catch(e) {
-        el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка сети</span>';
     }
-}
+
+    async function loadSignals() {
+        const body = document.getElementById('signals-body');
+        const source = document.getElementById('signals-source').value;
+        body.innerHTML = '<tr><td colspan="5" class="term-empty">Загрузка...</td></tr>';
+        try {
+            const resp = await fetch('/api/market/signals?exchange=binance&source=' + encodeURIComponent(source));
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Не удалось получить сигналы');
+            const signals = data.signals || [];
+            body.innerHTML = signals.map(row => `
+                <tr>
+                    <td>${row.pair}</td>
+                    <td class="${row.signal > 0 ? 'up' : row.signal < 0 ? 'down' : ''}">${row.recommended_side.toUpperCase()}</td>
+                    <td>${(row.confidence * 100).toFixed(1)}%</td>
+                    <td>${row.strategy}</td>
+                    <td><button type="button" class="term-close-btn" data-pair="${row.pair}" data-side="${row.recommended_side}">Apply</button></td>
+                </tr>
+            `).join('');
+            body.querySelectorAll('button[data-pair]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    document.getElementById('term-pair').value = btn.dataset.pair;
+                    document.getElementById('order-amount').value = document.getElementById('order-amount').value || '10';
+                    if (btn.dataset.side === 'buy') {
+                        currentSide = 'buy';
+                        document.getElementById('submit-buy').style.display = '';
+                        document.getElementById('submit-sell').style.display = 'none';
+                    } else if (btn.dataset.side === 'sell') {
+                        currentSide = 'sell';
+                        document.getElementById('submit-buy').style.display = 'none';
+                        document.getElementById('submit-sell').style.display = '';
+                    }
+                    await applySignal();
+                });
+            });
+        } catch (err) {
+            body.innerHTML = '<tr><td colspan="5" class="term-empty">Ошибка: ' + err.message + '</td></tr>';
+        }
+    }
 
 document.querySelectorAll('.term-panel-tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -297,6 +371,8 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
             strategy: document.getElementById('order-strategy').value,
             sentiment: 0,
             price_change: 0,
+            amount,
+            side,
         };
 
         try {
@@ -312,7 +388,7 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
                 document.getElementById('demo-balance').textContent = demoBalance.toFixed(2) + '€';
                 document.getElementById('demo-pnl-val').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
                 document.getElementById('demo-pnl-val').className = demoPnl >= 0 ? 'up' : 'down';
-                showResult(`✓ ${side === 'buy' ? 'Покупка' : 'Продажа'}: ${data.strategy} | P/L: ${data.pnl.toFixed(4)}€ | Сигнал: ${data.signal}`, true);
+                showResult(`✓ ${side === 'buy' ? 'Покупка' : 'Продажа'}: ${data.strategy} | ${data.amount.toFixed(2)}€ | P/L: ${data.pnl.toFixed(4)}€ | Сигнал: ${data.signal}`, true);
 
                 /* Add to positions */
                 const pos = { id: positions.length + 1, pair: pairEl.value, side, amount, entry: data.price || 0, strategy: data.strategy, time: new Date().toLocaleTimeString() };
@@ -328,7 +404,7 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
 
     function showResult(msg, ok) {
         const el = document.getElementById('order-result');
-        el.innerHTML = `<span style="color:${ok ? 'var(--term-up)' : 'var(--term-down)'}">${msg}</span>`;
+        el.innerHTML = `<span style="color:${ok ? 'var(--success)' : 'var(--danger)'}">${msg}</span>`;
     }
 
     function renderPositions() {
@@ -360,6 +436,9 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
 
     document.getElementById('submit-buy').addEventListener('click', () => submitTrade('buy'));
     document.getElementById('submit-sell').addEventListener('click', () => submitTrade('sell'));
+    document.getElementById('refresh-signals-btn').addEventListener('click', loadSignals);
+    document.getElementById('signals-source').addEventListener('change', loadSignals);
+    loadSignals();
 })();
 </script>
 {% endblock %}

@@ -259,6 +259,82 @@
     cursor: pointer;
 }
 
+/* ═══════ Terminal polish overrides ═══════ */
+.terminal-page {
+    background:
+        radial-gradient(circle at top center, rgba(240,185,11,0.08), transparent 24%),
+        linear-gradient(180deg, rgba(11,14,17,.98), rgba(12,15,20,.98));
+}
+
+.term-header,
+.term-timeframes {
+    background: rgba(18,22,28,.95);
+}
+
+.term-chart-area {
+    background: linear-gradient(180deg, rgba(22,26,30,.98), rgba(15,18,22,.98));
+}
+
+.term-panel {
+    background: linear-gradient(180deg, rgba(18,22,28,.98), rgba(14,17,22,.98));
+    box-shadow: inset 1px 0 0 rgba(255,255,255,.03);
+}
+
+.term-panel-tabs,
+.term-bottom-tabs {
+    background: rgba(255,255,255,.015);
+}
+
+.term-order-form {
+    gap: .7rem;
+}
+
+.term-field input,
+.term-field select {
+    background: rgba(255,255,255,.03);
+    border-color: rgba(255,255,255,.08);
+}
+
+.term-buy-btn,
+.term-sell-btn {
+    letter-spacing: .01em;
+    box-shadow: 0 12px 24px rgba(0,0,0,.18);
+}
+
+.term-bottom-content,
+.term-table th {
+    background: rgba(255,255,255,.01);
+}
+
+.term-demo-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: .25rem .55rem;
+    border-radius: 999px;
+    color: #111;
+    background: var(--primary);
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+}
+
+.term-section-title {
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.term-balance-info {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .75rem;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,.02);
+}
+
 .term-strategy-select {
     padding: .5rem .6rem;
     font-size: .82rem;

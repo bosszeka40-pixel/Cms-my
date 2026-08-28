@@ -39,12 +39,47 @@
             <!-- Trading preferences -->
             <section class="card">
                 <div class="term-section-title">Торговые предпочтения</div>
-                <div class="term-field-row">
-                    <div class="term-field"><label>Режим по умолчанию</label><input type="text" value="{% if demo.demo_active %}Demo{% else %}Live{% endif %}"></div>
-                    <div class="term-field"><label>Котировка</label><input type="text" value="USDT"></div>
-                    <div class="term-field"><label>Таймфрейм</label><input type="text" value="1h"></div>
-                    <div class="term-field"><label>Уровень риска</label><input type="text" value="Low"></div>
-                </div>
+                <form method="post">
+                    <input type="hidden" name="action" value="save_trading_preferences">
+                    <div class="term-field-row">
+                        <div class="term-field">
+                            <label>Стратегия</label>
+                            <select name="strategy">
+                                <option value="pure_harvester" {% if current_strategy == 'pure_harvester' %}selected{% endif %}>Pure Harvester</option>
+                                <option value="high_frequency_momentum" {% if current_strategy == 'high_frequency_momentum' %}selected{% endif %}>HFT Momentum</option>
+                                <option value="compound_defender" {% if current_strategy == 'compound_defender' %}selected{% endif %}>Compound Defender</option>
+                                <option value="trend_breakout_compound" {% if current_strategy == 'trend_breakout_compound' %}selected{% endif %}>Trend Breakout</option>
+                                <option value="multi_sentiment_scalper" {% if current_strategy == 'multi_sentiment_scalper' %}selected{% endif %}>Multi Sentiment</option>
+                                <option value="ai_adaptive_momentum" {% if current_strategy == 'ai_adaptive_momentum' %}selected{% endif %}>AI Adaptive</option>
+                                <option value="quantum_grid_trader" {% if current_strategy == 'quantum_grid_trader' %}selected{% endif %}>Quantum Grid</option>
+                                <option value="neural_pattern_recognition" {% if current_strategy == 'neural_pattern_recognition' %}selected{% endif %}>Neural Pattern</option>
+                                <option value="delta_neutral_hedger" {% if current_strategy == 'delta_neutral_hedger' %}selected{% endif %}>Delta Neutral</option>
+                                <option value="volatility_harvest" {% if current_strategy == 'volatility_harvest' %}selected{% endif %}>Volatility Harvest</option>
+                            </select>
+                        </div>
+                        <div class="term-field"><label>Леверидж</label><input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" min="0.1" max="2.0" step="0.1"></div>
+                        <div class="term-field"><label>Риск</label><input type="number" name="risk_tolerance" value="{{ config.risk_tolerance|default(0.03) }}" min="0.01" max="1.0" step="0.01"></div>
+                        <div class="term-field"><label>Комиссия</label><input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" min="0" max="0.05" step="0.0001"></div>
+                    </div>
+                    <button class="btn btn-sm" type="submit">Сохранить торговые настройки</button>
+                </form>
+            </section>
+
+            <!-- Theme -->
+            <section class="card">
+                <div class="term-section-title">Оформление</div>
+                <form method="post" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;">
+                    <input type="hidden" name="action" value="save_theme">
+                    <div class="term-field" style="min-width:220px;flex:1;">
+                        <label>Тема</label>
+                        <select name="theme">
+                            <option value="dark" {% if theme == 'dark' %}selected{% endif %}>Тёмная</option>
+                            <option value="light" {% if theme == 'light' %}selected{% endif %}>Светлая</option>
+                            <option value="auto" {% if theme == 'auto' %}selected{% endif %}>Авто</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-sm" type="submit">Сохранить тему</button>
+                </form>
             </section>
 
             <!-- Demo toggle -->
@@ -92,7 +127,14 @@
                     <form method="post">
                         <input type="hidden" name="action" value="connect_exchange">
                         <div class="term-field-row">
-                            <div class="term-field"><label>Биржа</label><input type="text" name="exchange_provider" placeholder="binance"></div>
+                            <div class="term-field">
+                                <label>Биржа</label>
+                                <select name="exchange_provider">
+                                    {% for ex in trading_exchanges %}
+                                        <option value="{{ ex }}" {% if wallet.exchange_provider == ex %}selected{% endif %}>{{ ex|capitalize }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                             <div class="term-field"><label>API Key</label><input type="text" name="exchange_key"></div>
                             <div class="term-field"><label>API Secret</label><input type="password" name="exchange_secret"></div>
                         </div>
@@ -111,6 +153,45 @@
                     <a class="btn btn-outline btn-sm" href="{{ url_for('manual_trading') }}">📈 Торговля</a>
                     <a class="btn btn-outline btn-sm" href="{{ url_for('bot_management') }}">🤖 Бот</a>
                 </div>
+            </section>
+
+            <!-- Wallet + Telegram -->
+            <section class="card">
+                <div class="term-section-title">Кошелёк и Telegram</div>
+                <div class="term-field-row">
+                    <div class="term-field"><label>CMSC баланс</label><input type="text" value="{{ '%.2f'|format(wallet.credits) }} CMSC" readonly></div>
+                    <div class="term-field"><label>Telegram</label><input type="text" value="{{ wallet.telegram or 'не подключён' }}" readonly></div>
+                </div>
+                <form method="post" style="margin-top:1rem;">
+                    <input type="hidden" name="action" value="connect_wallet">
+                    <div class="term-field-row">
+                        <div class="term-field">
+                            <label>Кошелёк</label>
+                            <select name="wallet_provider">
+                                {% for w in wallet_providers %}<option value="{{ w }}">{{ w }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="term-field">
+                            <label>Адрес</label>
+                            <input type="text" name="wallet_address" placeholder="0x...">
+                        </div>
+                    </div>
+                    <button class="btn btn-sm" type="submit">Подключить кошелёк</button>
+                </form>
+                <form method="post" style="margin-top:1rem;">
+                    <input type="hidden" name="action" value="connect_telegram">
+                    <div class="term-field-row">
+                        <div class="term-field">
+                            <label>Telegram username</label>
+                            <input type="text" name="telegram_username" placeholder="@username">
+                        </div>
+                        <div class="term-field">
+                            <label>Bot token</label>
+                            <input type="text" name="telegram_token" placeholder="123456:ABC-DEF">
+                        </div>
+                    </div>
+                    <button class="btn btn-sm" type="submit">Подключить Telegram</button>
+                </form>
             </section>
 
         </div>

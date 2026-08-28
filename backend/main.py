@@ -108,6 +108,15 @@ arbitrage_engine = ArbitrageEngine()
 bot_runtime = BotRuntime(engine, strategy_manager, risk_manager, bot, exchange_service)
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
+SUPPORTED_TRADING_PAIRS = ("BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT")
+BACKTEST_PERIOD_WINDOWS = {
+    "1d": 2,
+    "1w": 8,
+    "1m": 31,
+    "3m": 92,
+    "6m": 183,
+    "1y": 366,
+}
 WALLET_PROVIDERS = ("MetaMask", "Trust Wallet", "Binance Wallet", "WalletConnect", "Ledger", "Trezor")
 SOCIAL_PROVIDERS = {
     "google": {
@@ -202,6 +211,8 @@ class BacktestPayload(BaseModel):
     pair: str = "BTC/USDT"
     exchange: str = "binance"
     initial_balance: float = 10.0
+    period: str = "1m"
+    strategy: str = "all"
 
 class ChatPayload(BaseModel):
     message: str
@@ -372,7 +383,7 @@ def _exchange_directory() -> list[dict]:
 
 
 def _market_signal(pair: str, exchange_name: str):
-    if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
+    if pair not in SUPPORTED_TRADING_PAIRS:
         raise ValueError("Недоступная торговая пара.")
     def _compute():
         exchange = _public_exchange(exchange_name)
@@ -404,7 +415,105 @@ def _market_signal(pair: str, exchange_name: str):
         "disclaimer": "Сигнал информационный и не является гарантией доходности."}
 
 
-def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT"):
+def _period_window_size(period: str) -> int:
+    return BACKTEST_PERIOD_WINDOWS.get((period or "").strip().lower(), BACKTEST_PERIOD_WINDOWS["1m"])
+
+
+def _truncate_daily_candles(candles: list[dict], period: str) -> list[dict]:
+    window = _period_window_size(period)
+    if window <= 0:
+        return candles
+    if len(candles) <= window:
+        return candles
+    return candles[-window:]
+
+
+def _exchange_fee_rate(exchange_name: str, pair: str) -> float:
+    exchange_name = (exchange_name or "binance").strip().lower()
+    try:
+        client = _public_exchange(exchange_name)
+        client.load_markets()
+        market = client.markets.get(pair) or {}
+        fee = market.get("taker")
+        if fee is None:
+            fee = (client.fees.get("trading") or {}).get("taker")
+        if fee is not None and float(fee) > 0:
+            return float(fee)
+    except Exception:
+        pass
+    return float(os.getenv("SIMULATION_FEE_RATE", "0.001"))
+
+
+def _signal_for_pair(pair: str, exchange_name: str, source: str = "bot") -> dict:
+    if pair not in SUPPORTED_TRADING_PAIRS:
+        raise ValueError("Недоступная торговая пара.")
+    exchange_name = (exchange_name or "binance").strip().lower()
+    source = (source or "bot").strip().lower()
+    exchange = _public_exchange(exchange_name)
+    candles = refresh_candles(MARKET_DATABASE, exchange, exchange_name, pair)
+    daily = refresh_history(MARKET_DATABASE, exchange, exchange_name, pair)
+    if len(candles) < 3 or len(daily) < 2:
+        raise ValueError("Недостаточно исторических данных для сигнала.")
+    latest = candles[-1]
+    previous = candles[-2]
+    change = ((latest["close"] - previous["close"]) / previous["close"] * 100 if previous["close"] else 0.0)
+    news = load_news(MARKET_DATABASE, limit=15)
+    news_sentiment = analyze_news_sentiment(news) if news else 0.0
+    bot_result = strategy_manager.execute(0.0, change, 100.0)
+    ai_result = strategy_manager.execute(news_sentiment, change, 100.0)
+
+    if source == "ai":
+        signal_value = ai_result["signal"]
+        confidence = min(0.98, 0.55 + abs(news_sentiment) * 0.2 + abs(change) / 18)
+        strategy_name = f"ai:{ai_result['strategy']}"
+    elif source == "ai_bot":
+        signal_value = ai_result["signal"] if ai_result["signal"] == bot_result["signal"] else (1 if ai_result["pnl"] >= bot_result["pnl"] else bot_result["signal"])
+        confidence = min(0.99, 0.5 + (abs(ai_result["signal"]) + abs(bot_result["signal"])) / 6 + abs(change) / 20)
+        strategy_name = f"ai+bot:{ai_result['strategy']}"
+    else:
+        signal_value = bot_result["signal"]
+        confidence = min(0.96, 0.5 + abs(change) / 12)
+        strategy_name = f"bot:{bot_result['strategy']}"
+
+    fee_rate = _exchange_fee_rate(exchange_name, pair)
+    return {
+        "pair": pair,
+        "exchange": exchange_name,
+        "source": source,
+        "signal": signal_value,
+        "recommended_side": "buy" if signal_value > 0 else "sell" if signal_value < 0 else "hold",
+        "strategy": strategy_name,
+        "confidence": round(confidence, 4),
+        "last_price": latest["close"],
+        "hour_change": round(change, 4),
+        "daily_candles": len(daily),
+        "hourly_candles": len(candles),
+        "news_sentiment": round(news_sentiment, 4),
+        "fee_rate": round(fee_rate, 6),
+        "timestamp": latest.get("timestamp"),
+    }
+
+
+def _signals_for_all_pairs(exchange_name: str, source: str = "bot") -> list[dict]:
+    reports = []
+    for pair in SUPPORTED_TRADING_PAIRS:
+        try:
+            reports.append(_signal_for_pair(pair, exchange_name, source))
+        except Exception as exc:
+            reports.append({
+                "pair": pair,
+                "exchange": (exchange_name or "binance").strip().lower(),
+                "source": (source or "bot").strip().lower(),
+                "signal": 0,
+                "recommended_side": "hold",
+                "strategy": "signal_error",
+                "confidence": 0.0,
+                "error": str(exc),
+            })
+    return reports
+
+
+def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT", period: str = "1m"):
     from datetime import datetime, timedelta, timezone
 
     def _load():
@@ -414,16 +523,16 @@ def _strategy_performance(exchange_name: str = "binance", pair: str = "BTC/USDT"
         if not daily or str(daily[-1].get("day", "")) < freshness_cutoff:
             client = _public_exchange(exchange_name)
             daily = refresh_history(MARKET_DATABASE, client, exchange_name, pair)
-        month = daily[-31:]
+        month = _truncate_daily_candles(daily, period)
         names = [plugin.name for plugin in engine.list_plugins()]
-        return evaluate_strategies(month, names)
+        return evaluate_strategies(month, names, fee_rate=_exchange_fee_rate(exchange_name, pair))
     # TTL cache 300s; fallback to last computed стратегии if network fails
-    cached = cached_get(f"strategy_performance:{exchange_name}:{pair}")
+    cached = cached_get(f"strategy_performance:{exchange_name}:{pair}:{period}")
     if cached is not None:
         return cached
     try:
         result = _load()
-        cached_fetch(f"strategy_performance:{exchange_name}:{pair}", 300, lambda: result)
+        cached_fetch(f"strategy_performance:{exchange_name}:{pair}:{period}", 300, lambda: result)
         return result
     except Exception:
         return {}
@@ -493,6 +602,8 @@ class DemoTradePayload(BaseModel):
     strategy: str = "pure_harvester"
     sentiment: float = 0.5
     price_change: float = 1.0
+    amount: float = 10.0
+    side: str = "buy"
 
 
 
@@ -609,7 +720,12 @@ async def dashboard(request: Request):
             "message": message,
             "bot_active": bot.active,
             "memories": engine.recent_memories(user_email, 5),
-            "demo": engine.get_demo_session(user_email)},
+            "demo": engine.get_demo_session(user_email),
+            "risk": risk_manager.status(),
+            "risk_score": risk_manager.calculate_risk_score(leverage=float(strategy_manager.config.get("leverage", 1.5))),
+            "current_strategy": strategy_manager.current_strategy(),
+            "mode": current_mode(),
+            "bot_runtime": bot_runtime.status(user_email)},
     )
 
 def _connection_action(user_email: str, action: str, form) -> tuple[str | None, str | None]:
@@ -679,47 +795,7 @@ def _connection_action(user_email: str, action: str, form) -> tuple[str | None, 
 
 @app.api_route("/settings", methods=["GET", "POST"], name="settings")
 async def settings_page(request: Request):
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return RedirectResponse(url="/login", status_code=302)
-    message = None
-    if request.method == "POST":
-        form = await request.form()
-        action = form.get("action")
-        if action == "save_theme":
-            theme = form.get("theme", "light")
-            if theme in {"light", "dark", "auto"}:
-                request.session["theme"] = theme
-                message = "Тема оформления сохранена."
-            else:
-                message = "Выберите доступную тему оформления."
-        elif action == "toggle_demo":
-            active = form.get("demo_active") == "on"
-            engine.toggle_demo_mode(user_email, active)
-            engine.ensure_demo_session(user_email)
-            message = "Демо-режим включён." if active else "Демо-режим отключён."
-        elif action == "reset_demo":
-            engine.reset_demo_balance(user_email)
-            message = "Демо-баланс сброшен до 100€."
-        else:
-            message, _ = _connection_action(user_email, str(action), form)
-    user = engine.get_user(user_email)
-    username = user.email if user else user_email
-    is_admin = bool(user and user.role == "admin")
-    wallet = engine.get_or_create_wallet(user_email)
-    return templates.TemplateResponse(request, "settings.html",
-        {
-                        "user_id": user_email,
-            "username": username,
-            "email": user_email,
-            "selected_theme": request.session.get("theme", "dark"),
-            "message": message,
-            "is_admin": is_admin,
-            "wallet": wallet,
-            "exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
-            "wallets": list(WALLET_PROVIDERS),
-            "demo": engine.get_demo_session(user_email)},
-    )
+    return await profile(request)
 
 @app.api_route("/marketplace", methods=["GET", "POST"], name="marketplace")
 async def marketplace(request: Request):
@@ -1045,11 +1121,23 @@ def demo_trade(payload: DemoTradePayload, request: Request):
         raise HTTPException(status_code=400, detail="Демо-режим отключён.")
     try:
         strategy_manager.config["strategy"] = payload.strategy
-        result = strategy_manager.execute(payload.sentiment, payload.price_change, demo["demo_balance"])
-        pnl = result["pnl"]
+        side_factor = -1.0 if payload.side.lower() == "sell" else 1.0
+        adjusted_sentiment = max(-1.0, min(1.0, payload.sentiment * side_factor))
+        adjusted_price_change = payload.price_change * side_factor
+        result = strategy_manager.execute(adjusted_sentiment, adjusted_price_change, demo["demo_balance"])
+        balance_before = float(demo["demo_balance"])
+        allocation = min(max(float(payload.amount), 1.0), balance_before) / max(balance_before, 1.0)
+        pnl = result["pnl"] * allocation
         updated = engine.update_demo_balance(email, pnl)
-        engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy}", email)
-        return {"pnl": round(pnl, 4), "balance": round(updated["demo_balance"], 2), "signal": result["signal"], "strategy": payload.strategy}
+        engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy} {payload.side}", email)
+        return {
+            "pnl": round(pnl, 4),
+            "balance": round(updated["demo_balance"], 2),
+            "signal": result["signal"] if payload.side.lower() == "buy" else -result["signal"],
+            "strategy": payload.strategy,
+            "side": payload.side,
+            "amount": round(float(payload.amount), 2),
+        }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -1130,12 +1218,33 @@ async def profile(request: Request):
     db_user = engine.get_user(user_email)
     wallet = engine.get_or_create_wallet(user_email)
     exchanges = exchange_service.list_connected(user_email)
+    site_settings = engine.get_site_settings()
+    message = None
     message = None
     if request.method == "POST":
         form = await request.form()
         action = form.get("action")
         if action == "save_profile":
             message = "Настройки профиля сохранены."
+        elif action == "save_theme":
+            theme = form.get("theme", "dark")
+            if theme in {"light", "dark", "auto"}:
+                request.session["theme"] = theme
+                message = "Тема оформления сохранена."
+            else:
+                message = "Выберите доступную тему оформления."
+        elif action == "save_trading_preferences":
+            strategy = str(form.get("strategy", strategy_manager.current_strategy()))
+            try:
+                leverage = max(0.1, min(float(form.get("leverage", 1.5)), 10))
+                risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
+                fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
+                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
+                bot.set_strategy(strategy)
+                engine.set_active_strategy(user_email, strategy)
+                message = "Торговые настройки сохранены."
+            except (TypeError, ValueError):
+                message = "Проверьте значения левериджа, риска и комиссии."
         elif action == "toggle_demo":
             active = str(form.get("active", "true")).lower() == "true"
             engine.toggle_demo_mode(user_email, active)
@@ -1160,15 +1269,47 @@ async def profile(request: Request):
             exchange_service.disconnect(user_email)
             exchanges = exchange_service.list_connected(user_email)
             message = f"Биржа {provider} отключена."
+        elif action == "connect_wallet":
+            provider = str(form.get("wallet_provider", "")).strip()
+            address = str(form.get("wallet_address", "")).strip()
+            if provider not in WALLET_PROVIDERS:
+                message = "Выберите поддерживаемый кошелёк."
+            elif not address:
+                message = "Укажите адрес кошелька."
+            else:
+                engine.update_wallet(user_email, wallet_provider=provider, wallet_address=address)
+                message = f"Кошелёк {provider} подключён."
+        elif action == "connect_telegram":
+            telegram_username = str(form.get("telegram_username", "")).strip().lstrip("@")
+            telegram_token = str(form.get("telegram_token", "")).strip()
+            if not telegram_username or not telegram_token:
+                message = "Укажите Telegram username и Bot token."
+            else:
+                engine.update_wallet(user_email, telegram_username=telegram_username)
+                message = f"Telegram @{telegram_username} подключён."
         ctx["message"] = message
+        ctx["demo"] = engine.get_demo_session(user_email)
+        wallet = engine.get_or_create_wallet(user_email)
+        exchanges = exchange_service.list_connected(user_email)
     ctx.update({
         "user_id": user_email,
         "user": db_user,
         "wallet": wallet,
         "exchanges": exchanges,
         "message": message,
+        "config": strategy_manager.config,
+        "theme": request.session.get("theme", "dark"),
+        "selected_theme": request.session.get("theme", "dark"),
+        "site_settings": site_settings,
+        "current_strategy": strategy_manager.current_strategy(),
+        "risk": risk_manager.status(),
+        "risk_score": risk_manager.calculate_risk_score(leverage=float(strategy_manager.config.get("leverage", 1.5))),
+        "bot_runtime": bot_runtime.status(user_email),
         "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
+        "wallet_providers": WALLET_PROVIDERS,
+        "allowed_exchanges": {name.strip() for name in site_settings["allowed_exchanges"].split(",")},
+        "allowed_wallets": {name.strip() for name in site_settings["allowed_wallets"].split(",")},
     })
     return templates.TemplateResponse(request, "profile.html", ctx)
 
@@ -1315,16 +1456,24 @@ def purchase_strategy(payload: PluginActionPayload, request: Request):
 
 
 @app.get("/api/strategies/performance")
-def strategy_performance(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+def strategy_performance(request: Request, pair: str = "BTC/USDT", exchange: str = "binance", period: str = "1m"):
     if not request.session.get("user_email"):
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     try:
         return {
             "pair": pair,
             "exchange": exchange,
-            "period": "последние 30 дней",
+            "period": period,
+            "period_label": {
+                "1d": "1 день",
+                "1w": "1 неделя",
+                "1m": "1 месяц",
+                "3m": "3 месяца",
+                "6m": "6 месяцев",
+                "1y": "1 год",
+            }.get(period, "1 месяц"),
             "currency": "EUR",
-            "strategies": _strategy_performance(exchange, pair)}
+            "strategies": _strategy_performance(exchange, pair, period)}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось рассчитать доходность: {exc}") from exc
 
@@ -1432,13 +1581,46 @@ def market_news(request: Request, refresh: bool = True, limit: int = 100):
 
 
 @app.get("/api/market/signal")
-def market_signal(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+def market_signal(request: Request, pair: str = "BTC/USDT", exchange: str = "binance", source: str = "bot"):
     if not request.session.get("user_email"):
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     try:
-        return _market_signal(pair, exchange)
+        return _signal_for_pair(pair, exchange, source)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось рассчитать сигнал: {exc}") from exc
+
+
+@app.get("/api/market/signals")
+def market_signals(request: Request, exchange: str = "binance", source: str = "bot"):
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    try:
+        return {"signals": _signals_for_all_pairs(exchange, source)}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить сигналы: {exc}") from exc
+
+
+class ApplySignalPayload(BaseModel):
+    pair: str = "BTC/USDT"
+    exchange: str = "binance"
+    source: str = "bot"
+    amount: float = 10.0
+    mode: str = "demo"
+
+
+@app.post("/api/market/apply-signal")
+def apply_market_signal(payload: ApplySignalPayload, request: Request):
+    email = _require_user(request)
+    signal = _signal_for_pair(payload.pair, payload.exchange, payload.source)
+    balance = engine.get_demo_session(email).get("demo_balance", 100.0)
+    suggested_amount = min(max(payload.amount, 1.0), balance)
+    return {
+        **signal,
+        "mode": payload.mode,
+        "suggested_amount": round(suggested_amount, 2),
+        "applied": False,
+        "note": "Signal prepared for execution. Use terminal controls to submit the trade.",
+    }
 
 
 @app.post("/api/chat")
@@ -1573,18 +1755,32 @@ def bot_backtest(payload: BacktestPayload, request: Request):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось получить историю: {exc}") from exc
     names = [plugin.name for plugin in engine.list_plugins()]
-    performance = evaluate_strategies(daily[-365:], names)
+    performance = evaluate_strategies(
+        _truncate_daily_candles(daily, payload.period),
+        names,
+        fee_rate=_exchange_fee_rate(payload.exchange, payload.pair),
+    )
+    if payload.strategy and payload.strategy != "all":
+        names = [payload.strategy] if payload.strategy in performance else []
     scale = payload.initial_balance / 100.0
-    results = [
-        {
+    results = []
+    for name, data in performance.items():
+        if names and name not in names:
+            continue
+        results.append({
             "strategy": name,
             "final_balance": round(data["final_balance_eur"] * scale, 2),
             "pnl": round((data["final_balance_eur"] - 100.0) * scale, 2),
             "roi": data["monthly_return_pct"],
             "wins": round(data["win_rate_pct"] / 100 * data["trades"]),
-            "trades": data["trades"]}
-        for name, data in performance.items()
-    ]
+            "trades": data["trades"],
+            "max_drawdown": data["max_drawdown_pct"],
+            "sharpe": data["sharpe"],
+            "sortino": data["sortino"],
+            "profit_factor": data["profit_factor"],
+            "period": payload.period,
+            "fee_rate": _exchange_fee_rate(payload.exchange, payload.pair),
+        })
     return {"results": results}
 
 @app.post("/api/bot/simulate")
@@ -1763,7 +1959,7 @@ def api_feedback(request: Request):
 
 @app.post("/api/feedback")
 def api_submit_feedback(request: Request, message: str = Form(...)):
-    user = _require_user(request)
+    email = _require_user(request)
     engine.record_audit("feedback", message, email)
     return {"ok": True}
 

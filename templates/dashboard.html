@@ -9,9 +9,36 @@
         <h1 class="page-title">Добро пожаловать, {{ username }}</h1>
         <p class="lead">Обзор аккаунта, быстрые действия и статистика торговли.</p>
     </div>
+    <div class="hero-badge">
+        <strong>{{ current_strategy|default('pure_harvester') }}</strong>
+        <span>{{ mode|default('demo')|upper }} · risk {{ risk_score|default(0) }}/60</span>
+    </div>
 </div>
 
 {% if message %}<div class="message success">{{ message }}</div>{% endif %}
+
+<div class="feature-grid" style="margin-bottom:1.1rem;">
+    <div class="card" style="background:linear-gradient(180deg, rgba(240,185,11,.14), rgba(22,26,30,.96));border-color:rgba(240,185,11,.35);">
+        <div class="eyebrow">Баланс</div>
+        <div class="stat-value" style="font-size:1.8rem;color:var(--primary);">{{ '%.2f'|format(wallet.credits) }} CMSC</div>
+        <p class="lead">Лицензии, плагин-покупки и внутренний платежный контур.</p>
+    </div>
+    <div class="card">
+        <div class="eyebrow">Демо</div>
+        <div class="stat-value" style="font-size:1.8rem;">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div>
+        <p class="lead">Сделки на реальных рыночных данных без реального риска.</p>
+    </div>
+    <div class="card">
+        <div class="eyebrow">Риск</div>
+        <div class="stat-value" style="font-size:1.8rem;color:{% if risk_score|default(0) <= 40 %}var(--success){% elif risk_score|default(0) <= 60 %}var(--warning){% else %}var(--danger){% endif %};">{{ risk_score|default(0) }}/60</div>
+        <p class="lead">Лимит запуска и блокировки живой торговли.</p>
+    </div>
+    <div class="card">
+        <div class="eyebrow">Бот</div>
+        <div class="stat-value" style="font-size:1.4rem;">{{ bot_runtime.lifecycle|default('STOPPED') }}</div>
+        <p class="lead">Фоновый runtime, журнал и защита kill switch.</p>
+    </div>
+</div>
 
 <!-- Stats Row -->
 <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:1.5rem;">
