@@ -35,8 +35,7 @@
 <div class="card" style="margin-bottom:1rem;">
     <h2>⚙️ Управление<span data-info="arbitrage"></span></h2>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-        <button class="btn btn-success" onclick="arbitrageAction('start')">▶ Запустить</button>
-        <button class="btn btn-danger" onclick="arbitrageAction('stop')">⏹ Остановить</button>
+        <button class="btn {% if arbitrage.active %}btn-danger{% else %}btn-success{% endif %}" onclick="arbitrageAction('{{ 'stop' if arbitrage.active else 'start' }}')">{{ '⏹ Остановить' if arbitrage.active else '▶ Запустить' }}</button>
         <button class="btn btn-outline" onclick="scanArbitrage()">🔍 Сканировать рынок</button>
     </div>
     <div id="scan-results" style="margin-top:1rem;"></div>
