@@ -25,6 +25,10 @@ class ExchangeService:
         exchange_name = (name or "").strip().lower()
         if exchange_name not in SUPPORTED_EXCHANGES:
             raise ValueError("Неизвестная или неподдерживаемая биржа.")
+        if exchange_name == "pionex":
+            from .pionex_adapter import PionexClient
+
+            return exchange_name, PionexClient
         exchange_class = getattr(ccxt, exchange_name, None)
         if exchange_class is None:
             raise ValueError("Биржа недоступна в установленной версии CCXT.")

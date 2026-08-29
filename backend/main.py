@@ -107,7 +107,7 @@ exchange_service = ExchangeService(LIVE_CONTROL_STATE)
 arbitrage_engine = ArbitrageEngine()
 bot_runtime = BotRuntime(engine, strategy_manager, risk_manager, bot, exchange_service)
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
-SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex"}
+SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
 SUPPORTED_TRADING_PAIRS = ("BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT")
 BACKTEST_PERIOD_WINDOWS = {
     "1d": 2,
@@ -364,6 +364,10 @@ def _public_exchange(name: str):
     exchange_name = (name or "binance").strip().lower()
     if exchange_name not in SUPPORTED_MARKET_EXCHANGES:
         raise ValueError("Неподдерживаемая публичная биржа.")
+    if exchange_name == "pionex":
+        from .pionex_adapter import PionexClient
+
+        return PionexClient({"enableRateLimit": True, "timeout": 15000})
     exchange_class = getattr(ccxt, exchange_name, None)
     if exchange_class is None:
         raise ValueError("Биржа недоступна в установленной версии CCXT.")
