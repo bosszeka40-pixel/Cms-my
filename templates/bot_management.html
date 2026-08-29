@@ -680,7 +680,7 @@ async function loadBotMemory() {
             ApiUI.statGrid([
                 { label: 'Всего сделок', value: ApiUI.num(d.total_trades ?? 0), color: 'var(--accent)' },
                 { label: 'Средний P/L', value: ApiUI.num(d.avg_pnl, 4) + '€', color: ApiUI.signColor(d.avg_pnl) },
-                { label: 'Винрейт', value: (d.win_rate * 100).toFixed(1) + '%', color: ApiUI.signColor((d.win_rate || 0) - 0.5) }
+                { label: 'Винрейт', value: (d.win_rate ?? 0).toFixed(1) + '%', color: ApiUI.signColor((d.win_rate ?? 0) - 50) }
             ]) +
             (used.length ? '<div style="margin-top:.6rem;display:flex;flex-wrap:wrap;gap:.35rem;">' + used.map(s => '<span class="api-chip">' + ApiUI.esc(s) + '</span>').join('') + '</div>' : '') +
             (d.best_trade ? '<div style="margin-top:.6rem;">' + objCard('Лучшая сделка', d.best_trade, ApiUI.badge('+', 'ok')) + '</div>' : '') +
