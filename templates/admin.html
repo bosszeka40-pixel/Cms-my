@@ -24,11 +24,12 @@
 
 <!-- Tabs -->
 <div style="display:flex;gap:.25rem;margin-bottom:1rem;flex-wrap:wrap;" id="admin-tabs">
-    <button class="filter-btn active" onclick="showTab('users')">👥 Пользователи</button>
-    <button class="filter-btn" onclick="showTab('plugins')">🧩 Плагины</button>
-    <button class="filter-btn" onclick="showTab('risk')">⚠️ Риск</button>
-    <button class="filter-btn" onclick="showTab('settings')">⚙️ Настройки</button>
-    <button class="filter-btn" onclick="showTab('payouts')">💳 Выплаты</button>
+    <button class="filter-btn active" onclick="showTab('users', this)">👥 Пользователи</button>
+    <button class="filter-btn" onclick="showTab('plugins', this)">🧩 Плагины</button>
+    <button class="filter-btn" onclick="showTab('risk', this)">⚠️ Риск</button>
+    <button class="filter-btn" onclick="showTab('settings', this)">⚙️ Настройки</button>
+    <button class="filter-btn" onclick="showTab('shadow', this)">🛰 ИИ-тень</button>
+    <button class="filter-btn" onclick="showTab('payouts', this)">💳 Выплаты</button>
 </div>
 
 <!-- Users -->
@@ -133,27 +134,56 @@
         </div>
         <button class="btn" type="submit">Сохранить настройки</button>
     </form>
+
+    <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="font-size:.95rem;margin:0;">📊 Состояние риска (API)</h3>
+            <button class="btn btn-outline btn-sm" onclick="loadRiskStatus()">Обновить</button>
+        </div>
+        <div id="risk-status-box" style="font-size:.82rem;margin-top:.5rem;">Загрузка…</div>
+        <h3 style="font-size:.95rem;margin:1.2rem 0 .4rem;">🧮 Калькулятор риска</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.5rem;">
+            <div class="field-group"><label>Леверидж</label><input id="risk-leverage" type="number" step="0.1" value="1.5"></div>
+            <div class="field-group"><label>Волатильность</label><input id="risk-volatility" type="number" step="0.01" value="0.02"></div>
+            <div class="field-group"><label>Просадка</label><input id="risk-drawdown" type="number" step="0.01" value="0.0"></div>
+            <div class="field-group"><label>Ликвидность</label><input id="risk-liquidity" type="number" step="0.05" value="0.8"></div>
+            <div class="field-group"><label>Концентрация</label><input id="risk-concentration" type="number" step="0.05" value="0.1"></div>
+            <div class="field-group"><label>Позиций</label><input id="risk-positions" type="number" value="1"></div>
+            <div class="field-group"><label>Рынок</label><select id="risk-market-regime"><option value="normal">normal</option><option value="high_vol">high_vol</option><option value="low_vol">low_vol</option></select></div>
+            <div style="align-self:end;"><button class="btn btn-sm" onclick="calcRisk()">Рассчитать</button></div>
+        </div>
+        <div id="risk-calc-result" style="font-size:.8rem;margin-top:.5rem;"></div>
+    </div>
 </div>
 
 <!-- Live Controls -->
 <div id="live-controls" style="margin-bottom:1.5rem;">
     <h2>🔴 Управление LIVE</h2>
-    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem;">Глобальные переключатели для ботов и ИИ-ботов (только для администраторов).</p>
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem;">Глобальные и индивидуальные переключатели для ботов и ИИ-ботов (только для администраторов).</p>
     <div class="card" style="padding:1rem;">
         <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
-            <label data-live-global="true" style="display:flex;align-items:center;gap:.5rem;">
-                <input type="checkbox" id="global-kill-switch" data-live-global="true"> Global Kill Switch
+            <label style="display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" id="global-kill-switch"> Global Kill Switch
             </label>
-            <button data-live-global="false" style="display:none;"></button>
-            <button class="btn btn-sm" onclick="fetch('/api/admin/live-controls/global', {method:'POST', headers:{'X-CSRF-Token': window.__csrfToken}, 'Content-Type':'application/json'}, body:JSON.stringify({enabled: !document.getElementById('global-kill-switch').checked})}).then(r=>r.json()).then(()=>{location.reload();})">Применить</button>
-            <span style="color:var(--text-muted);font-size:.8rem;">CSRF: <span id="csrf-display">{{ csrf_token|default('') }}</span></span>
+            <button class="btn btn-sm" onclick="applyGlobal()">Применить</button>
+            <span style="color:var(--text-muted);font-size:.8rem;">CSRF: <span id="csrf-display">…</span></span>
         </div>
-        <div style="margin-top:1rem;">
-            <div class="live-bot-controls" style="margin-bottom:.75rem;"><strong>Боты</strong> <span style="font-size:.7rem;color:var(--text-muted);" id="bots-endpoint">/api/admin/live-controls/bots/</span></div>
-            <div class="live-ai-bot-controls"><strong>ИИ-боты</strong> <span style="font-size:.7rem;color:var(--text-muted);" id="ai-bots-endpoint">/api/admin/live-controls/ai-bots/</span></div>
-            <input type="hidden" name="_csrf" value="{{ csrf_token|default('') }}">
-            <script>window.__csrfToken = '{{ csrf_token|default("") }}';</script>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem;">
+            <button class="btn btn-outline btn-sm" onclick="refreshLiveBots()">🔄 Обновить боты</button>
+            <button class="btn btn-outline btn-sm" onclick="showLiveAudit()">📜 Журнал LIVE</button>
         </div>
+        <div style="margin-top:.75rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div>
+                <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem;">Боты</div>
+                <div id="live-bots" style="font-size:.8rem;">Загрузка…</div>
+            </div>
+            <div>
+                <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem;">ИИ-боты</div>
+                <div id="live-ai-bots" style="font-size:.8rem;">Загрузка…</div>
+            </div>
+        </div>
+        <div id="live-audit" style="display:none;margin-top:.75rem;font-size:.78rem;max-height:220px;overflow-y:auto;"></div>
+        <input type="hidden" name="_csrf" id="csrf-hidden">
     </div>
 </div>
 
@@ -176,6 +206,67 @@
         <label class="term-check-row"><input type="checkbox" name="maintenance_mode" {% if site_settings.maintenance_mode=='true' %}checked{% endif %}> Режим обслуживания</label>
         <button class="btn" type="submit" style="margin-top:.5rem;">Сохранить</button>
     </form>
+    <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="font-size:.95rem;margin:0;">📈 Статистика платформы (API)</h3>
+            <button class="btn btn-outline btn-sm" onclick="loadAdminData()">Обновить</button>
+        </div>
+        <div id="admin-stats-box" style="font-size:.82rem;display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:.5rem;">Загрузка…</div>
+    </div>
+</div>
+
+<!-- Shadow AI -->
+<div id="tab-shadow" class="card" style="display:none;">
+    <h2>🛰 ИИ-теневой режим</h2>
+    <p style="font-size:.82rem;color:var(--text-muted);">Оценка, урегулирование и мониторинг теневых сделок ИИ-бота. Работает параллельно и не влияет на реальные ордера.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;margin-bottom:1rem;">
+        <div class="field-group">
+            <label>Статус фида</label>
+            <div id="shadow-feed-status" style="font-size:.85rem;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">Загрузка…</div>
+        </div>
+        <div class="field-group">
+            <label>Пара (feed)</label>
+            <input id="shadow-feed-pair" value="BTC/USDT" spellcheck="false">
+        </div>
+        <div style="display:flex;gap:.35rem;">
+            <button class="btn btn-sm" onclick="startShadowFeed()">▶ Запустить фид</button>
+            <button class="btn btn-danger btn-sm" onclick="stopShadowFeed()">⏹ Стоп</button>
+        </div>
+    </div>
+
+    <form onsubmit="shadowEvaluate(event)" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.5rem;margin-bottom:1rem;padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+        <div class="field-group"><label>Оценить сделку (тень)</label>
+            <input type="hidden" name="pair" value="BTC/USDT"></div>
+        <div class="field-group"><label>Цена входа</label><input name="price" type="number" step="any" value="60000" required></div>
+        <div class="field-group"><label>Уверенность ИИ (0..1)</label><input name="ai_confidence" type="number" step="0.01" min="0" max="1" value="0.7" required></div>
+        <div class="field-group"><label>Сентимент</label><input name="news_sentiment" type="number" step="0.1" value="0.2"></div>
+        <div class="field-group"><label>Изменение %</label><input name="price_change" type="number" step="0.1" value="0.5"></div>
+        <div class="field-group"><label>Баланс</label><input name="balance" type="number" step="any" value="100"></div>
+        <button class="btn btn-sm" type="submit" style="align-self:end;">Расчитать</button>
+    </form>
+    <div id="shadow-eval-result" style="font-size:.8rem;margin-bottom:1rem;"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div style="padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="field-group"><label>Урегулировать (settle)</label></div>
+            <div style="display:flex;gap:.4rem;margin-top:.4rem;">
+                <input id="shadow-settle-trade-id" type="number" placeholder="trade_id" style="margin:0;flex:1;">
+                <input id="shadow-settle-exit" type="number" step="any" placeholder="exit_price" style="margin:0;flex:1;">
+                <button class="btn btn-sm" onclick="shadowSettle()">OK</button>
+            </div>
+            <div id="shadow-settle-result" style="font-size:.78rem;margin-top:.4rem;"></div>
+        </div>
+        <div style="padding:1rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="field-group"><label>Мониторинг рынка</label></div>
+            <div style="display:flex;gap:.4rem;margin-top:.4rem;">
+                <input id="shadow-mon-pair" value="BTC/USDT" spellcheck="false" style="margin:0;flex:1;">
+                <input id="shadow-mon-price" type="number" step="any" placeholder="market_price" style="margin:0;flex:1;">
+                <button class="btn btn-sm" onclick="shadowMonitor()">OK</button>
+            </div>
+            <div id="shadow-mon-result" style="font-size:.78rem;margin-top:.4rem;"></div>
+        </div>
+    </div>
 </div>
 
 <!-- Payouts -->
@@ -199,12 +290,271 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
-function showTab(name) {
-    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
-    document.getElementById('tab-' + name).style.display = '';
-    document.querySelectorAll('#admin-tabs .filter-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+async function initLiveControls() {
+    try {
+        const r = await fetch('/api/admin/live-controls');
+        if (!r.ok) return;
+        const d = await r.json();
+        window.__csrfToken = d.csrf_token || '';
+        const hidden = document.getElementById('csrf-hidden');
+        if (hidden) hidden.value = window.__csrfToken;
+        const csrf = document.getElementById('csrf-display');
+        if (csrf) csrf.textContent = window.__csrfToken ? 'обновлён' : 'нет';
+        const cb = document.getElementById('global-kill-switch');
+        if (cb && typeof d.global_kill_switch !== 'undefined') cb.checked = !!d.global_kill_switch;
+        renderLiveBots(d.bot_live, d.ai_bot_live);
+    } catch (e) {}
 }
+
+function renderLiveBots(bots, aiBots) {
+    const render = (container, map, kind) => {
+        if (!container) return;
+        const entries = Object.entries(map || {});
+        if (!entries.length) { container.innerHTML = '<div class="term-empty">Нет зарегистрированных ботов</div>'; return; }
+        container.innerHTML = entries.map(([id, on]) =>
+            '<div class="api-pill-row"><div style="display:flex;align-items:center;gap:.5rem;min-width:0;flex-wrap:wrap;">' +
+            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;">' + ApiUI.esc(id) + '</span>' +
+            ApiUI.badge(on ? 'ON' : 'OFF', on ? 'ok' : 'flat') + '</div>' +
+            '<button class="btn btn-sm ' + (on ? 'btn-danger' : 'btn-success') + '" style="flex-shrink:0;font-size:.66rem;padding:.15rem .55rem;" onclick="toggleBotLive(\'' + kind + '\',\'' + id.replace(/'/g, "\\'") + '\',this)">' + (on ? 'Выкл' : 'Вкл') + '</button></div>'
+        ).join('');
+    };
+    render(document.getElementById('live-bots'), bots, 'bots');
+    render(document.getElementById('live-ai-bots'), aiBots, 'ai-bots');
+}
+
+async function refreshLiveBots() {
+    try {
+        const d = await (await fetch('/api/admin/live-controls')).json();
+        const cb = document.getElementById('global-kill-switch');
+        if (cb && typeof d.global_kill_switch !== 'undefined') cb.checked = !!d.global_kill_switch;
+        renderLiveBots(d.bot_live, d.ai_bot_live);
+    } catch (e) {}
+}
+
+async function toggleBotLive(kind, id, btn) {
+    const target = btn.textContent.trim() === 'Вкл';
+    if (!window.__csrfToken) await initLiveControls();
+    try {
+        const r = await fetch('/api/admin/live-controls/' + kind + '/' + encodeURIComponent(id), {
+            method: 'POST',
+            headers: {'X-CSRF-Token': window.__csrfToken, 'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: target})
+        });
+        if (!r.ok) { alert((await r.json().catch(()=>({}))).detail || 'Ошибка'); return; }
+        refreshLiveBots();
+    } catch (e) { alert('Ошибка сети'); }
+}
+
+async function showLiveAudit() {
+    const box = document.getElementById('live-audit');
+    if (!box) return;
+    box.style.display = box.style.display === 'none' ? '' : 'none';
+    if (box.style.display === 'none') return;
+    box.innerHTML = '<span style="color:var(--text-muted);">Загрузка…</span>';
+    try {
+        const d = await (await fetch('/api/admin/live-controls/audit')).json();
+        const rows = (d.entries || []).slice().reverse().map(e =>
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.35rem .4rem;border-bottom:1px solid var(--border);">' +
+            '<div style="display:flex;align-items:center;gap:.45rem;min-width:0;flex-wrap:wrap;">' +
+            (e.enabled ? ApiUI.badge('ВКЛ', 'ok') : ApiUI.badge('ВЫКЛ', 'flat')) +
+            '<span style="font-size:.74rem;font-weight:600;">' + ApiUI.esc(e.kind || '—') + '</span>' +
+            (e.target ? '<span class="api-chip">' + ApiUI.esc(e.target) + '</span>' : '') +
+            (e.actor ? '<span style="font-size:.66rem;color:var(--text-muted);">' + ApiUI.esc(e.actor) + '</span>' : '') +
+            '</div><span class="api-feedtime">' + ApiUI.time(e.timestamp) + '</span></div>'
+        ).join('');
+        box.innerHTML = rows || '<div class="term-empty">Журнал пуст</div>';
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить журнал.</span>'; }
+}
+
+/* ── ИИ-тень (Shadow AI) ── */
+async function loadShadowStatus() {
+    const el = document.getElementById('shadow-feed-status');
+    if (!el) return;
+    try {
+        const d = await (await fetch('/api/admin/ai-shadow/feed/status')).json();
+        el.innerHTML =
+            '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.45rem;">' +
+            ApiUI.badge(d.running ? '► ПОТОК АКТИВЕН' : '⏸ ОСТАНОВЛЕН', d.running ? 'ok' : 'flat') +
+            '<span class="api-chip">' + ApiUI.esc(d.exchange || '—') + ' · ' + ApiUI.esc(d.pair || '—') + '</span>' +
+            (d.interval_seconds ? '<span class="api-chip">интервал ' + ApiUI.num(d.interval_seconds, 1) + 'с</span>' : '') + '</div>' +
+            ApiUI.statGrid([
+                { label: 'Тиков получено', value: ApiUI.num(d.ticks ?? 0), color: 'var(--accent)' },
+                { label: 'Сеттлментов', value: ApiUI.num(d.settlements ?? 0), color: 'var(--success)' },
+                { label: 'Последняя цена', value: d.last_price !== null && d.last_price !== undefined ? ApiUI.num(d.last_price) : '—' },
+                { label: 'Последний тик', value: ApiUI.time(d.last_tick_at) }
+            ]) +
+            (d.last_error ? '<div style="margin-top:.45rem;">' + ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.7rem;color:var(--danger);">' + ApiUI.esc(d.last_error) + '</span></div>' : '');
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Недоступно</span>'; }
+}
+async function startShadowFeed() {
+    try {
+        const pair = document.getElementById('shadow-feed-pair').value || 'BTC/USDT';
+        const r = await fetch('/api/admin/ai-shadow/feed/start', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({exchange: 'binance', pair: pair, interval_seconds: 1.0})
+        });
+        alert((await r.json().catch(()=>({}))).detail || 'Фид запущен');
+        loadShadowStatus();
+    } catch (e) { alert('Ошибка сети'); }
+}
+async function stopShadowFeed() {
+    try {
+        const r = await fetch('/api/admin/ai-shadow/feed/stop', {method: 'POST'});
+        alert((await r.json().catch(()=>({}))).detail || 'Фид остановлен');
+        loadShadowStatus();
+    } catch (e) { alert('Ошибка сети'); }
+}
+async function shadowEvaluate(ev) {
+    ev.preventDefault();
+    const f = ev.target;
+    const box = document.getElementById('shadow-eval-result');
+    try {
+        const payload = {
+            pair: 'BTC/USDT', news_sentiment: 0, price_change: 0, balance: 100,
+            price: parseFloat(f.price.value),
+            ai_confidence: parseFloat(f.ai_confidence.value),
+            news_sentiment: parseFloat(f.news_sentiment.value || 0),
+            price_change: parseFloat(f.price_change.value || 0),
+            balance: parseFloat(f.balance.value || 100)
+        };
+        const r = await fetch('/api/admin/ai-shadow/evaluate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        const d = await r.json().catch(()=>({}));
+        if (r.ok) {
+            const side = String(d.side || 'wait').toLowerCase();
+            box.innerHTML =
+                '<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.45rem;">' +
+                ApiUI.badge(String(d.side || '—').toUpperCase(), side === 'blocked' ? 'bad' : side === 'buy' ? 'ok' : side === 'sell' ? 'warn' : 'flat') +
+                (d.pair ? '<span class="api-chip">' + ApiUI.esc(d.pair) + '</span>' : '') +
+                (d.strategy ? '<span class="api-chip">' + ApiUI.esc(d.strategy) + '</span>' : '') +
+                (d.confidence !== undefined ? '<span class="api-chip">Уверенность ' + ApiUI.num(d.confidence * 100, 1) + '%</span>' : '') +
+                '</div>' +
+                (d.reason ? '<div style="font-size:.72rem;color:var(--text-secondary);margin-bottom:.45rem;">' + ApiUI.esc(d.reason) + '</div>' : '') +
+                '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);">' +
+                ApiUI.kv({ trade_id: d.trade_id, entry_price: d.entry_price, stop_loss: d.stop_loss, take_profit: d.take_profit, mode: d.mode }) + '</div>';
+        } else {
+            box.innerHTML = ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.74rem;color:var(--danger);">' + ApiUI.esc(d.detail || 'Ошибка') + '</span>';
+        }
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);">Ошибка сети</span>'; }
+}
+async function shadowSettle() {
+    const box = document.getElementById('shadow-settle-result');
+    try {
+        const r = await fetch('/api/admin/ai-shadow/settle', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({trade_id: parseInt(document.getElementById('shadow-settle-trade-id').value || 0), exit_price: parseFloat(document.getElementById('shadow-settle-exit').value || 0)})});
+        const d = await r.json().catch(()=>({}));
+        box.innerHTML = r.ok
+            ? ApiUI.badge('Урегулировано', 'ok') + '<div style="margin-top:.4rem;border:1px solid var(--border);border-radius:var(--radius-sm);">' + ApiUI.kv(d) + '</div>'
+            : ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.74rem;color:var(--danger);">' + ApiUI.esc(d.detail || 'Ошибка') + '</span>';
+    } catch (e) { box.innerHTML = 'Ошибка сети'; }
+}
+async function shadowMonitor() {
+    const box = document.getElementById('shadow-mon-result');
+    try {
+        const r = await fetch('/api/admin/ai-shadow/monitor', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({pair: document.getElementById('shadow-mon-pair').value || 'BTC/USDT', market_price: parseFloat(document.getElementById('shadow-mon-price').value || 0)})});
+        const d = await r.json().catch(()=>({}));
+        box.innerHTML = r.ok
+            ? ApiUI.statGrid([
+                { label: 'Пара', value: ApiUI.esc(d.pair || '—') },
+                { label: 'Рыночная цена', value: d.market_price !== undefined ? ApiUI.num(d.market_price) : '—', color: 'var(--accent)' },
+                { label: 'Сеттлментов', value: ApiUI.num(d.settled), color: 'var(--success)' }
+            ])
+            : ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.74rem;color:var(--danger);">' + ApiUI.esc(d.detail || 'Ошибка') + '</span>';
+    } catch (e) { box.innerHTML = 'Ошибка сети'; }
+}
+
+/* ── Риск ── */
+async function loadRiskStatus() {
+    const box = document.getElementById('risk-status-box');
+    if (!box) return;
+    try {
+        const d = await (await fetch('/api/risk/status')).json();
+        box.innerHTML =
+            '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;">' +
+            ApiUI.badge(d.kill_switch ? '⛔ KILL SWITCH ВКЛЮЧЁН' : '✅ ТОРГОВЛЯ РАЗРЕШЕНА', d.kill_switch ? 'bad' : 'ok') + '</div>' +
+            ApiUI.statGrid([
+                { label: 'Дневной P/L', value: (Number(d.daily_pnl) >= 0 ? '+' : '') + ApiUI.num(d.daily_pnl) + '€', color: ApiUI.signColor(d.daily_pnl) },
+                { label: 'Пик баланса', value: ApiUI.num(d.peak_balance) + '€', color: 'var(--accent)' },
+                { label: 'Риск/сделку', value: ApiUI.num(d.risk_per_trade, 3), sub: 'доля' },
+                { label: 'Лимит/день', value: ApiUI.num(d.daily_loss_limit, 3), sub: 'доля' },
+                { label: 'Макс. просадка', value: ApiUI.num(d.max_drawdown, 3), sub: 'доля' },
+                { label: 'Макс. плечо', value: ApiUI.num(d.max_leverage) + 'x', sub: 'лимит' }
+            ]) +
+            '<div style="margin-top:.5rem;">' +
+            ApiUI.gauge(d.current_risk_score, d.max_risk_score, 'Текущий скор риска', true) +
+            '</div>';
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);">Не удалось получить состояние риска.</span>'; }
+}
+async function calcRisk() {
+    const box = document.getElementById('risk-calc-result');
+    const params = new URLSearchParams({
+        leverage: document.getElementById('risk-leverage').value,
+        volatility: document.getElementById('risk-volatility').value,
+        drawdown: document.getElementById('risk-drawdown').value,
+        liquidity: document.getElementById('risk-liquidity').value,
+        concentration: document.getElementById('risk-concentration').value,
+        positions: document.getElementById('risk-positions').value,
+        market_regime: document.getElementById('risk-market-regime').value
+    });
+    try {
+        const r = await fetch('/api/risk/score?' + params.toString(), {method: 'POST'});
+        const d = await r.json().catch(()=>({}));
+        if (r.ok) {
+            box.innerHTML =
+                '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.45rem;">' +
+                ApiUI.badge(d.allowed ? 'РАЗРЕШЕНО' : 'ЗАПРЕЩЕНО', d.allowed ? 'ok' : 'bad') +
+                '<span style="font-size:.72rem;color:var(--text-secondary);">' + ApiUI.esc(d.reason || '') + '</span></div>' +
+                ApiUI.gauge(d.risk_score, d.max_allowed, 'Скор риска', true);
+        } else {
+            box.innerHTML = ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.74rem;color:var(--danger);">' + ApiUI.esc(d.detail || 'Ошибка') + '</span>';
+        }
+    } catch (e) { box.innerHTML = '<span style="color:var(--text-muted);">Ошибка сети</span>'; }
+}
+
+/* ── Админ-данные ── */
+async function loadAdminData() {
+    const box = document.getElementById('admin-stats-box');
+    if (!box) return;
+    try {
+        const st = await (await fetch('/api/admin/stats')).json();
+        const set = await (await fetch('/api/admin/settings')).json();
+        box.innerHTML =
+            '<div><span style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;">Пользователей</span><div style="font-size:1.4rem;font-weight:700;">' + (st.users ?? '—') + '</div></div>' +
+            '<div><span style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;">Стратегий</span><div style="font-size:1.4rem;font-weight:700;">' + (st.strategies ?? '—') + '</div></div>' +
+            '<div><span style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;">Название сайта</span><div style="font-weight:600;">' + (set.site_name || '—') + '</div></div>' +
+            '<div><span style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;">Поддержка</span><div style="font-weight:600;">' + (set.support_contact || '—') + '</div></div>' +
+            '<div><span style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;">Обслуживание</span><div style="font-weight:600;">' + (set.maintenance_mode || 'off') + '</div></div>';
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить.</span>'; }
+}
+
+async function applyGlobal() {
+    const cb = document.getElementById('global-kill-switch');
+    if (!window.__csrfToken) await initLiveControls();
+    try {
+        const r = await fetch('/api/admin/live-controls/global', {
+            method: 'POST',
+            headers: {'X-CSRF-Token': window.__csrfToken, 'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: !!cb.checked})
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(d.detail || 'Ошибка изменения Global Kill Switch'); return; }
+        location.reload();
+    } catch (e) { alert('Ошибка сети'); }
+}
+
+function showTab(name, el) {
+    document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+    const tab = document.getElementById('tab-' + name);
+    if (tab) tab.style.display = '';
+    document.querySelectorAll('#admin-tabs .filter-btn').forEach(b => b.classList.remove('active'));
+    if (el) el.classList.add('active');
+}
+
+initLiveControls();
+loadShadowStatus();
+loadRiskStatus();
+loadAdminData();
 </script>
 {% endblock %}

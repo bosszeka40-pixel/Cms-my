@@ -9,7 +9,7 @@
         <h1 class="page-title">Тестирование стратегий</h1>
         <p class="lead">Тесты на реальных данных live. Без знания будущего — только прошлые свечи.</p>
     </div>
-    <span class="term-demo-badge">DEMO MODE</span>
+    <span class="term-demo-badge {% if demo.demo_active %}on{% else %}off{% endif %}">{% if demo.demo_active %}DEMO MODE{% else %}LIVE MODE{% endif %}</span>
 </div>
 
 <!-- Config -->

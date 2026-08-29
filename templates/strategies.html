@@ -19,7 +19,7 @@
             <div class="term-stat"><div class="term-stat-label">Баланс</div><div class="term-stat-value" id="test-bal">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div></div>
             <div class="term-stat"><div class="term-stat-label">P/L</div><div class="term-stat-value" id="test-pnl">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</div></div>
         </div>
-        <span class="term-demo-badge">LIVE DATA</span>
+        <span class="term-demo-badge {% if demo.demo_active %}on{% else %}off{% endif %}">{% if demo.demo_active %}DEMO DATA{% else %}LIVE DATA{% endif %}</span>
     </div>
 
     <div class="term-timeframes">

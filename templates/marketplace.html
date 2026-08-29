@@ -156,9 +156,24 @@
         </ul>
     </section>
     {% endif %}
+
+<section class="card" style="margin-top:1.5rem;">
+    <h2>📈 Доходность стратегий (API) <button class="btn btn-outline btn-sm" onclick="loadMarketInfo()" style="float:right;">Обновить</button></h2>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.75rem 0;">
+        <select id="perf-pair"><option>BTC/USDT</option><option>ETH/USDT</option><option>SOL/USDT</option></select>
+        <select id="perf-exchange">
+            {% for e in exchanges %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+        </select>
+        <select id="perf-period"><option value="1d">1 день</option><option value="1w">1 неделя</option><option value="1m">1 месяц</option><option value="3m">3 месяца</option><option value="6m">6 месяцев</option><option value="1y">1 год</option></select>
+        <button class="btn btn-sm" onclick="loadMarketInfo()">Показать</button>
+    </div>
+    <div id="perf-box" style="font-size:.8rem;">—</div>
+    <div id="pub-box" style="font-size:.78rem;margin-top:.5rem;"></div>
+</section>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 (() => {
   const search = document.getElementById('marketplace-search');
@@ -242,5 +257,62 @@ document.querySelectorAll('.activate-btn').forEach(btn => {
     });
   });
 })();
+
+/* ── Доходность / публичные (API) ── */
+async function loadMarketInfo() {
+    const perf = document.getElementById('perf-box');
+    const pub = document.getElementById('pub-box');
+    if (!perf) return;
+    try {
+        const q = new URLSearchParams({
+            pair: document.getElementById('perf-pair').value,
+            exchange: document.getElementById('perf-exchange').value,
+            period: document.getElementById('perf-period').value
+        });
+        const d = await (await fetch('/api/strategies/performance?' + q)).json();
+        const strat = d.strategies || {};
+        const entries = Object.entries(strat).slice(0, 12);
+        perf.innerHTML =
+            '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;">' +
+            ApiUI.badge(d.pair || '—', 'info') + ApiUI.badge(d.exchange || '—', 'flat') +
+            '<span style="font-size:.72rem;color:var(--text-muted);">' + ApiUI.esc(d.period_label || d.period || '') + '</span></div>' +
+            (entries.length
+                ? ApiUI.table(
+                    ['Стратегия', 'Доходность/мес', 'Винрейт', 'Сделок', 'Просадка', 'Sharpe', 'Статус'],
+                    entries.map(([name, v]) => [
+                        { html: '<span style="font-weight:600;">' + ApiUI.esc(name) + '</span>' },
+                        ApiUI.cellColored(v.monthly_return_pct),
+                        ApiUI.cellPct(v.win_rate_pct),
+                        { html: ApiUI.esc(ApiUI.num(v.trades)) },
+                        { html: ApiUI.esc(ApiUI.num(v.max_drawdown_pct, 2)) + '%', style: 'color:' + ApiUI.signColor(-(Number(v.max_drawdown_pct) || 0)) + ';' },
+                        { html: ApiUI.esc(ApiUI.num(v.sharpe, 2)), style: 'font-family:var(--font-mono);' },
+                        { html: String(v.category || '').startsWith('Неудач') ? ApiUI.badge('Аутсайдер', 'bad') : ApiUI.badge('Активна', 'ok') }
+                    ])
+                )
+                : '<div class="term-empty">Нет данных за период</div>');
+    } catch (e) { perf.innerHTML = '<span style="color:var(--danger);">Не удалось получить доходность</span>'; }
+    try {
+        const p = await (await fetch('/api/strategies/public')).json();
+        const items = Array.isArray(p) ? p : (p.strategies || []);
+        pub.innerHTML = items.length
+            ? (function () {
+                var cards = items.slice(0, 6).map(function (s) {
+                    return '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.5rem .6rem;background:var(--bg-tertiary);flex:1 1 220px;min-width:200px;">' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">' +
+                        '<span style="font-weight:700;font-size:.82rem;">' + ApiUI.esc(s.name || '—') + '</span>' +
+                        ApiUI.badge(Number(s.price_eur) > 0 ? ApiUI.num(s.price_eur) + '€' : 'Бесплатно', Number(s.price_eur) > 0 ? 'warn' : 'ok') + '</div>' +
+                        (s.description ? '<div style="font-size:.7rem;color:var(--text-secondary);margin:.25rem 0;">' + ApiUI.esc(s.description) + '</div>' : '') +
+                        '<div style="display:flex;flex-wrap:wrap;gap:.3rem;">' +
+                        '<span class="api-chip">' + ApiUI.esc(s.strategy_type || '—') + '</span>' +
+                        (s.leverage ? '<span class="api-chip">Плечо ' + ApiUI.num(s.leverage) + 'x</span>' : '') +
+                        (s.trial_days ? '<span class="api-chip">Триал ' + ApiUI.num(s.trial_days) + ' дн.</span>' : '') +
+                        '</div></div>';
+                }).join('');
+                return '<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem;">' + cards + '</div>';
+            })()
+            : '<div class="term-empty">Публичных стратегий нет</div>';
+    } catch (e) { pub.innerHTML = '<span style="color:var(--danger);">Не удалось получить публичные стратегии</span>'; }
+}
+loadMarketInfo();
 </script>
 {% endblock %}

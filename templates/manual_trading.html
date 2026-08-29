@@ -20,7 +20,7 @@
             <div class="term-stat"><div class="term-stat-label">24h Мин</div><div class="term-stat-value" data-field="low24h">—</div></div>
             <div class="term-stat"><div class="term-stat-label">Марк</div><div class="term-stat-value" data-field="markPrice">—</div></div>
         </div>
-        <span class="term-demo-badge">DEMO</span>
+        <span class="term-demo-badge {% if demo.demo_active %}on{% else %}off{% endif %}">{% if demo.demo_active %}DEMO{% else %}LIVE{% endif %}</span>
     </div>
 
     <!-- Timeframes -->
@@ -204,12 +204,82 @@
         </div>
     </div>
 </div>
+
+<!-- АПИ-инструменты: ручная торговля, тест, execute, новости, тренды, биржи -->
+<div class="card" style="margin-top:1rem;">
+    <h2>🛠 Дополнительные инструменты торговли</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:.85rem;">
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="term-section-title">📟 Ручной ордер (API)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.5rem;">
+                <select id="mt-pair"><option>BTC/USDT</option><option>ETH/USDT</option><option>SOL/USDT</option><option>BNB/USDT</option><option>XRP/USDT</option></select>
+                <select id="mt-side"><option value="buy">buy</option><option value="sell">sell</option></select>
+                <input id="mt-price" type="number" step="any" placeholder="Цена" style="margin:0;">
+                <input id="mt-amount" type="number" step="any" placeholder="Кол-во" style="margin:0;">
+                <input id="mt-balance" type="number" step="any" placeholder="Баланс (€)" style="margin:0;" value="1000">
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <button class="btn btn-sm" onclick="submitManualTrade()">Отправить ордер</button>
+                <span id="mt-result" style="font-size:.75rem;"></span>
+            </div>
+        </div>
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="term-section-title">🧪 Тест стратегии</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.5rem;">
+                <select id="tst-pair"><option>BTC/USDT</option><option>ETH/USDT</option><option>SOL/USDT</option><option>BNB/USDT</option><option>XRP/USDT</option></select>
+                <input id="tst-sentiment" type="number" step="0.1" placeholder="Сентимент" value="0.5" style="margin:0;">
+                <input id="tst-change" type="number" step="0.1" placeholder="Изменение %" value="1.0" style="margin:0;">
+                <input id="tst-balance" type="number" step="any" placeholder="Баланс" value="100" style="margin:0;">
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <button class="btn btn-sm" onclick="submitStrategyTest()">Запустить тест</button>
+                <span id="tst-result" style="font-size:.75rem;"></span>
+            </div>
+        </div>
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="term-section-title">⚡ Выполнить стратегию</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.5rem;">
+                <input id="exe-sentiment" type="number" step="0.1" placeholder="Сентимент" value="0.5" style="margin:0;">
+                <input id="exe-change" type="number" step="0.1" placeholder="Изменение %" value="0.8" style="margin:0;">
+                <input id="exe-balance" type="number" step="any" placeholder="Баланс" value="100" style="margin:0;">
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <button class="btn btn-sm" onclick="execStrategy()">Выполнить</button>
+                <span id="exe-result" style="font-size:.75rem;"></span>
+            </div>
+        </div>
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="term-section-title">📰 Новости рынка</div>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <button class="btn btn-outline btn-sm" onclick="loadNews()">Загрузить</button>
+                <span style="font-size:.72rem;color:var(--text-muted);" id="news-count"></span>
+            </div>
+            <div id="news-box" style="margin-top:.5rem;max-height:200px;overflow-y:auto;font-size:.75rem;"></div>
+        </div>
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="term-section-title">🔥 Тренды и листинги</div>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <button class="btn btn-outline btn-sm" onclick="loadTrending()">Тренды</button>
+                <button class="btn btn-outline btn-sm" onclick="loadListings()">Листинги</button>
+            </div>
+            <div id="trend-box" style="margin-top:.5rem;max-height:200px;overflow-y:auto;font-size:.75rem;"></div>
+        </div>
+        <div style="padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);">
+            <div class="term-section-title">🏦 Доступные биржи</div>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <button class="btn btn-outline btn-sm" onclick="loadExchanges()">Показать</button>
+            </div>
+            <div id="exchanges-box" style="margin-top:.5rem;font-size:.75rem;"></div>
+        </div>
+    </div>
+</div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
+<script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 (() => {
     const pairEl = document.getElementById('term-pair');
@@ -440,5 +510,147 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
     document.getElementById('signals-source').addEventListener('change', loadSignals);
     loadSignals();
 })();
+
+/* ── Дополнительные инструменты (API) ── */
+async function postJson(url, body) {
+    const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+    const d = await r.json().catch(() => ({}));
+    return {ok: r.ok, d};
+}
+function errBox(el, msg) { el.innerHTML = ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.72rem;color:var(--danger);">' + ApiUI.esc(msg) + '</span>'; }
+async function submitManualTrade() {
+    const el = document.getElementById('mt-result');
+    try {
+        const {ok, d} = await postJson('/api/trading/manual', {
+            pair: document.getElementById('mt-pair').value,
+            side: document.getElementById('mt-side').value,
+            price: parseFloat(document.getElementById('mt-price').value || 0),
+            amount: parseFloat(document.getElementById('mt-amount').value || 0),
+            balance: parseFloat(document.getElementById('mt-balance').value || 0)
+        });
+        if (!ok) return errBox(el, d.detail || 'Ошибка');
+        if (d.status === 'blocked' || d.status === 'rejected') {
+            el.innerHTML = ApiUI.badge('Отклонено', 'bad') + ' <span style="font-size:.72rem;color:var(--danger);">' + ApiUI.esc(d.reason || d.status) + '</span>';
+            return;
+        }
+        el.innerHTML = ApiUI.statGrid([
+            { label: 'Статус', value: ApiUI.badge(d.status || '—', d.status === 'executed' ? 'ok' : 'warn') },
+            { label: 'Комиссия', value: ApiUI.num(d.fee, 6) + '€', color: 'var(--warning)' },
+            { label: 'Баланс', value: ApiUI.num(d.balance) + '€', color: 'var(--success)' },
+            { label: 'ID ордера', value: d.order_id ? '<span class="api-feedtime">' + ApiUI.esc(String(d.order_id).slice(0, 12)) + '</span>' : '—' }
+        ]);
+    } catch (e) { errBox(el, 'Ошибка сети'); }
+}
+async function submitStrategyTest() {
+    const el = document.getElementById('tst-result');
+    try {
+        const {ok, d} = await postJson('/api/trading/test', {
+            pair: document.getElementById('tst-pair').value,
+            news_sentiment: parseFloat(document.getElementById('tst-sentiment').value || 0),
+            price_change: parseFloat(document.getElementById('tst-change').value || 0),
+            current_balance: parseFloat(document.getElementById('tst-balance').value || 0)
+        });
+        if (!ok) return errBox(el, d.detail || 'Ошибка');
+        const t = d.trade || {};
+        const dir = t.signal > 0 ? 'BUY' : t.signal < 0 ? 'SELL' : 'HOLD';
+        el.innerHTML =
+            ApiUI.badge(dir, t.signal > 0 ? 'ok' : t.signal < 0 ? 'bad' : 'flat') +
+            ' <span class="api-chip">' + ApiUI.esc(d.strategy || '—') + '</span> <span class="api-chip">' + ApiUI.esc(d.pair || '—') + '</span>' +
+            '<div style="margin-top:.4rem;">' + ApiUI.statGrid([
+                { label: 'P/L', value: ApiUI.num(t.pl, 4) + '€', color: ApiUI.signColor(t.pl) },
+                { label: 'Баланс до', value: ApiUI.num(t.previous_balance, 4) + '€' },
+                { label: 'Баланс после', value: ApiUI.num(t.next_balance, 4) + '€', color: 'var(--success)' }
+            ]) + '</div>';
+    } catch (e) { errBox(el, 'Ошибка сети'); }
+}
+async function execStrategy() {
+    const el = document.getElementById('exe-result');
+    try {
+        const {ok, d} = await postJson('/api/strategy/execute', {
+            news_sentiment: parseFloat(document.getElementById('exe-sentiment').value || 0),
+            price_change: parseFloat(document.getElementById('exe-change').value || 0),
+            current_balance: parseFloat(document.getElementById('exe-balance').value || 0)
+        });
+        if (!ok) return errBox(el, d.detail || 'Ошибка');
+        const dir = d.signal > 0 ? 'BUY' : d.signal < 0 ? 'SELL' : 'HOLD';
+        el.innerHTML =
+            ApiUI.badge('Сигнал ' + dir, d.signal > 0 ? 'ok' : d.signal < 0 ? 'bad' : 'flat') +
+            ' <span class="api-chip">' + ApiUI.esc(d.strategy || '—') + '</span> <span class="api-chip">Плечо ' + ApiUI.num(d.leverage) + 'x</span>' +
+            '<div style="margin-top:.4rem;">' + ApiUI.statGrid([
+                { label: 'P/L', value: ApiUI.num(d.pnl, 4) + '€', color: ApiUI.signColor(d.pnl) },
+                { label: 'Баланс после', value: ApiUI.num(d.next_balance, 4) + '€', color: 'var(--success)' },
+                { label: 'Комиссия', value: ApiUI.num(d.fee, 4) + '€', color: 'var(--warning)' }
+            ]) + '</div>';
+    } catch (e) { errBox(el, 'Ошибка сети'); }
+}
+async function loadNews() {
+    const box = document.getElementById('news-box'); const cnt = document.getElementById('news-count');
+    if (!box) return;
+    try {
+        const d = await (await fetch('/api/market/news')).json();
+        if (cnt) cnt.innerHTML = ApiUI.badge(String(d.count || 0) + ' новостей', 'info');
+        const items = (d.news || []).slice(0, 10);
+        box.innerHTML = items.length
+            ? items.map(n => '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.45rem .6rem;margin-bottom:.4rem;background:var(--bg-tertiary);">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.2rem;">' +
+                '<span class="api-pill">' + ApiUI.esc(n.source || '—') + '</span>' +
+                '<span class="api-feedtime">' + ApiUI.time(n.published_at) + '</span></div>' +
+                '<a href="' + ApiUI.esc(n.url || '#') + '" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--text);text-decoration:none;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + ApiUI.esc(n.title || n.headline || '—') + '</a></div>').join('')
+            : '<div class="term-empty">Новостей пока нет</div>';
+    } catch (e) { box.innerHTML = errHtml(); }
+    function errHtml() { return '<span style="color:var(--danger);font-size:.74rem;">Не удалось загрузить новости</span>'; }
+}
+async function loadTrending() {
+    const box = document.getElementById('trend-box');
+    if (!box) return;
+    try {
+        const d = await (await fetch('/api/market/trending')).json();
+        const obj = d.trending && typeof d.trending === 'object' ? d.trending : {};
+        const entries = Object.entries(obj);
+        box.innerHTML = entries.length
+            ? ApiUI.table(
+                ['Стратегия', 'Доходность/мес', 'Винрейт', 'Сделок', 'Просадка', 'Sharpe'],
+                entries.map(([name, s]) => [
+                    { html: '<span style="font-weight:600;">' + ApiUI.esc(name) + '</span>' },
+                    ApiUI.cellColored(s.monthly_return_pct),
+                    ApiUI.cellPct(s.win_rate_pct),
+                    { html: ApiUI.esc(ApiUI.num(s.trades)) },
+                    { html: ApiUI.esc(ApiUI.num(s.max_drawdown_pct, 2)) + '%', style: 'color:' + ApiUI.signColor(-s.max_drawdown_pct) + ';' },
+                    { html: ApiUI.esc(ApiUI.num(s.sharpe, 2)), style: 'font-family:var(--font-mono);' }
+                ])
+            )
+            : '<div class="term-empty">Нет данных о трендах</div>';
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);font-size:.74rem;">Не удалось загрузить тренды</span>'; }
+}
+async function loadListings() {
+    const box = document.getElementById('trend-box');
+    if (!box) return;
+    try {
+        const d = await (await fetch('/api/market/listings')).json();
+        const items = d.listings || [];
+        box.innerHTML = items.length
+            ? items.slice(0, 10).map(it => '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.45rem .6rem;margin-bottom:.4rem;background:var(--bg-tertiary);">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">' +
+                '<span style="font-weight:700;font-size:.8rem;">' + ApiUI.esc(it.name) + '</span>' +
+                ApiUI.badge(Number(it.price_eur) > 0 ? Number(it.price_eur) + '€' : 'Бесплатно', Number(it.price_eur) > 0 ? 'warn' : 'ok') + '</div>' +
+                (it.description ? '<div style="font-size:.7rem;color:var(--text-secondary);margin:.2rem 0;">' + ApiUI.esc(it.description) + '</div>' : '') +
+                '<div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem;">' +
+                '<span class="api-chip">' + (it.owned ? ApiUI.badge('Куплена', 'ok') : ApiUI.badge('Доступна', 'flat')) + '</span>' +
+                (it.category ? '<span class="api-chip">' + ApiUI.esc(it.category) + '</span>' : '') +
+                (it.monthly_return_pct !== undefined ? '<span class="api-chip" style="color:' + ApiUI.signColor(it.monthly_return_pct) + ';font-weight:600;">' + ApiUI.pct(it.monthly_return_pct, 1) + '/мес</span>' : '') +
+                (it.win_rate_pct !== undefined ? '<span class="api-chip">Винрейт ' + ApiUI.num(it.win_rate_pct, 1) + '%</span>' : '') +
+                '</div></div>').join('')
+            : '<div class="term-empty">Листингов нет</div>';
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);font-size:.74rem;">Не удалось загрузить листинги</span>'; }
+}
+async function loadExchanges() {
+    const box = document.getElementById('exchanges-box');
+    if (!box) return;
+    try {
+        const d = await (await fetch('/api/exchanges')).json();
+        const items = d.exchanges || [];
+        box.innerHTML = items.map(e => '<span class="api-pill">' + ApiUI.esc(e.name || e.id || e) + '</span>').join('') || '—';
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);font-size:.74rem;">Не удалось загрузить биржи</span>'; }
+}
 </script>
 {% endblock %}

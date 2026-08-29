@@ -41,4 +41,63 @@
         </form>
     </div>
 </div>
+
+<div class="grid" style="margin-top:1rem;">
+    <div class="card">
+        <h2>🔌 Подключение кошелька (API)</h2>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:.5rem;">
+            <select id="wallet-provider">
+                {% for w in ['MetaMask','Trust Wallet','Binance Wallet','WalletConnect','Ledger','Trezor'] %}<option value="{{ w }}">{{ w }}</option>{% endfor %}
+            </select>
+            <input id="wallet-address" placeholder="Адрес кошелька" style="margin:0;">
+            <div style="grid-column:1/-1;display:flex;gap:.5rem;">
+                <button class="btn btn-sm" onclick="connectWallet()">Подключить</button>
+                <button class="btn btn-outline btn-sm" onclick="loadWalletStatus()">🔄 Обновить баланс</button>
+            </div>
+        </div>
+        <div id="wallet-api-status" style="margin-top:.75rem;font-size:.82rem;">—</div>
+    </div>
+    <div class="card">
+        <h2>📄 Реквизиты</h2>
+        <div id="wallet-provider-info" style="font-size:.85rem;">
+            <div style="padding:.4rem 0;"><span style="color:var(--text-secondary);">Провайдер:</span> <strong id="wallet-info-provider">{{ wallet.provider if wallet.provider else '—' }}</strong></div>
+            <div style="padding:.4rem 0;"><span style="color:var(--text-secondary);">Адрес:</span> <strong id="wallet-info-address" style="overflow-wrap:anywhere;">{{ wallet.address if wallet.address else '—' }}</strong></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='api_render.js') }}"></script>
+<script>
+async function loadWalletStatus() {
+    const el = document.getElementById('wallet-api-status');
+    try {
+        const d = await (await fetch('/api/wallet/balance')).json();
+        el.innerHTML =
+            ApiUI.statGrid([
+                { label: 'Баланс', value: ApiUI.num(d.balance) + ' ' + ApiUI.esc(d.currency || 'EUR'), color: 'var(--primary)' },
+                { label: 'Провайдер', value: d.provider ? ApiUI.badge(d.provider, 'info') : '—' },
+                { label: 'Кошелёк', value: '<span class="api-feedtime">' + ApiUI.esc(d.address || '—') + '</span>' }
+            ]);
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить баланс</span>'; }
+}
+async function connectWallet() {
+    const el = document.getElementById('wallet-api-status');
+    const fd = new FormData();
+    fd.append('provider', document.getElementById('wallet-provider').value);
+    fd.append('address', document.getElementById('wallet-address').value);
+    try {
+        const r = await fetch('/api/wallet/connect', {method: 'POST', body: fd});
+        const d = await r.json();
+        if (r.ok) {
+            el.innerHTML = ApiUI.badge('Кошелёк подключён', 'ok') + '<div style="margin-top:.4rem;">' + ApiUI.kvRow('Провайдер', ApiUI.esc(d.provider)) + ApiUI.kvRow('Адрес', '<span class="api-feedtime">' + ApiUI.esc(document.getElementById('wallet-address').value) + '</span>') + '</div>';
+            document.getElementById('wallet-info-provider').textContent = d.provider;
+            document.getElementById('wallet-info-address').textContent = document.getElementById('wallet-address').value;
+        } else {
+            el.innerHTML = ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.74rem;color:var(--danger);">' + ApiUI.esc(d.detail || 'Ошибка') + '</span>';
+        }
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Ошибка сети</span>'; }
+}
+</script>
 {% endblock %}

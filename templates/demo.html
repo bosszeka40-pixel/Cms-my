@@ -18,7 +18,7 @@
             <div class="term-stat"><div class="term-stat-label">P/L</div><div class="term-stat-value" id="demo-pnl" style="color:{% if demo.demo_pnl|default(0) >= 0 %}var(--success){% else %}var(--danger){% endif %};">{{ '%.2f'|format(demo.demo_pnl|default(0)) }}€</div></div>
             <div class="term-stat"><div class="term-stat-label">Сделок</div><div class="term-stat-value" id="demo-trades">{{ demo.demo_trades_count|default(0) }}</div></div>
         </div>
-        <span class="term-demo-badge">DEMO 100€</span>
+        <span class="term-demo-badge {% if demo.demo_active %}on{% else %}off{% endif %}">{% if demo.demo_active %}DEMO 100€{% else %}LIVE{% endif %}</span>
     </div>
 
     <div class="term-timeframes">
@@ -77,10 +77,9 @@
             <!-- Auto Trade -->
             <div style="border-top:1px solid var(--border);padding:.75rem;">
                 <div class="term-section-title">Авто-торговля</div>
-                <p style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0;">Бот торгует автоматически на реальных данных. Режим: <strong>DEMO</strong></p>
+                <p style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0;">Бот торгует автоматически на реальных данных. Режим: <strong id="demo-mode-label">{% if demo.demo_active %}DEMO{% else %}LIVE{% endif %}</strong></p>
                 <div style="display:flex;gap:.5rem;">
-                    <button class="btn btn-success btn-sm" onclick="startAutoDemo()">▶ Старт</button>
-                    <button class="btn btn-danger btn-sm" onclick="stopAutoDemo()">⏹ Стоп</button>
+                    <button class="btn btn-success btn-sm" id="btn-demo-auto" onclick="toggleAutoDemo()">▶ Старт</button>
                 </div>
                 <div id="auto-demo-status" style="margin-top:.5rem;font-size:.78rem;"></div>
             </div>
@@ -89,7 +88,10 @@
             <div style="border-top:1px solid var(--border);padding:.5rem .75rem;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
                     <span style="font-size:.78rem;font-weight:600;">История сделок</span>
-                    <button class="btn btn-outline btn-sm" onclick="resetDemo()" id="reset-demo" style="font-size:.68rem;padding:.2rem .5rem;">Сброс (100€)</button>
+                    <div style="display:flex;gap:.35rem;">
+                        <button class="btn btn-outline btn-sm" onclick="loadDemoStatus()" style="font-size:.68rem;padding:.2rem .5rem;">🔄 Из API</button>
+                        <button class="btn btn-outline btn-sm" onclick="resetDemo()" id="reset-demo" style="font-size:.68rem;padding:.2rem .5rem;">Сброс (100€)</button>
+                    </div>
                 </div>
                 <div style="max-height:200px;overflow-y:auto;">
                     <table class="term-table">
@@ -99,6 +101,7 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="demo-status-box" style="margin-top:.6rem;font-size:.84rem;"></div>
             </div>
         </div>
     </div>
@@ -107,6 +110,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 let demoBalance = {{ demo.demo_balance|default(100) }};
 let demoPnl = {{ demo.demo_pnl|default(0) }};
@@ -156,8 +160,28 @@ function renderDemoHistory() {
     body.innerHTML = demoHistory.slice(0, 20).map(h => '<tr><td>' + h.time + '</td><td>' + h.strategy + '</td><td>' + h.signal + '</td><td style="color:' + (h.pnl >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' + (h.pnl >= 0 ? '+' : '') + h.pnl.toFixed(4) + '€</td></tr>').join('');
 }
 
-async function startAutoDemo() {
+function setAutoDemoState(running) {
+    const btn = document.getElementById('btn-demo-auto');
+    if (!btn) return;
+    if (running) {
+        btn.className = 'btn btn-danger btn-sm';
+        btn.textContent = '⏹ Стоп';
+    } else {
+        btn.className = 'btn btn-success btn-sm';
+        btn.textContent = '▶ Старт';
+    }
+}
+
+async function toggleAutoDemo() {
     const el = document.getElementById('auto-demo-status');
+    if (autoDemoInterval) {
+        clearInterval(autoDemoInterval);
+        autoDemoInterval = null;
+        setAutoDemoState(false);
+        el.textContent = '⏹ Авто-торговля остановлена.';
+        return;
+    }
+    setAutoDemoState(true);
     el.textContent = '⏳ Авто-торговля запущена (каждые 5 сек)...';
     autoDemoInterval = setInterval(async () => {
         try {
@@ -185,11 +209,6 @@ async function startAutoDemo() {
     }, 5000);
 }
 
-function stopAutoDemo() {
-    if (autoDemoInterval) { clearInterval(autoDemoInterval); autoDemoInterval = null; }
-    document.getElementById('auto-demo-status').textContent = '⏹ Авто-торговля остановлена.';
-}
-
 async function resetDemo() {
     if (!confirm('Сбросить демо-баланс до 100€?')) return;
     try {
@@ -201,6 +220,46 @@ async function resetDemo() {
         document.getElementById('demo-history-body').innerHTML = '<tr><td colspan="4" class="term-empty">Сделок пока нет</td></tr>';
     } catch(_) {}
 }
+
+async function loadDemoStatus() {
+    const box = document.getElementById('demo-status-box');
+    try {
+        const st = await (await fetch('/api/demo/status')).json();
+        try {
+            const hist = await (await fetch('/api/demo/history')).json();
+            const bal = await (await fetch('/api/demo/balance')).json();
+            if (typeof st.demo_balance !== 'undefined') {
+                demoBalance = Number(st.demo_balance);
+                demoPnl = Number(st.demo_pnl || 0);
+            } else if (typeof bal.balance !== 'undefined') {
+                demoBalance = Number(bal.balance);
+            }
+            const balEl = document.getElementById('demo-bal');
+            const pnlEl = document.getElementById('demo-pnl');
+            const trEl = document.getElementById('demo-trades');
+            if (balEl) balEl.textContent = demoBalance.toFixed(2) + '€';
+            if (pnlEl) { pnlEl.textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€'; pnlEl.style.color = demoPnl >= 0 ? 'var(--success)' : 'var(--danger)'; }
+            if (trEl) trEl.textContent = st.demo_trades_count || demoHistory.length || 0;
+            const tracks = (hist && hist.trades) || [];
+            const rows = tracks.slice(0, 20).map(t => '<tr><td>' + (t.created_at || '—') + '</td><td>' + (t.strategy || '—') + '</td><td>' + (t.signal || '—') + '</td><td style="color:' + (Number(t.pnl) >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' + (Number(t.pnl) >= 0 ? '+' : '') + Number(t.pnl).toFixed(4) + '€</td></tr>').join('');
+            const hb = document.getElementById('demo-history-body');
+            if (rows && hb) hb.innerHTML = rows;
+            box.innerHTML = ApiUI.statGrid([
+                { label: 'Режим', value: st.demo_active ? ApiUI.badge('DEMO 100€', 'ok') : ApiUI.badge('LIVE', 'bad') },
+                { label: 'Баланс', value: ApiUI.num(demoBalance) + '€', color: 'var(--success)' },
+                { label: 'Сделок', value: ApiUI.num(st.demo_trades_count || 0), color: 'var(--accent)' },
+                { label: 'P/L', value: (demoPnl >= 0 ? '+' : '') + ApiUI.num(demoPnl) + '€', color: ApiUI.signColor(demoPnl) }
+            ]);
+        } catch (e) {
+            box.innerHTML = ApiUI.statGrid([
+                { label: 'Режим', value: st.demo_active ? ApiUI.badge('DEMO 100€', 'ok') : ApiUI.badge('LIVE', 'bad') }
+            ]);
+        }
+    } catch (_) {
+        box.innerHTML = '<span style="color:var(--danger);">Не удалось получить статус демо-режима.</span>';
+    }
+}
+loadDemoStatus();
 
 // Timeframe buttons
 document.querySelectorAll('.term-tf-btn').forEach(btn => {

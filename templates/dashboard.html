@@ -3,124 +3,132 @@
 {% block breadcrumb %}Дашборд{% endblock %}
 
 {% block content %}
+<style>
+.dash{display:grid;gap:.85rem;min-width:0;max-width:100%}
+.dash *{min-width:0;max-width:100%}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:.75rem;min-width:0}
+.kpi .card{padding:1rem 1.1rem;margin:0;min-width:0;overflow-wrap:anywhere}
+.kpi .value{font-size:1.5rem;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;word-break:break-word;overflow-wrap:anywhere}
+.kpi .value small{font-size:.75rem;font-weight:600;opacity:.7;margin-left:.15rem}
+.kpi .label{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary);margin-top:.3rem}
+.kpi .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.35rem;vertical-align:middle}
+.dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;min-width:0}
+.dash-grid .card{min-width:0;overflow-wrap:anywhere}
+.quick{display:grid;gap:.45rem}
+.quick a{text-align:left;white-space:normal;overflow-wrap:anywhere}
+.conn{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.5rem .65rem;background:var(--bg-tertiary);border-radius:4px;font-size:.82rem}
+.conn .lbl{color:var(--text-secondary);flex-shrink:0;overflow-wrap:anywhere}
+.conn .val{font-weight:600;text-align:right;overflow-wrap:anywhere}
+@media(max-width:760px){.dash-grid{grid-template-columns:1fr}}
+</style>
+
 <div class="page-head">
     <div>
         <span class="eyebrow">Личный кабинет</span>
         <h1 class="page-title">Добро пожаловать, {{ username }}</h1>
-        <p class="lead">Обзор аккаунта, быстрые действия и статистика торговли.</p>
+        <p class="lead">Статистика, активность бота и быстрый доступ.</p>
     </div>
     <div class="hero-badge">
         <strong>{{ current_strategy|default('pure_harvester') }}</strong>
-        <span>{{ mode|default('demo')|upper }} · risk {{ risk_score|default(0) }}/60</span>
+        <span>
+            <span id="dash-mode-badge" class="{% if demo.demo_active %}term-demo-badge on{% endif %}" style="{% if not demo.demo_active %}opacity:.85{% endif %}">
+                {% if demo.demo_active %}DEMO{% else %}LIVE{% endif %}
+            </span>
+            · risk {{ risk_score|default(0) }}/60
+        </span>
     </div>
 </div>
 
-{% if message %}<div class="message success">{{ message }}</div>{% endif %}
+{% if message %}<div class="message success"></div>{% endif %}
 
-<div class="feature-grid" style="margin-bottom:1.1rem;">
-    <div class="card" style="background:linear-gradient(180deg, rgba(240,185,11,.14), rgba(22,26,30,.96));border-color:rgba(240,185,11,.35);">
-        <div class="eyebrow">Баланс</div>
-        <div class="stat-value" style="font-size:1.8rem;color:var(--primary);">{{ '%.2f'|format(wallet.credits) }} CMSC</div>
-        <p class="lead">Лицензии, плагин-покупки и внутренний платежный контур.</p>
-    </div>
-    <div class="card">
-        <div class="eyebrow">Демо</div>
-        <div class="stat-value" style="font-size:1.8rem;">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div>
-        <p class="lead">Сделки на реальных рыночных данных без реального риска.</p>
-    </div>
-    <div class="card">
-        <div class="eyebrow">Риск</div>
-        <div class="stat-value" style="font-size:1.8rem;color:{% if risk_score|default(0) <= 40 %}var(--success){% elif risk_score|default(0) <= 60 %}var(--warning){% else %}var(--danger){% endif %};">{{ risk_score|default(0) }}/60</div>
-        <p class="lead">Лимит запуска и блокировки живой торговли.</p>
-    </div>
-    <div class="card">
-        <div class="eyebrow">Бот</div>
-        <div class="stat-value" style="font-size:1.4rem;">{{ bot_runtime.lifecycle|default('STOPPED') }}</div>
-        <p class="lead">Фоновый runtime, журнал и защита kill switch.</p>
-    </div>
-</div>
+<div class="dash">
 
-<!-- Stats Row -->
-<div class="stat-grid" style="margin-bottom:1.5rem;">
-    <div class="card stat-tile">
-        <div class="stat-value text-primary" style="color:var(--primary);">{{ '%.2f'|format(wallet.credits) }}</div>
-        <div class="stat-label">CMSC Баланс</div>
-    </div>
-    <div class="card stat-tile">
-        <div class="stat-value {% if demo.demo_pnl|default(0) >= 0 %}text-success{% else %}text-danger{% endif %}">{{ '%.2f'|format(demo.demo_balance|default(100)) }}€</div>
-        <div class="stat-label">Демо Баланс</div>
-    </div>
-    <div class="card stat-tile">
-        <div class="stat-value">{{ memories|length }}</div>
-        <div class="stat-label">Тестов</div>
-    </div>
-    <div class="card stat-tile">
-        <div class="stat-value" style="color:{% if wallet.exchange_provider %}var(--success){% else %}var(--text-muted){% endif %};">{% if wallet.exchange_provider %}✓{% else %}—{% endif %}</div>
-        <div class="stat-label">{{ wallet.exchange_provider or 'Биржа не подключена' }}</div>
-    </div>
-    <div class="card stat-tile">
-        <div class="stat-value" id="bot-status-val" style="font-size:.9rem;">{% if bot_active %}🟢 ON{% else %}🔴 OFF{% endif %}</div>
-        <div class="stat-label">Бот</div>
-    </div>
-</div>
-
-<!-- Main Grid -->
-<div class="grid">
-    <!-- Bot Activity -->
-    <div class="card">
-        <h2>🤖 Активность бота</h2>
-        <div id="dash-bot-activity" style="max-height:300px;overflow-y:auto;font-size:.82rem;">
-            <div class="term-empty">Загрузка...</div>
+    <!-- KPI row -->
+    <div class="kpi">
+        <div class="card">
+            <div class="value" style="color:var(--primary);">{{ '%.2f'|format(wallet.credits) }}<small>CMSC</small></div>
+            <div class="label">Баланс</div>
+        </div>
+        <div class="card">
+            <div class="value">{{ '%.2f'|format(demo.demo_balance|default(100)) }}<small>€</small></div>
+            <div class="label">Демо баланс</div>
+        </div>
+        <div class="card">
+            <div class="value" style="color:{% if demo.demo_pnl|default(0) >= 0 %}var(--success){% else %}var(--danger){% endif %};">{{ '%+.2f'|format(demo.demo_pnl|default(0)) }}<small>€</small></div>
+            <div class="label">P/L демо</div>
+        </div>
+        <div class="card">
+            <div class="value" style="font-size:1.25rem;color:{% if risk_score|default(0) <= 40 %}var(--success){% elif risk_score|default(0) <= 60 %}var(--warning){% else %}var(--danger){% endif %};">{{ risk_score|default(0) }}/60</div>
+            <div class="label">Риск</div>
+        </div>
+        <div class="card">
+            <div class="value" style="font-size:1.25rem;" id="bot-status-val">
+                <span class="status-dot" style="background:{% if bot_active %}var(--success){% else %}var(--danger){% endif %};"></span>{% if bot_active %}ON{% else %}OFF{% endif %}
+            </div>
+            <div class="label" id="bot-lifecycle-label">{{ bot_runtime.lifecycle|default('STOPPED')|upper }}</div>
         </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="card">
-        <h2>⚡ Быстрый доступ</h2>
-        <div class="quick-actions">
-            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('bot_management') }}">🤖 Управление ботом</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('manual_trading') }}">📈 Терминал</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('copy_trading_page') }}">👥 Копитрейдинг</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('strategies_page') }}">🧬 Стратегии</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('demo_page') }}">🎯 Демо-торговля</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('marketplace') }}">🏪 Маркетплейс</a>
-            <a class="btn btn-outline btn-sm btn-block" href="{{ url_for('settings') }}">⚙️ Настройки</a>
+    <!-- Main grid -->
+    <div class="dash-grid">
+        <!-- Bot activity -->
+        <div class="card" style="margin:0;">
+            <h2>🤖 Активность бота</h2>
+            <div id="dash-bot-activity" style="max-height:260px;overflow-y:auto;font-size:.82rem;">
+                <div class="term-empty">
+                    {% if bot_runtime.trade_count %}Сделок: {{ bot_runtime.trade_count }} · P/L: {{ '%.4f'|format(bot_runtime.total_pnl) }}€{% else %}Бот не активен{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="card" style="margin:0;">
+            <h2>⚡ Быстрый доступ</h2>
+            <div class="quick">
+                <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('bot_management') }}">🤖 Управление ботом</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('manual_trading') }}">📈 Терминал</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('copy_trading_page') }}">👥 Копитрейдинг</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('strategies_page') }}">🧬 Стратегии</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('demo_page') }}">🎯 Демо-торговля</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{{ url_for('marketplace') }}">🏪 Маркетплейс</a>
+                <a class="btn btn-outline btn-sm btn-block" href="{{ url_for('settings') }}">⚙️ Настройки</a>
+            </div>
+        </div>
+
+        <!-- Connections -->
+        <div class="card" style="margin:0;">
+            <h2>🔗 Подключения</h2>
+            <div style="display:flex;flex-direction:column;gap:.5rem;">
+                <div class="conn">
+                    <span class="lbl">Биржа</span>
+                    <span class="val" style="color:{% if wallet.exchange_provider %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.exchange_provider or 'Не подключена' }}</span>
+                </div>
+                <div class="conn">
+                    <span class="lbl">Кошелёк</span>
+                    <span class="val" style="color:{% if wallet.provider %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.provider or 'Не подключён' }}</span>
+                </div>
+                <div class="conn">
+                    <span class="lbl">Telegram</span>
+                    <span class="val" style="color:{% if wallet.telegram %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.telegram or 'Не подключён' }}</span>
+                </div>
+            </div>
+            <a class="btn btn-outline btn-sm btn-block" style="margin-top:.75rem;" href="{{ url_for('settings') }}">Настроить подключения</a>
+        </div>
+
+        <!-- AI Assistant -->
+        <div class="card" style="margin:0;">
+            <h2>🧠 ИИ-ассистент</h2>
+            <p class="muted" style="font-size:.8rem;margin-bottom:.75rem;">Анализ стратегий и рыночных данных.</p>
+            <div id="chat-history" style="max-height:150px;overflow-y:auto;margin-bottom:.5rem;font-size:.8rem;"></div>
+            <form id="chat-form">
+                <textarea id="chat-message" style="height:52px;resize:vertical;font-size:.82rem;" required placeholder="Какую стратегию протестировать?"></textarea>
+                <button class="btn btn-sm btn-block" style="margin-top:.35rem;">Отправить</button>
+            </form>
         </div>
     </div>
 
-    <!-- AI Assistant -->
-    <div class="card">
-        <h2>🧠 ИИ-ассистент</h2>
-        <p class="muted" style="font-size:.8rem;margin-bottom:.75rem;">Чат для анализа стратегий и рыночных данных.</p>
-        <div id="chat-history" style="max-height:200px;overflow-y:auto;margin-bottom:.5rem;font-size:.8rem;"></div>
-        <form id="chat-form">
-            <textarea id="chat-message" style="height:60px;resize:vertical;font-size:.82rem;" required placeholder="Какую стратегию протестировать?"></textarea>
-            <button class="btn btn-sm btn-block" style="margin-top:.35rem;">Отправить</button>
-        </form>
-    </div>
-
-    <!-- Exchange Info -->
-    <div class="card">
-        <h2>🔗 Подключения</h2>
-        <div style="display:flex;flex-direction:column;gap:.5rem;">
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">
-                <span style="font-size:.82rem;color:var(--text-secondary);">Биржа</span>
-                <span style="font-size:.82rem;font-weight:600;color:{% if wallet.exchange_provider %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.exchange_provider or 'Не подключена' }}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">
-                <span style="font-size:.82rem;color:var(--text-secondary);">Кошелёк</span>
-                <span style="font-size:.82rem;font-weight:600;color:{% if wallet.provider %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.provider or 'Не подключён' }}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">
-                <span style="font-size:.82rem;color:var(--text-secondary);">Telegram</span>
-                <span style="font-size:.82rem;font-weight:600;color:{% if wallet.telegram %}var(--success){% else %}var(--text-muted){% endif %};">{{ wallet.telegram or 'Не подключён' }}</span>
-            </div>
-        </div>
-        <a class="btn btn-outline btn-sm btn-block" style="margin-top:.75rem;" href="{{ url_for('settings') }}">Настроить подключения</a>
-    </div>
-
-    <!-- Activity History -->
-    <div class="card" style="grid-column:1/-1;">
+    <!-- Activity history -->
+    <div class="card" style="margin:0;">
         <h2>📊 История активности</h2>
         <div class="table-wrap">
             <table>
@@ -140,7 +148,9 @@
             </table>
         </div>
     </div>
+
 </div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -163,33 +173,42 @@ document.getElementById('chat-form')?.addEventListener('submit', async (e) => {
         const resp = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:msg})});
         const data = await resp.json();
         addMsg('Бот', resp.ok ? data.answer : (data.detail || 'Ошибка'));
-    } catch(e) { addMsg('Бот', 'Ошибка соединения'); }
+    } catch(_) { addMsg('Бот', 'Ошибка соединения'); }
 });
 
-async function loadBotActivity() {
+function renderActivity(activity) {
+    const el = document.getElementById('dash-bot-activity');
+    if (!el) return;
+    if (activity && activity.length) {
+        el.innerHTML = activity.map(a =>
+            `<div style="padding:.45rem;border-bottom:1px solid var(--border);">` +
+            `<div style="display:flex;justify-content:space-between;align-items:center;">` +
+            `<span style="font-weight:600;font-size:.8rem;">${a.event || '—'}</span>` +
+            `<span style="font-size:.66rem;color:var(--text-muted);">${(a.time||'').substring(11,19)}</span>` +
+            `</div>` +
+            `<div style="color:var(--text-secondary);font-size:.76rem;margin-top:.15rem;">${a.detail || a.strategy || ''}</div>` +
+            `</div>`).join('');
+    } else {
+        el.innerHTML = '<div class="term-empty">Бот не активен</div>';
+    }
+}
+
+async function loadBotStatus() {
     try {
         const resp = await fetch('/api/bot/status');
         if (!resp.ok) return;
         const data = await resp.json();
-        const el = document.getElementById('dash-bot-activity');
         const statusEl = document.getElementById('bot-status-val');
-        if (statusEl) statusEl.innerHTML = data.active ? '🟢 ON' : '🔴 OFF';
-        if (data.activity_log && data.activity_log.length) {
-            el.innerHTML = data.activity_log.map(a =>
-                `<div style="padding:.5rem;border-bottom:1px solid var(--border);">` +
-                `<div style="display:flex;justify-content:space-between;align-items:center;">` +
-                `<span style="font-weight:600;font-size:.82rem;">${a.event || '—'}</span>` +
-                `<span style="font-size:.68rem;color:var(--text-muted);">${(a.time||'').substring(11,19)}</span>` +
-                `</div>` +
-                `<div style="color:var(--text-secondary);font-size:.78rem;margin-top:.15rem;">${a.detail || a.strategy || ''}</div>` +
-                `</div>`
-            ).join('');
-        } else {
-            el.innerHTML = '<div class="term-empty">Бот не активен</div>';
-        }
+        const flowEl = document.getElementById('bot-lifecycle-label');
+        const active = !!data.active;
+        if (statusEl) statusEl.innerHTML =
+            `<span class="status-dot" style="background:${active ? 'var(--success)' : 'var(--danger)'};"></span>${active ? 'ON' : 'OFF'}`;
+        if (flowEl && data.lifecycle) flowEl.textContent = String(data.lifecycle).toUpperCase();
+        if (data.activity_log) renderActivity(data.activity_log);
     } catch(_) {}
 }
-loadBotActivity();
-setInterval(loadBotActivity, 8000);
+
+loadBotStatus();
+setInterval(loadBotStatus, 8000);
 </script>
 {% endblock %}

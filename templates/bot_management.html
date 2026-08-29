@@ -263,10 +263,43 @@
     </form>
     <div id="user-strategies" style="font-size:.82rem;"></div>
 </div>
+
+<!-- Brain / Config / Memory / Generation status -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:.85rem;margin-top:1rem;">
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+            <h2 style="margin:0;">🧠 Мозг бота</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadBotBrain()">Обновить</button>
+        </div>
+        <div id="bot-brain" style="font-size:.82rem;max-height:260px;overflow-y:auto;"><div class="term-empty">Загрузка…</div></div>
+    </div>
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+            <h2 style="margin:0;">⚙️ Конфигурация</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadBotConfig()">Обновить</button>
+        </div>
+        <div id="bot-config" style="font-size:.82rem;max-height:260px;overflow-y:auto;"><div class="term-empty">Загрузка…</div></div>
+    </div>
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+            <h2 style="margin:0;">💾 Память и примеры</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadBotMemory()">Обновить</button>
+        </div>
+        <div id="bot-memory" style="font-size:.82rem;max-height:260px;overflow-y:auto;"><div class="term-empty">Загрузка…</div></div>
+    </div>
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+            <h2 style="margin:0;">⏳ Прогресс генерации</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadGenStatus()">Обновить</button>
+        </div>
+        <div id="bot-gen-status" style="font-size:.82rem;"><div class="term-empty">Загрузка…</div></div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
+<script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 const STRATEGY_PARAMS = {
     pure_harvester: {
@@ -590,5 +623,109 @@ setInterval(loadBotMarket, 15000);
 setInterval(loadBotTrades, 10000);
 pollBotStatus();
 setInterval(pollBotStatus, 5000);
+
+/* ── Дополнительные панели: мозг / конфиг / память / генерация ── */
+function objCard(title, obj, tone) {
+    return '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin:.4rem 0;overflow:hidden;">' +
+        '<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;background:var(--bg-tertiary);border-bottom:1px solid var(--border);">' +
+        '<span style="font-size:.7rem;font-weight:700;color:var(--text);">' + ApiUI.esc(title) + '</span>' +
+        (tone ? '<span style="margin-left:auto;">' + tone + '</span>' : '') + '</div>' + ApiUI.kv(obj) + '</div>';
+}
+async function loadBotBrain() {
+    const el = document.getElementById('bot-brain');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/bot/brain');
+        if (!r.ok) throw new Error('Нет доступа');
+        const d = await r.json();
+        const hist = Array.isArray(d.history) ? d.history : [];
+        el.innerHTML =
+            ApiUI.statGrid([
+                { label: 'Действий в памяти', value: ApiUI.num(d.actions ?? 0), color: 'var(--primary)' },
+                { label: 'Записей истории', value: ApiUI.num(hist.length), sub: 'последние' }
+            ]) +
+            (hist.length
+                ? '<div style="margin-top:.6rem;">' + hist.slice(0, 20).map(h => objCard('Запись · ' + ApiUI.time(h.time), h)).join('') + '</div>'
+                : '<div class="term-empty" style="margin-top:.6rem;">История пуста</div>');
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить мозг бота.</span>'; }
+}
+async function loadBotConfig() {
+    const el = document.getElementById('bot-config');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/bot/config');
+        if (!r.ok) throw new Error('Нет доступа');
+        const d = await r.json();
+        const cfg = d.config || {};
+        el.innerHTML =
+            '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">' +
+            ApiUI.badge('Стратегия', 'info') + '<span style="font-weight:700;font-size:.9rem;">' + ApiUI.esc(d.strategy || '—') + '</span></div>' +
+            ApiUI.statGrid([
+                { label: 'Комиссия', value: ApiUI.pct(cfg.fee_rate), color: 'var(--warning)', sub: 'fee_rate' },
+                { label: 'Плечо', value: ApiUI.num(cfg.leverage) + 'x', color: 'var(--accent)', sub: 'leverage' },
+                { label: 'Риск', value: ApiUI.pct(cfg.risk_tolerance), color: 'var(--danger)', sub: 'risk_tolerance' }
+            ]) +
+            '<div style="margin-top:.6rem;">' + ApiUI.kv(cfg) + '</div>';
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить конфигурацию.</span>'; }
+}
+async function loadBotMemory() {
+    const el = document.getElementById('bot-memory');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/bot/memory');
+        if (!r.ok) throw new Error('Нет доступа');
+        const d = await r.json();
+        const used = Array.isArray(d.strategies_used) ? d.strategies_used : [];
+        el.innerHTML =
+            ApiUI.statGrid([
+                { label: 'Всего сделок', value: ApiUI.num(d.total_trades ?? 0), color: 'var(--accent)' },
+                { label: 'Средний P/L', value: ApiUI.num(d.avg_pnl, 4) + '€', color: ApiUI.signColor(d.avg_pnl) },
+                { label: 'Винрейт', value: (d.win_rate * 100).toFixed(1) + '%', color: ApiUI.signColor((d.win_rate || 0) - 0.5) }
+            ]) +
+            (used.length ? '<div style="margin-top:.6rem;display:flex;flex-wrap:wrap;gap:.35rem;">' + used.map(s => '<span class="api-chip">' + ApiUI.esc(s) + '</span>').join('') + '</div>' : '') +
+            (d.best_trade ? '<div style="margin-top:.6rem;">' + objCard('Лучшая сделка', d.best_trade, ApiUI.badge('+', 'ok')) + '</div>' : '') +
+            (d.worst_trade ? objCard('Худшая сделка', d.worst_trade, ApiUI.badge('−', 'bad')) : '');
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить память.</span>'; }
+}
+async function loadGenStatus() {
+    const el = document.getElementById('bot-gen-status');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/bot/generation-status');
+        if (!r.ok) throw new Error('Нет доступа');
+        const d = await r.json();
+        const log = Array.isArray(d.recent_log) ? d.recent_log : [];
+        const summary = log.filter(x => x && ('candidates' in x));
+        const items = log.filter(x => x && !('candidates' in x));
+        el.innerHTML =
+            ApiUI.statGrid([
+                { label: 'Сгенерировано', value: ApiUI.num(d.generated_count ?? 0), color: 'var(--primary)' },
+                { label: 'Опубликовано', value: ApiUI.num(d.published_count ?? 0), color: 'var(--success)' }
+            ]) +
+            (summary.length ? '<div style="margin-top:.6rem;">' + ApiUI.statGrid((function (s) {
+                return [
+                    { label: 'Кандидатов', value: ApiUI.num(s.candidates), color: 'var(--accent)' },
+                    { label: 'Победителей', value: ApiUI.num(s.winners), color: 'var(--success)' },
+                    { label: 'Лучшая доходность', value: ApiUI.pct(s.best_return, 1), color: ApiUI.signColor(s.best_return) }
+                ];
+            })(summary[summary.length - 1])) + '</div>' : '') +
+            (items.length
+                ? '<div style="margin-top:.6rem;">' + ApiUI.table(
+                    ['Время', 'Стратегия', 'Доходность', 'Винрейт', 'Статус'],
+                    items.slice(0, 20).map(x => [
+                        ApiUI.cellTime(x.time),
+                        { html: '<span style="font-weight:600;">' + ApiUI.esc(x.name || '—') + '</span>' },
+                        ApiUI.cellColored(x.return),
+                        ApiUI.cellPct(x.win_rate),
+                        { html: x.action === 'published' ? ApiUI.badge('Опубликована', 'ok') : ApiUI.badge(x.action || '—', 'info') }
+                    ])
+                ) + '</div>'
+                : '');
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось получить статус генерации.</span>'; }
+}
+loadBotBrain();
+loadBotConfig();
+loadBotMemory();
+loadGenStatus();
 </script>
 {% endblock %}

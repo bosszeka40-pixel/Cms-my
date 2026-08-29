@@ -144,7 +144,7 @@
     <h2>🎯 Демо-режим</h2>
     <p class="muted" style="font-size:.82rem;margin-bottom:.75rem;">Демо работает на реальных данных live. Баланс: 100€.</p>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-        <form method="post"><input type="hidden" name="action" value="toggle_demo"><input type="hidden" name="demo_active" value="{{ 'off' if demo.demo_active else 'on' }}"><button class="btn btn-sm {% if demo.demo_active %}btn-danger{% else %}btn-success{% endif %}" type="submit">{{ 'Отключить демо' if demo.demo_active else 'Включить демо' }}</button></form>
+        <form method="post"><input type="hidden" name="action" value="toggle_demo"><input type="hidden" name="active" value="{% if demo.demo_active %}false{% else %}true{% endif %}"><button class="btn btn-sm {% if demo.demo_active %}btn-danger{% else %}btn-success{% endif %}" type="submit">{{ 'Отключить демо' if demo.demo_active else 'Включить демо' }}</button></form>
         <form method="post"><input type="hidden" name="action" value="reset_demo"><button class="btn btn-outline btn-sm" type="submit">Сбросить баланс (100€)</button></form>
     </div>
 </div>
