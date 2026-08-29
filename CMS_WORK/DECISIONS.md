@@ -10,3 +10,4 @@
 8. Helper tools may work in parallel on separate boundaries; conflicting edits must be reconciled before closure.
 9. Work-state documents for this phase live in `CMS_WORK/` so the project can be recovered without chat history.
 10. Server deployment/testing must produce a persistent error log that is tracked in `CMS_WORK/ERRORS.md` when available.
+11. (2026-08-29) UI-полировка выполняется ТОЛЬКО в `templates/*` + `static/*` единым модулем `static/api_render.js`; backend и системные файлы не изменяются. Данные — из существующих API через fetch; формы ответов сверяются с реальными ответами сервера перед рендером.
