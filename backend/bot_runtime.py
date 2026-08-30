@@ -56,6 +56,7 @@ class BotRuntime:
             "bot_mode": "strategy",
         }
         self._last_market_info = None
+        self._last_signal_hour = None
 
     def _kill_switch_active(self):
         try:
@@ -276,6 +277,8 @@ class BotRuntime:
             price_change = (price - prev_price) / prev_price * 100
         else:
             price_change = candle_feat.get("momentum_1h", 0.0)
+        # горизонт сигнала — часовой ход (движение, которое предсказывает сигнал)
+        realized_move = float(candle_feat.get("momentum_1h") or price_change)
 
         # 2) рыночная информация бота: реальные данные выбранной биржи/пары/режима
         from .main import _exchange_fee_rate
@@ -322,13 +325,17 @@ class BotRuntime:
             return
 
         if bot_mode == "full_auto":
+            # один сигнал в час: не дублировать одну и ту же часовую сделку каждые 15 секунд
+            hour_key = time.strftime("%Y-%m-%d-%H", time.gmtime())
+            if getattr(self, "_last_signal_hour", None) == hour_key:
+                self._emit("skip", f"{pair} {exchange} bot=автономный · сигнал этого часа уже закрыт (cooldown)")
+                return
             # бот самостоятельно: сам решает когда действовать, сам оценивает результат
-            result = self._autonomous_tick(sentiment, price_change, balance, leverage, fee_rate)
+            result = self._autonomous_tick(sentiment, realized_move, balance, leverage, fee_rate)
             if result["signal"] in ("KEEP", "FLAT", "HOLD"):
-                if self.learner and vector is not None:
-                    self.learner.update(vector, 0.0)
                 self._emit("skip", f"{pair} {exchange} bot=автономный · sentiment={round(sentiment, 4)} — бездействие (низкая уверенность)")
                 return
+            self._last_signal_hour = hour_key
         else:
             result = self.strategy_manager.execute(
                 sentiment, price_change, balance, fee_rate=fee_rate, leverage=leverage, strategy=strategy
@@ -353,6 +360,7 @@ class BotRuntime:
             "strategy": result["strategy"],
             "entry_price": price,
             "price_change": round(price_change, 4),
+            "realized_move": round(realized_move, 4),
             "sentiment": round(sentiment, 4),
             "pnl": round(pnl, 4),
             "balance": round(net, 2),
