@@ -58,6 +58,18 @@
     async function fetchBook(pair, exchange, opts) {
         const target = document.getElementById(opts.containerId);
         if (!target) return;
+        // 1) прямое публичное API биржи из браузера (не грузим наш сервер)
+        if (typeof ExchangeFeed !== 'undefined' && ExchangeFeed.supported && ExchangeFeed.supported(exchange)) {
+            const nativeId = window.__nativeId && window.__nativeId(exchange, pair);
+            if (nativeId) {
+                try {
+                    const book = await ExchangeFeed.orderBook(exchange, nativeId, 12);
+                    render(book, target);
+                    return;
+                } catch (_) { /* fallback */ }
+            }
+        }
+        // 2) серверный фолбек (данные всё равно с биржи через ccxt)
         try {
             const r = await fetch('/api/market/orderbook?pair=' + encodeURIComponent(pair) + '&exchange=' + encodeURIComponent(exchange) + '&limit=12', { headers: { 'Accept': 'application/json' } });
             if (!r.ok) throw new Error('HTTP ' + r.status);

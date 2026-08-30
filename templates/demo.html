@@ -75,6 +75,9 @@
                     <input id="demo-amount" type="number" value="10" step="1" min="1">
                 </div>
                 <div class="term-field">
+                    <div id="oc-demo"></div>
+                </div>
+                <div class="term-field">
                     <label>Биржа</label>
                     <select id="demo-exchange">
                         {% for ex in trading_exchanges %}<option value="{{ ex }}">{{ ex }}</option>{% endfor %}
@@ -133,6 +136,8 @@
 <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
 <script src="{{ url_for('static', filename='orderbook_panel.js') }}"></script>
+<script src="{{ url_for('static', filename='exchange_feed.js') }}"></script>
+<script src="{{ url_for('static', filename='order_converter.js') }}"></script>
 <script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 let demoBalance = {{ demo.demo_balance|default(100) }};
@@ -144,11 +149,13 @@ function setDemoSide(side) {
     document.getElementById('demo-side').value = side;
     document.getElementById('demo-side-buy').style.opacity = side === 'buy' ? '1' : '.4';
     document.getElementById('demo-side-sell').style.opacity = side === 'sell' ? '1' : '.4';
+    if (window.demoConv && typeof window.demoConv.setSide === 'function') window.demoConv.setSide(side);
 }
 
 document.getElementById('demo-trade-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const resultEl = document.getElementById('demo-result');
+    const oc = window.demoConv ? window.demoConv.getState() : null;
     try {
         const resp = await fetch('/api/demo/trade', {
             method: 'POST',
@@ -158,9 +165,12 @@ document.getElementById('demo-trade-form').addEventListener('submit', async (e) 
                 strategy: document.getElementById('demo-strategy').value,
                 sentiment: parseFloat(document.getElementById('demo-sentiment').value),
                 price_change: parseFloat(document.getElementById('demo-change').value),
+                side: document.getElementById('demo-side').value,
                 exchange: document.getElementById('demo-exchange').value,
                 market_mode: document.getElementById('demo-mode').value,
-                leverage: parseFloat(document.getElementById('demo-leverage').value) || 1
+                leverage: parseFloat(document.getElementById('demo-leverage').value) || 1,
+                ...(oc && oc.value ? {unit: oc.unit, value: oc.value}
+                                  : {amount: parseFloat(document.getElementById('demo-amount').value) || 10})
             })
         });
         const data = await resp.json();
@@ -171,10 +181,18 @@ document.getElementById('demo-trade-form').addEventListener('submit', async (e) 
             document.getElementById('demo-pnl').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
             document.getElementById('demo-pnl').style.color = demoPnl >= 0 ? 'var(--success)' : 'var(--danger)';
             document.getElementById('demo-trades').textContent = parseInt(document.getElementById('demo-trades').textContent || '0') + 1;
+            let convNote = '';
+            if (data.conversion && data.conversion.effective_amount_eur != null) {
+                const c = data.conversion;
+                const rate = (c.rate && (c.rate.bid || c.rate.ask)) ? (data.side === 'sell' ? c.rate.bid : c.rate.ask) : null;
+                convNote = ' | конвертация: ' + (c.value || 0) + ' ' + (c.unit === 'base' ? (c.base || '') : c.unit === 'eur' ? 'EUR' : (c.quote || c.unit)) +
+                    ' = ' + c.effective_amount_eur + '€' + (rate ? ' (ставка ' + rate + ')' : '');
+            }
             resultEl.innerHTML = '<span style="color:var(--success);">✓ ' + data.strategy + ' | P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€ | Сигнал: ' + (data.signal > 0 ? 'BUY' : 'SELL') + '</span>' +
-                (data.market_mode ? '<div style="font-size:.7rem;color:var(--text-muted);margin-top:.25rem;">' + data.exchange + ' · ' + data.market_mode + ' · плечо ' + data.leverage + 'x · комиссия ' + ((data.fee_rate || 0) * 100).toFixed(3) + '%</div>' : '');
+                '<div style="font-size:.7rem;color:var(--text-muted);margin-top:.25rem;">' + data.exchange + ' · ' + data.market_mode + ' · плечо ' + data.leverage + 'x · комиссия ' + ((data.fee_rate || 0) * 100).toFixed(3) + '%' + convNote + '</div>';
             demoHistory.unshift({time: new Date().toLocaleTimeString(), strategy: data.strategy, signal: data.signal > 0 ? 'BUY' : 'SELL', pnl: data.pnl});
             renderDemoHistory();
+            if (oc) window.demoConv && window.demoConv.refresh();
         } else {
             resultEl.innerHTML = '<span style="color:var(--danger);">Ошибка: ' + (data.detail||'неизвестная') + '</span>';
         }
@@ -310,6 +328,40 @@ const pairEl = document.getElementById('test-pair');
 const exchangeEl = document.getElementById('demo-exchange');
 let currentTf = '1h';
 
+/* Конвертер терминала: сумма в USDT/EUR/монетах ⇄ количество монет */
+let demoConv = null;
+if (typeof OrderConverter !== 'undefined') {
+    demoConv = OrderConverter.create({
+        host: 'oc-demo',
+        pair: () => pairEl.value,
+        exchange: () => exchangeEl.value,
+        mode: () => document.getElementById('demo-mode').value,
+        side: () => document.getElementById('demo-side').value,
+        leverage: () => parseFloat(document.getElementById('demo-leverage').value) || 1,
+        balance: () => demoBalance,
+        onPairList: (pairs, meta) => {
+            if (meta && meta.pairs) {
+                const map = {};
+                meta.pairs.forEach(p => map[p.pair] = p.id);
+                window.__setNativePairs(meta.exchange, map);
+            }
+            if (pairs && pairs.length && pairEl.options.length !== pairs.filter(p => p.active !== false).length && pairs.filter(p => p.active !== false).length) {
+                const avail = pairs.filter(p => p.active !== false).map(p => p.pair);
+                const keep = pairEl.value;
+                pairEl.innerHTML = avail.map(p => `<option value="${p}">${p}</option>`).join('');
+                if (!avail.includes(keep)) pairEl.value = avail[0];
+                pairEl.dispatchEvent(new Event('change'));
+            } else {
+                loadChartData(pairEl.value, exchangeEl.value, currentTf);
+                syncOrderBook();
+                refreshMarketHeader();
+                if (demoConv) demoConv.refresh();
+            }
+        }
+    });
+    window.demoConv = demoConv;
+}
+
 function reloadChart() {
     loadChartData(pairEl.value, exchangeEl.value, currentTf);
 }
@@ -343,9 +395,13 @@ document.querySelectorAll('.term-tf-btn').forEach(btn => {
 
 pairEl.addEventListener('change', () => {
     reloadChart(); syncOrderBook(); refreshMarketHeader();
+    if (demoConv) demoConv.refresh();
 });
 exchangeEl.addEventListener('change', () => {
     syncOrderBook(); refreshMarketHeader();
+    if (demoConv) demoConv.exchangeChanged();
 });
+document.getElementById('demo-mode').addEventListener('change', () => { if (demoConv) demoConv.refresh(); });
+document.getElementById('demo-leverage').addEventListener('input', () => { if (demoConv) demoConv.refresh(); });
 </script>
 {% endblock %}

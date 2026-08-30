@@ -254,11 +254,62 @@
     return rows;
   }
 
+  /* ---- Прямой стакан (order book) с биржи. Возвращает { bids, asks } — массивы [price, qty].
+   * bids по убыванию цены, asks по возрастанию; первый элемент = лучший уровень. ---- */
+  const BOOK_CONF = {
+    binance: {
+      url: (id, lim) => `https://api.binance.com/api/v3/depth?symbol=${encodeURIComponent(id)}&limit=${lim}`,
+      parse: (j) => ({ bids: (j.bids || []).map(([p, v]) => [parseFloat(p), parseFloat(v)]), asks: (j.asks || []).map(([p, v]) => [parseFloat(p), parseFloat(v)]) })
+    },
+    bybit: {
+      url: (id, lim) => `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${encodeURIComponent(id)}&limit=${lim}`,
+      parse: (j) => ({
+        bids: (((j.result || {}).b) || []).map((r) => [parseFloat(r.price), parseFloat(r.size)]),
+        asks: (((j.result || {}).a) || []).map((r) => [parseFloat(r.price), parseFloat(r.size)])
+      })
+    },
+    okx: {
+      url: (id, lim) => `https://www.okx.com/api/v5/market/books?instId=${encodeURIComponent(id)}&sz=${Math.min(lim, 50)}`,
+      parse: (j) => {
+        const d = (j.data && j.data[0]) || {};
+        return { bids: (d.bids || []).map(([p, v]) => [parseFloat(p), parseFloat(v)]), asks: (d.asks || []).map(([p, v]) => [parseFloat(p), parseFloat(v)]) };
+      }
+    },
+    bitfinex: {
+      // book: [[px, count, amount], ...]; count > 0 — bid, count < 0 — ask
+      url: (id, lim) => `https://api-pub.bitfinex.com/v2/book/${encodeURIComponent(id)}/P0?len=${Math.min(lim, 100)}`,
+      parse: (j) => {
+        const rows = (j || []).map((r) => [Number(r[0]), Math.abs(Number(r[2]))]);
+        return { bids: rows.filter((_, i) => j[i][1] > 0), asks: rows.filter((_, i) => j[i][1] < 0).slice().reverse() };
+      }
+    },
+    pionex: {
+      url: (id, lim) => `https://api.pionex.com/api/v1/market/orderbook?symbol=${encodeURIComponent(id)}&limit=${lim}`,
+      parse: (j) => {
+        const d = (j.data || {});
+        return {
+          bids: (d.bids || []).map(([p, v]) => [parseFloat(p), parseFloat(v)]).sort((a, b) => b[0] - a[0]),
+          asks: (d.asks || []).map(([p, v]) => [parseFloat(p), parseFloat(v)]).sort((a, b) => a[0] - b[0])
+        };
+      }
+    }
+  };
+
+  async function orderBook(exchange, symbol, limit) {
+    const cfg = BOOK_CONF[exchange];
+    if (!symbol || !cfg) throw new Error(exchange + ' direct orderbook недоступен');
+    const lim = Math.max(5, Math.min(parseInt(limit) || 12, 50));
+    const data = cfg.parse(await get(cfg.url(symbol, lim)));
+    if (!data.bids.length || !data.asks.length) throw new Error('пустой стакан ' + exchange + ' ' + symbol);
+    return data;
+  }
+
   global.ExchangeFeed = {
     supported,
     directTicker,
     directLast,
     directPreview,
-    klines
+    klines,
+    orderBook
   };
 })(window);
