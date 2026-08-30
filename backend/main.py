@@ -22,6 +22,17 @@ from .bot_runtime import BotRuntime
 from .cms_core import CMSEngine
 from .hft_brain import CMSProductionHFTBot
 from .modules.strategy_manager import StrategyManager
+from .modules.bot_learner import OnlineSignalLearner
+from .modules.order_book import (
+    fetch_order_book_snapshot as _fetch_depth,
+    depth_features as _depth_metrics,
+    merge_features as _merge_depth,
+)
+from .modules.market_features import (
+    candle_features as _candle_features,
+    feature_vector as _feature_vector,
+    heuristic_sentiment as _heuristic_sentiment,
+)
 from .simple_cache import cached_fetch, cached_get
 from .market_history import (
     ensure_table, load_candles, refresh_candles, load_history, refresh_history,
@@ -116,7 +127,8 @@ production_bot = CMSProductionHFTBot()
 strategy_manager = StrategyManager()
 exchange_service = ExchangeService(LIVE_CONTROL_STATE)
 arbitrage_engine = ArbitrageEngine()
-bot_runtime = BotRuntime(engine, strategy_manager, risk_manager, bot, exchange_service)
+learner = OnlineSignalLearner(str(BASE_DIR / "backend" / "learning_state.json"))
+bot_runtime = BotRuntime(engine, strategy_manager, risk_manager, bot, exchange_service, learner=learner)
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
 SUPPORTED_TRADING_PAIRS = ("BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT")
@@ -665,6 +677,7 @@ class DemoTradePayload(BaseModel):
     exchange: str = "binance"
     market_mode: str = "spot"
     leverage: float = 1.5
+    auto_from_market: bool = False
 
 
 class ExchangeTestPayload(BaseModel):
@@ -1201,6 +1214,51 @@ def demo_trade(payload: DemoTradePayload, request: Request):
         side_factor = -1.0 if payload.side.lower() == "sell" else 1.0
         adjusted_sentiment = max(-1.0, min(1.0, payload.sentiment * side_factor))
         adjusted_price_change = payload.price_change * side_factor
+
+        market_fields = {}
+        if payload.auto_from_market:
+            # реальные стакан и график: сентимент и движение цены считает сервер
+            try:
+                client = _public_exchange(payload.exchange)
+                candles = refresh_candles(MARKET_DATABASE, client, payload.exchange.lower(), payload.pair, timeframe="1h")
+                daily = refresh_history(MARKET_DATABASE, client, payload.exchange.lower(), payload.pair)
+                snapshot = _fetch_depth(client, payload.pair, limit=20)
+                candle_feat = _candle_features(candles, daily)
+                depth_feat = _depth_metrics(snapshot)
+                vector = _feature_vector(candle_feat, depth_feat)
+                real_sentiment = _heuristic_sentiment(candle_feat, depth_feat)
+                real_direction = real_sentiment if abs(real_sentiment) >= 0.05 else 0.0
+                ai_confidence = None
+                ai_direction = 0
+                if learner.enabled and vector:
+                    ai_confidence = learner.predict_confidence(vector)
+                    ai_direction = learner.suggest_direction(ai_confidence)
+                    if ai_direction != 0:
+                        real_direction = ai_direction * max(0.3, abs(real_sentiment))
+                        real_sentiment = real_direction
+                adjusted_sentiment = max(-1.0, min(1.0, real_sentiment * side_factor))
+                adjusted_price_change = candle_feat.get("momentum_1h", 0.0) * side_factor
+                market_fields = {
+                    "auto_from_market": True,
+                    "features": {
+                        "momentum_1h": candle_feat.get("momentum_1h"),
+                        "momentum_4h": candle_feat.get("momentum_4h"),
+                        "rsi14": candle_feat.get("rsi14"),
+                        "vol_ratio": candle_feat.get("vol_ratio"),
+                        "imbalance": depth_feat.get("imbalance"),
+                        "spread_pct": depth_feat.get("spread_pct"),
+                        "bid_depth_ratio": depth_feat.get("bid_depth_ratio"),
+                    },
+                    "vector": vector,
+                    "ai_confidence": ai_confidence,
+                    "ai_direction": ai_direction,
+                    "learner_enabled": learner.enabled,
+                }
+                if vector is not None:
+                    market_fields["learner_trained"] = True
+            except Exception:
+                market_fields = {"auto_from_market": False, "note": "рыночный контекст недоступен, использованы введённые параметры"}
+
         result = strategy_manager.execute(
             adjusted_sentiment, adjusted_price_change, demo["demo_balance"],
             fee_rate=fee_rate, leverage=leverage,
@@ -1210,6 +1268,8 @@ def demo_trade(payload: DemoTradePayload, request: Request):
         pnl = result["pnl"] * allocation
         updated = engine.update_demo_balance(email, pnl)
         engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy} {payload.side} {payload.exchange} {payload.market_mode}", email)
+        if market_fields.get("learner_trained") and market_fields.get("vector"):
+            learner.update(market_fields["vector"], pnl)
         return {
             "pnl": round(pnl, 4),
             "balance": round(updated["demo_balance"], 2),
@@ -1221,6 +1281,7 @@ def demo_trade(payload: DemoTradePayload, request: Request):
             "market_mode": payload.market_mode,
             "leverage": leverage,
             "fee_rate": fee_rate,
+            **market_fields,
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -1661,7 +1722,7 @@ def market_history(request: Request, pair: str = "BTC/USDT", exchange: str = "bi
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
     if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
-    if timeframe not in {"1m", "5m", "15m", "1h", "1d"}:
+    if timeframe not in {"1m", "5m", "15m", "1h", "4h", "1d", "1w"}:
         raise HTTPException(status_code=400, detail="Поддерживаются таймфреймы от 1m до 1d.")
     try:
         exchange = (exchange or "binance").lower()
@@ -1678,6 +1739,80 @@ def market_history(request: Request, pair: str = "BTC/USDT", exchange: str = "bi
                 "analysis_policy": "Сигналы используют только закрытые текущие и предыдущие свечи."}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось обновить историю: {exc}") from exc
+
+
+@app.get("/api/market/orderbook")
+def market_orderbook(request: Request, pair: str = "BTC/USDT", exchange: str = "binance",
+                     limit: int = 20):
+    """Реальный стакан биржи + метрики ликвидности."""
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    if pair not in SUPPORTED_TRADING_PAIRS:
+        raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    exchange = (exchange or "binance").lower()
+    if exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    limit = max(5, min(int(limit), 100))
+    try:
+        client = _public_exchange(exchange)
+        snapshot = _fetch_depth(client, pair, limit=limit)
+        return {**_merge_depth(snapshot), "pair": pair, "exchange": exchange}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить стакан: {exc}") from exc
+
+
+@app.get("/api/market/context")
+def market_context(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+    """Совместный контекст бота: реальные свечи + стакан + сентимент + ИИ-уверенность."""
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    if pair not in SUPPORTED_TRADING_PAIRS:
+        raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    exchange = (exchange or "binance").lower()
+    if exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    try:
+        client = _public_exchange(exchange)
+        candles = refresh_candles(MARKET_DATABASE, client, exchange, pair, timeframe="1h")
+        daily = refresh_history(MARKET_DATABASE, client, exchange, pair)
+        snapshot = _fetch_depth(client, pair, limit=20)
+        candle_feat = _candle_features(candles, daily)
+        depth_feat = _depth_metrics(snapshot)
+        vector = _feature_vector(candle_feat, depth_feat)
+        sentiment = _heuristic_sentiment(candle_feat, depth_feat)
+        ai_confidence = learner.predict_confidence(vector) if learner.enabled and vector else None
+        return {
+            "pair": pair,
+            "exchange": exchange,
+            "ts": int(time.time() * 1000),
+            "heuristic_sentiment": round(sentiment, 6),
+            "ai_confidence": ai_confidence,
+            "ai_direction": learner.suggest_direction(ai_confidence) if ai_confidence is not None else 0,
+            "learner_enabled": learner.enabled,
+            "candles": candle_feat,
+            "depth": depth_feat,
+            "vector": vector,
+            "best_bid": snapshot.get("best_bid"),
+            "best_ask": snapshot.get("best_ask"),
+            "spread": snapshot.get("spread"),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось собрать рыночный контекст: {exc}") from exc
+
+
+@app.get("/api/bot/learning")
+def bot_learning(request: Request):
+    """Состояние обучения бота: веса, выборка, винрейт."""
+    _require_admin(request)
+    return learner.stats()
+
+
+@app.post("/api/bot/learning/reset")
+def bot_learning_reset(request: Request):
+    _require_admin(request)
+    learner.reset()
+    engine.record_audit("learning_reset", "online learner weights reset", _require_admin(request))
+    return learner.stats()
 
 
 @app.get("/api/market/news")

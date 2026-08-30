@@ -47,6 +47,7 @@
                     <button class="term-bottom-tab active" data-panel="positions">Позиции <span class="tab-count" id="pos-count">0</span></button>
                     <button class="term-bottom-tab" data-panel="orders">Ордера <span class="tab-count" id="ord-count">0</span></button>
                     <button class="term-bottom-tab" data-panel="history">История</button>
+                    <button class="term-bottom-tab" data-panel="book">Стакан</button>
                 </div>
                 <div class="term-bottom-content" id="panel-positions">
                     <div class="term-empty" id="no-positions">Нет открытых позиций</div>
@@ -76,6 +77,11 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+                <div class="term-bottom-content" id="panel-book" style="display:none;">
+                    <div class="ob-panel" id="book-orderbook" style="padding:.5rem;">
+                        <div class="term-empty">Загружаю стакан…</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -293,6 +299,7 @@
 {% block scripts %}
 <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
+<script src="{{ url_for('static', filename='orderbook_panel.js') }}"></script>
 <script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 (() => {
@@ -326,6 +333,7 @@
         stopLivePrice();
         loadChartData(pairEl.value, exchange, currentTf);
         if (currentTf === 'live') startLivePrice(pairEl.value, exchange);
+        if (typeof OrderBookPanel !== 'undefined') OrderBookPanel.setPair(pairEl.value, exchange);
         document.querySelectorAll('#submit-buy, #submit-sell').forEach(btn => {
             if (btn.id === 'submit-buy') btn.textContent = 'Купить ' + pairEl.value;
             else btn.textContent = 'Продать ' + pairEl.value;
@@ -438,10 +446,13 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.term-bottom-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            ['positions', 'orders', 'history'].forEach(p => {
+            ['positions', 'orders', 'history', 'book'].forEach(p => {
                 const el = document.getElementById('panel-' + p);
                 if (el) el.style.display = p === tab.dataset.panel ? '' : 'none';
             });
+            if (tab.dataset.panel === 'book' && typeof OrderBookPanel !== 'undefined') {
+                OrderBookPanel.init({ containerId: 'book-orderbook', pair: pairEl.value, exchange });
+            }
         });
     });
 

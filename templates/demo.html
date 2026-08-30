@@ -36,6 +36,10 @@
             <div class="term-chart-container">
                 <div id="demo-chart" style="width:100%;height:100%;"></div>
             </div>
+            <!-- Реальный стакан биржи -->
+            <div class="ob-panel" id="demo-book" style="height:230px;overflow-y:auto;border-top:1px solid var(--border);padding:.5rem;">
+                <div class="term-empty">Загружаю стакан…</div>
+            </div>
         </div>
 
         <!-- Right: Trade Form -->
@@ -126,6 +130,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
+<script src="{{ url_for('static', filename='orderbook_panel.js') }}"></script>
 <script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 let demoBalance = {{ demo.demo_balance|default(100) }};
@@ -207,15 +214,15 @@ async function toggleAutoDemo() {
         try {
             const pair = document.getElementById('test-pair').value;
             const strategy = document.getElementById('demo-strategy').value;
-            const sentiment = (Math.random() * 2 - 1);
-            const priceChange = (Math.random() * 0.6 - 0.3);
+            // Реальный рыночный контекст считает сервер (стакан + свечи + обучение)
             const resp = await fetch('/api/demo/trade', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({pair, strategy, sentiment, price_change: priceChange,
+                body: JSON.stringify({pair, strategy, sentiment: 0, price_change: 0,
                     exchange: document.getElementById('demo-exchange').value,
                     market_mode: document.getElementById('demo-mode').value,
-                    leverage: parseFloat(document.getElementById('demo-leverage').value) || 1})
+                    leverage: parseFloat(document.getElementById('demo-leverage').value) || 1,
+                    auto_from_market: true})
             });
             const data = await resp.json();
             if (resp.ok) {
@@ -227,6 +234,14 @@ async function toggleAutoDemo() {
                 document.getElementById('demo-trades').textContent = parseInt(document.getElementById('demo-trades').textContent || '0') + 1;
                 demoHistory.unshift({time: new Date().toLocaleTimeString(), strategy: data.strategy, signal: data.signal > 0 ? 'BUY' : 'SELL', pnl: data.pnl});
                 renderDemoHistory();
+                const el = document.getElementById('auto-demo-status');
+                if (el && data.auto_from_market && data.features) {
+                    const f = data.features;
+                    const ai = data.ai_confidence !== null && data.ai_confidence !== undefined ? (' · ИИ ' + (data.ai_confidence * 100).toFixed(0) + '%' + (data.ai_direction ? (' → ' + (data.ai_direction > 0 ? 'BUY' : 'SELL')) : '')) : '';
+                    el.innerHTML = '⏳ Авто (реальные стакан+график): RSI ' + (f.rsi14 != null ? f.rsi14 : '—') +
+                        ' · momentum 1h ' + (f.momentum_1h != null ? f.momentum_1h.toFixed(3) + '%' : '—') +
+                        ' · дисбаланс ' + (f.imbalance != null ? (f.imbalance * 100).toFixed(1) + '%' : '—') + ai;
+                }
             }
         } catch(_) {}
     }, 5000);
@@ -289,12 +304,48 @@ async function loadDemoStatus() {
 }
 loadDemoStatus();
 
-// Timeframe buttons
+// ── Реальный график (свечи + EMA + Bollinger + RSI) с настоящих бирж ──
+initTradingChart('demo-chart');
+const pairEl = document.getElementById('test-pair');
+const exchangeEl = document.getElementById('demo-exchange');
+let currentTf = '1h';
+
+function reloadChart() {
+    loadChartData(pairEl.value, exchangeEl.value, currentTf);
+}
+
+function syncOrderBook() {
+    OrderBookPanel.init({ containerId: 'demo-book', pair: pairEl.value, exchange: exchangeEl.value });
+}
+
+async function refreshMarketHeader() {
+    try {
+        const r = await fetch('/api/market/data?pair=' + encodeURIComponent(pairEl.value) + '&exchange=' + exchangeEl.value, { headers: { 'Accept': 'application/json' } });
+        if (!r.ok) return;
+        const d = await r.json();
+        updateTickerStats(d);
+    } catch (_) {}
+}
+
+reloadChart();
+syncOrderBook();
+refreshMarketHeader();
+setInterval(() => { if (autoDemoInterval) reloadChart(); }, 60000);
+
 document.querySelectorAll('.term-tf-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.term-tf-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        currentTf = btn.dataset.tf;
+        reloadChart();
     });
+});
+
+pairEl.addEventListener('change', () => {
+    reloadChart(); syncOrderBook(); refreshMarketHeader();
+});
+exchangeEl.addEventListener('change', () => {
+    syncOrderBook(); refreshMarketHeader();
 });
 </script>
 {% endblock %}

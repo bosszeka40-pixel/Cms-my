@@ -1,10 +1,14 @@
-/* TradingView Lightweight Charts — professional candlestick + EMA */
+/* TradingView Lightweight Charts — professional candlestick + indicators */
 let chartInstance = null;
 let candleSeries = null;
 let volumeSeries = null;
 let ema7Series = null;
 let ema25Series = null;
 let ema99Series = null;
+let bbUpper = null;
+let bbLower = null;
+let bbMiddle = null;
+let rsiSeries = null;
 
 function calcEMA(data, period) {
     const k = 2 / (period + 1);
@@ -16,6 +20,58 @@ function calcEMA(data, period) {
         if (i >= period - 1) result.push({ time: d.time, value: parseFloat(ema.toFixed(2)) });
     });
     return result;
+}
+
+function calcSMA(data, period) {
+    const result = [];
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+        sum += data[i].close;
+        if (i >= period) sum -= data[i - period].close;
+        if (i >= period - 1) result.push({ time: data[i].time, value: parseFloat((sum / period).toFixed(2)) });
+    }
+    return result;
+}
+
+function calcBollinger(data, period = 20, mult = 2) {
+    const sma = calcSMA(data, period);
+    const upper = [], lower = [], middle = [];
+    for (let i = period - 1; i < data.length; i++) {
+        const window = data.slice(i - period + 1, i + 1);
+        const mean = window.reduce((s, d) => s + d.close, 0) / period;
+        const variance = window.reduce((s, d) => s + (d.close - mean) ** 2, 0) / period;
+        const sd = Math.sqrt(variance);
+        const time = data[i].time;
+        upper.push({ time, value: parseFloat((mean + mult * sd).toFixed(4)) });
+        middle.push({ time, value: parseFloat(mean.toFixed(4)) });
+        lower.push({ time, value: parseFloat((mean - mult * sd).toFixed(4)) });
+    }
+    return { upper, middle, lower };
+}
+
+function calcRSI(data, period = 14) {
+    const result = [];
+    let gain = 0, loss = 0;
+    for (let i = 1; i < data.length; i++) {
+        const delta = data[i].close - data[i - 1].close;
+        if (i <= period) {
+            gain += Math.max(delta, 0);
+            loss += Math.max(-delta, 0);
+            if (i === period) {
+                gain /= period; loss /= period;
+                result.push({ time: data[i].time, value: rsiValue(gain, loss) });
+            }
+            continue;
+        }
+        gain = (gain * (period - 1) + Math.max(delta, 0)) / period;
+        loss = (loss * (period - 1) + Math.max(-delta, 0)) / period;
+        result.push({ time: data[i].time, value: rsiValue(gain, loss) });
+    }
+    return result;
+    function rsiValue(avgGain, avgLoss) {
+        if (avgLoss === 0) return 100;
+        return parseFloat((100 - 100 / (1 + avgGain / avgLoss)).toFixed(2));
+    }
 }
 
 function initTradingChart(containerId) {
@@ -34,7 +90,7 @@ function initTradingChart(containerId) {
         layout: { background: { type: 'solid', color: bg }, textColor: textColor, fontSize: 11 },
         grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: gridColor, scaleMargins: { top: 0.05, bottom: 0.2 } },
+        rightPriceScale: { borderColor: gridColor, scaleMargins: { top: 0.05, bottom: 0.3 } },
         timeScale: { borderColor: gridColor, timeVisible: true, secondsVisible: false },
     });
 
@@ -47,11 +103,25 @@ function initTradingChart(containerId) {
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume',
     });
-    chartInstance.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+    chartInstance.priceScale('volume').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
     ema7Series = chartInstance.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
     ema25Series = chartInstance.addLineSeries({ color: '#6366f1', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
     ema99Series = chartInstance.addLineSeries({ color: '#a855f7', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+
+    bbUpper = chartInstance.addLineSeries({ color: 'rgba(52,211,153,0.45)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    bbMiddle = chartInstance.addLineSeries({ color: 'rgba(52,211,153,0.25)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    bbLower = chartInstance.addLineSeries({ color: 'rgba(52,211,153,0.45)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+
+    // RSI на отдельной нижней шкале (совместимо с v4 charts)
+    rsiSeries = chartInstance.addLineSeries({
+        color: '#22d3ee', lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
+        priceScaleId: 'rsi', title: 'RSI',
+    });
+    chartInstance.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.75, bottom: 0, }, visible: true });
+    rsiSeries.createPriceLine({ price: 70, color: '#ef4444', lineWidth: 1, lineStyle: 2, title: '70' });
+    rsiSeries.createPriceLine({ price: 30, color: '#10b981', lineWidth: 1, lineStyle: 2, title: '30' });
+    rsiSeries.createPriceLine({ price: 50, color: 'rgba(148,152,184,0.4)', lineWidth: 1, lineStyle: 3, title: '50' });
 
     new ResizeObserver(() => {
         if (chartInstance && container.clientWidth > 0) {
@@ -62,14 +132,15 @@ function initTradingChart(containerId) {
     return chartInstance;
 }
 
-function loadChartData(pair, exchange, timeframe) {
+async function loadChartData(pair, exchange, timeframe) {
     if (!candleSeries) return;
-    const tf = timeframe === 'live' ? '1m' : timeframe;
-    fetch(`/api/market/history?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}&timeframe=${tf}`, {
-        headers: { 'Accept': 'application/json' }
-    })
-    .then(r => r.json())
-    .then(data => {
+    const tf = timeframe === 'live' ? '1m' : (timeframe || '1h');
+    try {
+        const r = await fetch(`/api/market/history?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}&timeframe=${tf}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!r.ok) return;
+        const data = await r.json();
         if (!data.candles || !data.candles.length) return;
         const candles = data.candles.map(c => ({
             time: Math.floor(c.timestamp / 1000),
@@ -82,26 +153,35 @@ function loadChartData(pair, exchange, timeframe) {
             value: Number(c.volume || 0),
             color: c.close >= c.open ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
         }));
-        volumeSeries.setData(volumes);
+        if (volumeSeries) volumeSeries.setData(volumes);
 
         if (candles.length >= 7) ema7Series.setData(calcEMA(candles, 7));
         if (candles.length >= 25) ema25Series.setData(calcEMA(candles, 25));
         if (candles.length >= 99) ema99Series.setData(calcEMA(candles, 99));
 
+        if (candles.length >= 20) {
+            const bb = calcBollinger(candles, 20, 2);
+            bbUpper.setData(bb.upper); bbMiddle.setData(bb.middle); bbLower.setData(bb.lower);
+        }
+        if (candles.length >= 15 && rsiSeries) rsiSeries.setData(calcRSI(candles, 14));
+
         updateOHLCV(candles[candles.length - 1]);
         updateTickerStats(data);
-    })
-    .catch(err => console.error('Chart load error:', err));
+    } catch (err) {
+        console.error('Chart load error:', err);
+    }
 }
 
 function updateOHLCV(candle) {
-    const el = document.getElementById('term-ohlcv');
-    if (!el || !candle) return;
-    el.innerHTML = `<span>O <b>${candle.open.toFixed(2)}</b></span>` +
-        `<span>H <b style="color:var(--success)">${candle.high.toFixed(2)}</b></span>` +
-        `<span>L <b style="color:var(--danger)">${candle.low.toFixed(2)}</b></span>` +
-        `<span>C <b>${candle.close.toFixed(2)}</b></span>` +
-        `<span>Vol ${(candle.volume || 0).toLocaleString()}</span>`;
+    document.querySelectorAll('#term-ohlcv, #test-ohlcv, #demo-ohlcv').forEach(el => {
+        if (!el || !candle) return;
+        el.innerHTML = `<span>O <b>${candle.open.toFixed(2)}</b></span>` +
+            `<span>H <b style="color:var(--success)">${candle.high.toFixed(2)}</b></span>` +
+            `<span>L <b style="color:var(--danger)">${candle.low.toFixed(2)}</b></span>` +
+            `<span>C <b>${candle.close.toFixed(2)}</b></span>` +
+            `<span>Vol ${(candle.volume || 0).toLocaleString()}</span>` +
+            (candle.rsi ? `<span>RSI ${candle.rsi}</span>` : '');
+    });
 }
 
 function updateTickerStats(data) {
@@ -112,10 +192,10 @@ function updateTickerStats(data) {
     if (priceEl) {
         const price = t.last || 0;
         priceEl.textContent = price.toFixed(2);
-        priceEl.className = 'term-pair-price ' + (t.percentage >= 0 ? 'up' : 'down');
+        priceEl.className = 'term-pair-price ' + ((t.percentage || t.change) >= 0 ? 'up' : 'down');
     }
     if (changeEl) {
-        const pct = t.percentage || 0;
+        const pct = t.change ?? t.percentage ?? 0;
         changeEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
         changeEl.className = 'term-pair-change ' + (pct >= 0 ? 'up' : 'down');
     }

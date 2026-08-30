@@ -30,12 +30,13 @@ class BotRuntime:
     Никогда не отправляет реальные ордера: LIVE-ордера идут только через ExecutionGateway.
     """
 
-    def __init__(self, engine, strategy_manager, risk_manager, bot, exchange_service=None, tick_interval=15.0):
+    def __init__(self, engine, strategy_manager, risk_manager, bot, exchange_service=None, tick_interval=15.0, learner=None):
         self.engine = engine
         self.strategy_manager = strategy_manager
         self.risk_manager = risk_manager
         self.bot = bot
         self.exchange_service = exchange_service
+        self.learner = learner
         self.tick_interval = float(tick_interval)
         self._lock = threading.RLock()
         self._thread = None
@@ -45,6 +46,7 @@ class BotRuntime:
         self.trade_history = []
         self._last_price = None
         self._demo_owner = None
+        self._last_context = None
 
     def _kill_switch_active(self):
         try:
@@ -140,6 +142,7 @@ class BotRuntime:
 
     def status(self, email):
         with self._lock:
+            learning = getattr(self.learner, "stats", lambda: {})() if self.learner else None
             return {
                 "lifecycle": self.lifecycle,
                 "active": self.lifecycle == BotLifecycle.RUNNING,
@@ -147,6 +150,9 @@ class BotRuntime:
                 "total_pnl": round(sum(t.get("pnl", 0.0) for t in self.trade_history), 4),
                 "last_price": self._last_price,
                 "recent_trades": self.trade_history[-10:],
+                "learning_enabled": bool(self.learner and self.learner.enabled),
+                "learning": learning,
+                "context": (self._last_context or {}).get("candles") or None,
             }
 
     def _emit(self, event, detail):
@@ -176,6 +182,34 @@ class BotRuntime:
             return self._last_price * (1 + random.uniform(-0.002, 0.002))
         return 100.0
 
+    def _market_context(self, pair, exchange):
+        """Реальные фичи из стакана и графика: (candle_feat, depth_feat, vector)."""
+        try:
+            from .main import _public_exchange, refresh_candles, refresh_history, MARKET_DATABASE
+            from .modules.order_book import fetch_order_book_snapshot, depth_features
+            from .modules.market_features import candle_features, feature_vector
+            client = _public_exchange(exchange)
+            candles = refresh_candles(MARKET_DATABASE, client, exchange, pair, timeframe="1h")
+            daily = refresh_history(MARKET_DATABASE, client, exchange, pair)
+            snapshot = fetch_order_book_snapshot(client, pair, limit=20)
+            candle_feat = candle_features(candles, daily)
+            depth_feat = depth_features(snapshot)
+            vector = feature_vector(candle_feat, depth_feat)
+            context = {
+                "pair": pair,
+                "exchange": exchange,
+                "candles": candle_feat,
+                "depth": depth_feat,
+                "vector": vector,
+                "best_bid": snapshot.get("best_bid"),
+                "best_ask": snapshot.get("best_ask"),
+                "ts": snapshot.get("ts") or int(time.time() * 1000),
+            }
+            self._last_context = context
+            return context
+        except Exception:
+            return self._last_context
+
     def _tick(self, email, pair, exchange):
         demo = self.engine.get_demo_session(email)
         balance = float(demo.get("demo_balance", 100.0))
@@ -183,29 +217,53 @@ class BotRuntime:
             self._emit("warning", "Демо-баланс исчерпан.")
             return
 
+        # 1) реальный контекст: цена, свечи, стакан
+        context = self._market_context(pair, exchange)
+        candle_feat = (context or {}).get("candles") or {}
+        depth_feat = (context or {}).get("depth") or {}
+        vector = (context or {}).get("vector")
+
         prev_price = self._last_price
-        price = self._current_price(pair, exchange)
+        if candle_feat.get("last_price"):
+            price = float(candle_feat["last_price"])
+        else:
+            price = self._current_price(pair, exchange)
         self._last_price = price
         if prev_price:
             price_change = (price - prev_price) / prev_price * 100
         else:
-            price_change = 0.0
+            price_change = candle_feat.get("momentum_1h", 0.0)
 
-        # sentiment proxy из изменения цены; стратегия сама решает сигнал
-        sentiment = 0.5 + (price_change / 50.0)
-        sentiment = max(-1.0, min(1.0, sentiment))
+        # 2) сентимент из реальных фич (график + стакан)
+        from .modules.market_features import heuristic_sentiment
+        sentiment = heuristic_sentiment(candle_feat, depth_feat)
+        ai_confidence = None
+        ai_direction = 0
+
+        # 3) ИИ-слой: если включён и уверен — задаёт направление
+        if self.learner and self.learner.enabled and vector:
+            ai_confidence = self.learner.predict_confidence(vector)
+            ai_direction = self.learner.suggest_direction(ai_confidence)
+            if ai_direction != 0:
+                sentiment = ai_direction * max(0.3, abs(sentiment))
+            if abs(sentiment) < 0.05 and candle_feat.get("momentum_1h", 0.0) == 0.0 and not depth_feat:
+                sentiment = 0.0
 
         result = self.strategy_manager.execute(sentiment, price_change, balance)
         signal = result["signal"]
         pnl = result["pnl"]
         net = result["next_balance"]
 
-        # Risk check — никогда не выше лимита CMS
+        # 4) Risk check — никогда не выше лимита CMS
         risk_score = self.risk_manager.calculate_risk_score(leverage=float(self.strategy_manager.config.get("leverage", 1.5)))
         allowed, reason = self.risk_manager.check_risk_score(risk_score)
         if not allowed:
             self._emit("risk_blocked", f"Risk score {risk_score} превышает лимит: {reason}")
             return
+
+        # 5) обучение по факту сделки (реальные свечи+стакан -> исход)
+        if self.learner and vector is not None:
+            self.learner.update(vector, pnl if prev_price else 0.0)
 
         trade = {
             "time": datetime.now(timezone.utc).isoformat(),
@@ -219,6 +277,16 @@ class BotRuntime:
             "pnl": round(pnl, 4),
             "balance": round(net, 2),
             "risk_score": risk_score,
+            "ai_confidence": round(ai_confidence, 4) if ai_confidence is not None else None,
+            "ai_direction": ai_direction,
+            "learner_trained": bool(self.learner and vector is not None),
+            "features": {
+                "momentum_1h": candle_feat.get("momentum_1h"),
+                "rsi14": candle_feat.get("rsi14"),
+                "imbalance": depth_feat.get("imbalance"),
+                "spread_pct": depth_feat.get("spread_pct"),
+                "bid_depth_ratio": depth_feat.get("bid_depth_ratio"),
+            },
         }
         self.trade_history.append(trade)
         self.engine.update_demo_balance(email, pnl)

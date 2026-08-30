@@ -289,6 +289,16 @@
     </div>
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+            <h2 style="margin:0;">📈 Обучение ИИ</h2>
+            <div style="display:flex;gap:.35rem;">
+                <button class="btn btn-outline btn-sm" onclick="loadBotLearning()">Обновить</button>
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="resetBotLearning()">Сброс</button>
+            </div>
+        </div>
+        <div id="bot-learning" style="font-size:.82rem;max-height:260px;overflow-y:auto;"><div class="term-empty">Загрузка…</div></div>
+    </div>
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
             <h2 style="margin:0;">⏳ Прогресс генерации</h2>
             <button class="btn btn-outline btn-sm" onclick="loadGenStatus()">Обновить</button>
         </div>
@@ -649,6 +659,36 @@ async function loadBotBrain() {
                 : '<div class="term-empty" style="margin-top:.6rem;">История пуста</div>');
     } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить мозг бота.</span>'; }
 }
+async function resetBotLearning() {
+    if (!confirm('Сбросить веса обучения бота?')) return;
+    try {
+        await fetch('/api/bot/learning/reset', {method: 'POST'});
+        loadBotLearning();
+    } catch (_) {}
+}
+async function loadBotLearning() {
+    const el = document.getElementById('bot-learning');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/bot/learning');
+        if (!r.ok) throw new Error('Нет доступа');
+        const d = await r.json();
+        const w = d.weights || {};
+        const rows = Object.entries(w)
+            .filter(([, v]) => Math.abs(v) > 0.0001)
+            .map(([k, v]) => '<div style="display:flex;justify-content:space-between;padding:.1rem .2rem;border-bottom:1px solid var(--border);"><span>' + ApiUI.esc(k) + '</span><span style="color:var(--accent)">' + (v > 0 ? '+' : '') + v + '</span></div>').join('');
+        el.innerHTML =
+            ApiUI.badge(d.enabled ? 'Включено' : 'Выключено', d.enabled ? 'ok' : 'bad') +
+            ApiUI.statGrid([
+                { label: 'Выборка', value: ApiUI.num(d.train_count), color: 'var(--primary)' },
+                { label: 'Винрейт', value: d.win_rate != null ? ApiUI.pct(d.win_rate) : '—', color: 'var(--success)' },
+                { label: 'Победы / Поражения', value: ApiUI.num(d.wins) + ' / ' + ApiUI.num(d.losses), color: 'var(--accent)' },
+                { label: 'Весов (фичи: свечи + стакан)', value: Object.keys(w).length, color: 'var(--warning)' }
+            ]) +
+            '<div style="margin-top:.5rem;">' + (rows || '<div class="term-empty">Все веса ~0 (мало данных)</div>') + '</div>' +
+            '<div style="margin-top:.5rem;font-size:.72rem;color:var(--text-muted);">ИИ-направление при уверенности ≥ ' + (d.cutoff * 100).toFixed(0) + '%, шаг обучения ' + d.learning_rate + '. Бот учится на реальных сделках (стакан + график).</div>';
+    } catch (e) { el.innerHTML = '<span style="color:var(--danger);">Не удалось загрузить состояние обучения.</span>'; }
+}
 async function loadBotConfig() {
     const el = document.getElementById('bot-config');
     if (!el) return;
@@ -725,6 +765,7 @@ async function loadGenStatus() {
 }
 loadBotBrain();
 loadBotConfig();
+loadBotLearning();
 loadBotMemory();
 loadGenStatus();
 </script>

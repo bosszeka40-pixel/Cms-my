@@ -1278,3 +1278,18 @@ body::after {
     .api-kv-v { text-align: left; }
     .api-stat-value { font-size: 1.05rem; }
 }
+
+/* ── Реальный стакан (order book) ─────────────────────────── */
+.ob-panel { display:flex; flex-direction:column; gap:.15rem; font-size:.74rem; }
+.ob-head { display:flex; justify-content:space-between; align-items:center; padding:.2rem .35rem; color:var(--muted); }
+.ob-spread { color:var(--accent); }
+.ob-asks { display:flex; flex-direction:column; gap:1px; }
+.ob-bids { display:flex; flex-direction:column; gap:1px; }
+.ob-row { display:flex; align-items:center; justify-content:space-between; position:relative; padding:1px .35rem; }
+.ob-price { min-width:74px; font-variant-numeric:tabular-nums; }
+.ob-bar { position:absolute; left:0; right:0; top:0; bottom:0; pointer-events:none; }
+.ob-fill { display:block; height:100%; }
+.ob-vol { position:relative; color:var(--muted); z-index:1; }
+.ob-mid { text-align:center; font-weight:700; padding:.25rem; border-top:1px solid var(--border); border-bottom:1px solid var(--border); color:var(--accent); }
+.ob-foot { display:flex; justify-content:space-between; gap:.5rem; padding:.2rem .35rem; color:var(--muted); flex-wrap:wrap; }
+.ob-imb { color:var(--accent); }
