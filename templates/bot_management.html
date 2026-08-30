@@ -78,6 +78,15 @@
         <div><span class="muted">Режим бота</span> <div id="bi-botmode">—</div></div>
         <div><span class="muted">Комиссия</span> <div id="bi-fee">—</div></div>
     </div>
+    <div style="margin-top:.6rem;border-top:1px solid var(--border);padding-top:.55rem;font-size:.8rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
+            <b>🧠 Анализ бота <span class="muted">(график · стакан · новости · ИИ)</span></b>
+            <span id="bi-action" style="font-weight:700;"></span>
+        </div>
+        <div id="bi-sentiment"></div>
+        <div id="bi-analysis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.5rem;margin-top:.4rem;"></div>
+        <div id="bi-news"></div>
+    </div>
 </div>
 
 <!-- Market Chart (same as Terminal: live) + Orderbook + Trades -->
@@ -706,6 +715,8 @@ async function loadBotMarket() {
 }
 
 /* Панель «Информация бота»: всё, что бот реально видит на рынке + активная конфигурация */
+const sg = (v) => ({ 'перегрет': 'RSI перегрет', 'перепродан': 'RSI перепродан' }[v] || 'RSI нейтрален');
+const fm = (v) => v == null ? '—' : (v >= 0 ? '+' : '') + (+v).toFixed(3);
 async function loadBotInfo() {
     try {
         const resp = await fetch('/api/bot/status');
@@ -725,6 +736,44 @@ async function loadBotInfo() {
         set('bi-mode', (mi.market_mode || rt.market_mode || '—') + ' / ' + (mi.leverage || rt.leverage || '1') + 'x');
         set('bi-botmode', rt.bot_mode || (d.active ? 'strategy' : '—'));
         set('bi-fee', mi.fee_rate != null ? (mi.fee_rate * 100).toFixed(3) + '%' : '—');
+        const a = mi.analysis || {};
+        const candles = a.candles || {}, ob = a.order_book || {}, nw = a.news || {}, ai = a.ai || {}, comb = a.combined || {};
+        const act = document.getElementById('bi-action');
+        const col = comb.action === 'BUY' ? 'var(--success)' : comb.action === 'SELL' ? 'var(--danger)' : 'var(--text-muted)';
+        if (act) { act.textContent = comb.action_label || '—'; act.style.color = col; }
+        const sen = document.getElementById('bi-sentiment');
+        if (sen) {
+            const s = comb.sentiment;
+            sen.textContent = 'Суммарный сентимент: ' + (s == null ? '—' : (s >= 0 ? '+' : '') + s.toFixed(3)) +
+                ' · График: ' + sg(candles.rsi_signal) +
+                ' · Новости: ' + (nw.sentiment != null ? (nw.sentiment >= 0 ? '+' : '') + nw.sentiment.toFixed(3) : '—') +
+                ' · ИИ: ' + (ai.confidence != null ? (ai.confidence * 100).toFixed(0) + '% ' + (ai.direction === 1 ? 'вверх' : ai.direction === -1 ? 'вниз' : 'нейтр.') : '—');
+        }
+        const box = document.getElementById('bi-analysis');
+        if (box) {
+            const cells = [
+                ['📈 График', 'Импульс 1h <b>' + fm(candles.momentum_1h) + '</b> · 4h ' + fm(candles.momentum_4h) + ' · 1d ' + fm(candles.momentum_1d) +
+                    '<br>RSI 14 <b>' + (candles.rsi14 != null ? candles.rsi14.toFixed(1) : '—') + '</b> (' + sg(candles.rsi_signal) + ')' +
+                    '<br>Объём ' + (candles.vol_ratio != null ? candles.vol_ratio.toFixed(2) + 'x' : '—') + ' · EMA-разрыв ' + fm(candles.ema_gap)],
+                ['📚 Стакан', 'Имбаланс <b>' + fm(ob.imbalance) + '</b><br>Спред ' + (ob.spread_pct != null ? ob.spread_pct.toFixed(3) + '%' : '—') +
+                    '<br>Перекос глубины ' + fm(ob.bid_depth_ratio)],
+                ['🗞 Новости', 'Сентимент <b>' + (nw.sentiment != null ? (nw.sentiment >= 0 ? '+' : '') + nw.sentiment.toFixed(3) : '—') + '</b> · ' + (nw.count || 0) + ' заг.'],
+                ['🤖 ИИ', ai.enabled ?
+                    'Уверенность <b>' + (ai.confidence != null ? (ai.confidence * 100).toFixed(0) + '%' : '—') + '</b>' +
+                    '<br>Направление: ' + (ai.direction === 1 ? 'вверх' : ai.direction === -1 ? 'вниз' : 'нейтрально')
+                    : 'выключен'],
+            ];
+            box.innerHTML = cells.map(([head, body]) => '<div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:.4rem .55rem;">' +
+                '<div class="muted" style="font-size:.72rem;text-transform:uppercase;margin-bottom:.2rem;">' + head + '</div>' + body + '</div>').join('');
+        }
+        const newsBox = document.getElementById('bi-news');
+        if (newsBox) {
+            const items = (mi.news || []).slice(0, 3);
+            newsBox.innerHTML = items.length
+                ? '<div class="muted" style="font-size:.7rem;margin-bottom:.15rem;">Последние заголовки:</div>' +
+                  items.map(t => '<div style="font-size:.72rem;padding:.1rem 0;">• ' + t + '</div>').join('')
+                : '';
+        }
         const src = document.getElementById('bot-info-src');
         if (src) src.textContent = (mi.pair || rt.pair || getBotPair()) + ' @ ' + ex + ' · ' + (d.active ? 'БОТ АКТИВЕН' : 'остановлен');
         const up = document.getElementById('bot-info-updated');

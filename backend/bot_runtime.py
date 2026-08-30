@@ -57,6 +57,8 @@ class BotRuntime:
         }
         self._last_market_info = None
         self._last_signal_hour = None
+        self._last_news_refresh = None
+        self._last_news = []
 
     def _kill_switch_active(self):
         try:
@@ -220,6 +222,25 @@ class BotRuntime:
             return self._last_price * (1 + random.uniform(-0.002, 0.002))
         return 100.0
 
+    def _news_sentiment(self):
+        """Новостной сентимент [-1..1]: RSS обновляется не чаще раза в 5 минут."""
+        try:
+            from .main import MARKET_DATABASE
+            from .market_history import refresh_news, load_news, analyze_news_sentiment
+            now = time.time()
+            if self._last_news_refresh is None or (now - self._last_news_refresh) > 300:
+                try:
+                    refresh_news(MARKET_DATABASE)
+                    self._last_news_refresh = now
+                except Exception:
+                    pass
+            news = load_news(MARKET_DATABASE, limit=20) or self._last_news
+            self._last_news = news
+            sentiment = analyze_news_sentiment(news)
+            return float(sentiment), [n for n in news[:4]]
+        except Exception:
+            return 0.0, list(self._last_news[:4] or [])
+
     def _market_context(self, pair, exchange):
         """Реальные фичи из стакана и графика: (candle_feat, depth_feat, vector)."""
         try:
@@ -305,6 +326,10 @@ class BotRuntime:
         # 3) сентимент из реальных фич (график + стакан)
         from .modules.market_features import heuristic_sentiment
         sentiment = heuristic_sentiment(candle_feat, depth_feat)
+        # 3.1) новостной сентимент: усиливает график только при совпадении направления
+        news_sentiment, news_items = self._news_sentiment()
+        if abs(news_sentiment) >= 0.1 and sentiment != 0.0 and (news_sentiment > 0) == (sentiment > 0):
+            sentiment = 0.8 * sentiment + 0.2 * news_sentiment
         ai_confidence = None
         ai_direction = 0
 
@@ -320,7 +345,51 @@ class BotRuntime:
         # 5) Risk check — никогда не выше лимита CMS (по выбранному плечу)
         risk_score = self.risk_manager.calculate_risk_score(leverage=leverage)
         allowed, reason = self.risk_manager.check_risk_score(risk_score)
+
+        # Полный разбор «что бот видит → что решает»: графика, стакана, новостей, ИИ, итог
+        def _finish_analysis(action):
+            rsi_val = candle_feat.get("rsi14")
+            rsi_signal = ("перегрет" if rsi_val is not None and rsi_val >= 70
+                          else "перепродан" if rsi_val is not None and rsi_val <= 30
+                          else "нейтрален")
+            self._last_market_info["news_sentiment"] = news_sentiment
+            self._last_market_info["news"] = list(news_items)
+            self._last_market_info["analysis"] = {
+                "candles": {
+                    "momentum_1h": candle_feat.get("momentum_1h"),
+                    "momentum_4h": candle_feat.get("momentum_4h"),
+                    "momentum_1d": candle_feat.get("momentum_1d"),
+                    "rsi14": rsi_val,
+                    "rsi_signal": rsi_signal,
+                    "vol_ratio": candle_feat.get("vol_ratio"),
+                    "ema_gap": candle_feat.get("ema_gap"),
+                    "atr_pct": candle_feat.get("atr_pct"),
+                },
+                "order_book": {
+                    "imbalance": depth_feat.get("imbalance"),
+                    "spread_pct": depth_feat.get("spread_pct"),
+                    "bid_depth_ratio": depth_feat.get("bid_depth_ratio"),
+                },
+                "news": {
+                    "sentiment": news_sentiment,
+                    "count": len(news_items),
+                    "headlines": [n.get("title") for n in news_items],
+                },
+                "ai": {
+                    "enabled": bool(self.learner and self.learner.enabled),
+                    "confidence": round(ai_confidence, 4) if ai_confidence is not None else None,
+                    "direction": ai_direction,
+                },
+                "combined": {
+                    "sentiment": round(sentiment, 4),
+                    "action": action,
+                    "action_label": ("ПОКУПКА" if action == "BUY" else "ПРОДАЖА" if action == "SELL" else "ВЫЖИДАНИЕ"),
+                },
+            }
+            return self._last_market_info["analysis"]
+
         if not allowed:
+            _finish_analysis("HOLD")
             self._emit("risk_blocked", f"Risk score {risk_score} превышает лимит: {reason}")
             return
 
@@ -328,11 +397,13 @@ class BotRuntime:
             # один сигнал в час: не дублировать одну и ту же часовую сделку каждые 15 секунд
             hour_key = time.strftime("%Y-%m-%d-%H", time.gmtime())
             if getattr(self, "_last_signal_hour", None) == hour_key:
+                _finish_analysis("HOLD")
                 self._emit("skip", f"{pair} {exchange} bot=автономный · сигнал этого часа уже закрыт (cooldown)")
                 return
             # бот самостоятельно: сам решает когда действовать, сам оценивает результат
             result = self._autonomous_tick(sentiment, realized_move, balance, leverage, fee_rate)
             if result["signal"] in ("KEEP", "FLAT", "HOLD"):
+                _finish_analysis("HOLD")
                 self._emit("skip", f"{pair} {exchange} bot=автономный · sentiment={round(sentiment, 4)} — бездействие (низкая уверенность)")
                 return
             self._last_signal_hour = hour_key
@@ -344,6 +415,7 @@ class BotRuntime:
         signal = result["signal"]
         pnl = result["pnl"]
         net = result["next_balance"]
+        _finish_analysis(signal)
 
         # 6) обучение по факту сделки (реальные свечи+стакан -> исход)
         if self.learner and vector is not None:
