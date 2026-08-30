@@ -74,7 +74,14 @@
                 </div>
                 <div class="term-field"><label>Леверидж</label><input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" min="0.1" max="2.0" step="0.1"></div>
                 <div class="term-field"><label>Риск</label><input type="number" name="risk_tolerance" value="{{ config.risk_tolerance|default(0.03) }}" min="0.01" max="1.0" step="0.01"></div>
-                <div class="term-field"><label>Комиссия</label><input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" min="0" max="0.05" step="0.0001"></div>
+                <div class="term-field"><label>Комиссия (реальная с биржи — запасная)</label><input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" min="0" max="0.05" step="0.0001"></div>
+                <div class="term-field"><label>Режим торгов</label>
+                    <select name="market_mode">
+                        {% for m in market_modes %}
+                        <option value="{{ m }}" {% if config.market_mode|default('spot') == m %}selected{% endif %}>{{ market_mode_labels.get(m, m) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
             <button class="btn btn-sm" type="submit">Сохранить торговые настройки</button>
         </form>

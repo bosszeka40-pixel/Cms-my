@@ -48,6 +48,8 @@ class ExchangeService:
             "password": passphrase or None,
             "enableRateLimit": True,
             "timeout": 15000,
+            "maxRetriesOnRateLimit": 1,
+            "maxRetriesOnNetworkError": 1,
         })
         if sandbox:
             client.set_sandbox_mode(True)
@@ -111,7 +113,8 @@ class ExchangeService:
         if rate is None:
             rate = (client.fees.get("trading") or {}).get("taker")
         if rate is None:
-            rate = float(os.getenv("SIMULATION_FEE_RATE", "0.001"))
+            from .exchange_catalog import default_fee
+            rate = default_fee(self.get(user_id)["name"])
         return float(rate)
 
     def minimum_order_amount(self, user_id, symbol, price=None):

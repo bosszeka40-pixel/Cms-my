@@ -30,6 +30,7 @@
     <button class="filter-btn" onclick="showTab('settings', this)">⚙️ Настройки</button>
     <button class="filter-btn" onclick="showTab('shadow', this)">🛰 ИИ-тень</button>
     <button class="filter-btn" onclick="showTab('payouts', this)">💳 Выплаты</button>
+    <button class="filter-btn" onclick="showTab('exchanges', this)">🏛 Биржи (API)</button>
 </div>
 
 <!-- Users -->
@@ -130,7 +131,7 @@
                 </select>
             </div>
             <div class="field-group"><label>Леверидж</label><input type="number" name="leverage" value="{{ config.leverage|default(1.5) }}" step="0.1" min="0.1" max="2.0"></div>
-            <div class="field-group"><label>Комиссия</label><input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" step="0.0001"></div>
+            <div class="field-group"><label>Комиссия (реальная с биржи — запасная)</label><input type="number" name="fee_rate" value="{{ config.fee_rate|default(0.001) }}" step="0.0001"></div>
         </div>
         <button class="btn" type="submit">Сохранить настройки</button>
     </form>
@@ -286,6 +287,21 @@
         <div class="field-group"><label>Получатель</label><input name="card_recipient" value="{{ payout_settings.card_recipient }}"></div>
         <button class="btn" type="submit" style="margin-top:.5rem;">Сохранить</button>
     </form>
+</div>
+
+<!-- Exchanges API diagnostics -->
+<div id="tab-exchanges" class="card" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+        <div>
+            <h2>🏛 Биржи (публичные тест API)</h2>
+            <p style="font-size:.82rem;color:var(--text-secondary);margin-top:.25rem;">Живая проверка публичных REST-эндпоинтов каждой биржи (ликвидность цены/тикера, комиссии, возможности spot/margin/futures, тестнет). Реальные торговые ключи никогда не отправляются — проверка идёт по публичным API.</p>
+        </div>
+        <div style="display:flex;gap:.5rem;">
+            <button class="btn btn-outline btn-sm" onclick="refreshExchangeStatus()">Обновить статус</button>
+            <button class="btn btn-sm" onclick="testAllExchanges()">Проверить все биржи</button>
+        </div>
+    </div>
+    <div id="exchange-diag-box" style="font-size:.85rem;margin-top:1rem;">Загрузка…</div>
 </div>
 {% endblock %}
 
@@ -550,11 +566,103 @@ function showTab(name, el) {
     if (tab) tab.style.display = '';
     document.querySelectorAll('#admin-tabs .filter-btn').forEach(b => b.classList.remove('active'));
     if (el) el.classList.add('active');
+    if (name === 'exchanges') refreshExchangeStatus();
 }
 
 initLiveControls();
 loadShadowStatus();
 loadRiskStatus();
 loadAdminData();
+let __exDiag = { catalog: null, status: {} };
+
+function fmtFee(p) { return (p * 100).toFixed(3) + '%'; }
+function escTxt(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function featBadge(entry) {
+    const f = entry.features || {};
+    const labels = {spot:'Спот', margin_isolated:'Маржа изол.', margin_cross:'Маржа кросс', futures:'Фьючерсы'};
+    return Object.keys(labels).filter(k => f[k]).map(k => '<span class="api-chip">' + labels[k] + '</span>').join('') || '<span style="color:var(--text-muted);">—</span>';
+}
+function latencyBadge(p) {
+    if (!p) return '<span style="color:var(--text-muted);">не проверено</span>';
+    if (!p.ok) return '<span style="color:var(--danger);">✖ ' + escTxt(p.error || 'ошибка') + '</span>';
+    return '<span style="color:var(--success);">✓ ' + p.latency_ms + ' мс</span>';
+}
+function testnetBox(entry, results) {
+    const tn = entry.testnet;
+    if (!tn) return '<div style="font-size:.72rem;color:var(--text-muted);">Тестнет не предоставлен.</div>';
+    let html = '';
+    for (const k of Object.keys(tn)) {
+        if (k === 'note') continue;
+        const spec = tn[k];
+        if (!spec || !spec.url) continue;
+        const r = (results && results.testnet_checks && results.testnet_checks[k]) || null;
+        html += '<div style="display:flex;justify-content:space-between;gap:.5rem;align-items:center;font-size:.72rem;padding:.15rem 0;">' +
+            '<span style="color:var(--text-secondary);">' + escTxt(k === 'spot' ? 'Спот тестнет' : 'Фьючерсы тестнет') + ':</span> ' + latencyBadge(r) +
+            '<span class="api-feedtime">' + escTxt(spec.url) + '</span></div>';
+    }
+    if (tn.note) html += '<div style="font-size:.7rem;color:var(--text-secondary);margin-top:.3rem;">ℹ ' + escTxt(tn.note) + '</div>';
+    return html;
+}
+async function refreshExchangeStatus() {
+    const box = document.getElementById('exchange-diag-box');
+    if (!box) return;
+    box.innerHTML = 'Загрузка…';
+    try {
+        const d = await (await fetch('/api/admin/exchange/status')).json();
+        const cfg = d.configured_keys || {};
+        __exDiag.catalog = d.catalog || {};
+        const names = Object.keys(d.catalog || {}).sort();
+        box.innerHTML = names.map(name => {
+            const entry = d.catalog[name];
+            const fees = entry.fees || {};
+            const hasKeys = (cfg[name] || 0) > 0;
+            return '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.6rem .7rem;margin-bottom:.5rem;background:var(--bg-tertiary);">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">' +
+                '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;"><strong>' + escTxt(entry.name || name) + '</strong> ' + featBadge(entry) + '</div>' +
+                '<span>' + (hasKeys ? ApiUI.badge('Ключи заданы (' + cfg[name] + ')', 'ok') : ApiUI.badge('Ключи не заданы', 'warn')) + '</span>' +
+                '</div>' +
+                '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.4rem .9rem;margin-top:.5rem;">' +
+                '<div style="font-size:.74rem;"><span style="color:var(--text-secondary);">Taker:</span> <strong>' + fmtFee(fees.taker || 0) + '</strong>' +
+                (fees.taker_futures != null ? ' · <span style="color:var(--text-secondary);">Фьюч.:</span> ' + fmtFee(fees.taker_futures) : '') + '</div>' +
+                '<div style="font-size:.74rem;"><span style="color:var(--text-secondary);">Макс. плечо фьюч.:</span> <strong>' + ((entry.max_leverage || {}).futures || 1) + 'x</strong></div>' +
+                (entry.public && entry.public.url ? '<div style="font-size:.74rem;"><span style="color:var(--text-secondary);">Публичный REST:</span> <span class="api-feedtime">' + escTxt(entry.public.url) + '</span></div>' : '') +
+                '</div>' +
+                '<div id="exch-res-' + escTxt(name) + '" style="margin-top:.5rem;font-size:.78rem;"></div>' +
+                '<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;">' +
+                '<button class="btn btn-sm" onclick="testExchange(\'' + escTxt(name).replace(/'/g, "\\'") + '\')">Проверить API</button>' +
+                '<button class="btn btn-outline btn-sm" onclick="testExchangeDeep(\'' + escTxt(name).replace(/'/g, "\\'") + '\')">Проверить + тикер BTC</button>' +
+                '</div></div>';
+        }).join('');
+    } catch (e) { box.innerHTML = '<span style="color:var(--danger);">Ошибка загрузки: ' + escTxt(e.message) + '</span>'; }
+}
+async function testExchange(name, deep) {
+    const box = document.getElementById('exch-res-' + name);
+    if (box) box.innerHTML = '<span style="color:var(--warning);">Проверка публичного API…</span>';
+    try {
+        const r = await fetch('/api/admin/exchange/test', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({exchange: name, deep: !!deep})
+        });
+        const d = await r.json().catch(() => ({}));
+        const res = (d.results || {})[name];
+        if (!r.ok || !res) {
+            if (box) box.innerHTML = ApiUI.badge('Ошибка', 'bad') + ' <span style="color:var(--danger);">' + escTxt((d.detail || res && res.error) || 'нет данных') + '</span>';
+            return;
+        }
+        const lines = [];
+        if (res.main) {
+            lines.push('<div style="display:flex;gap:.4rem;align-items:center;">Главный REST: ' + latencyBadge(res.main) + (res.main.ok ? ' (HTTP ' + res.main.status + ')' : '') + '</div>');
+        }
+        if (res.main_futures) lines.push('<div style="display:flex;gap:.4rem;align-items:center;">Фьючерсы REST: ' + latencyBadge(res.main_futures) + '</div>');
+        if (res.ticker && res.ticker.ok) lines.push('<div style="display:flex;gap:.4rem;align-items:center;color:var(--success);">Тикер BTC/USDT: ' + res.ticker.price + ' · ' + res.ticker.latency_ms + ' мс</div>');
+        lines.push(testnetBox((__exDiag.catalog || {})[name] || {}, res));
+        if (box) box.innerHTML = '<div style="display:grid;gap:.15rem;">' + lines.join('') + '</div>';
+    } catch (e) { if (box) box.innerHTML = '<span style="color:var(--danger);">Ошибка сети</span>'; }
+}
+async function testExchangeDeep(name) { await testExchange(name, true); }
+async function testAllExchanges() {
+    const names = Object.keys(__exDiag.catalog || {});
+    for (const name of names) { await testExchange(name, false); }
+}
 </script>
 {% endblock %}

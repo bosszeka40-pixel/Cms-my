@@ -21,9 +21,21 @@ class SecurityBoundaryTests(unittest.TestCase):
 
     def test_strategy_enforces_risk_leverage_ceiling(self):
         manager = StrategyManager()
-        manager.config["leverage"] = 10.0
+        manager.config["leverage"] = 500.0
         with self.assertRaises(ValueError):
             manager.execute(0.1, 0.2, 100.0)
+        manager.config["leverage"] = 200.0
+        result = manager.execute(0.1, 0.2, 100.0)
+        self.assertEqual(result["leverage"], 200.0)
+
+    def test_strategy_accepts_explicit_margin_futures_leverage(self):
+        manager = StrategyManager()
+        result = manager.execute(0.1, 0.2, 100.0, leverage=10.0)
+        self.assertEqual(result["leverage"], 10.0)
+        with self.assertRaises(ValueError):
+            manager.execute(0.1, 0.2, 100.0, leverage=300.0)
+        with self.assertRaises(ValueError):
+            manager.execute(0.1, 0.2, 100.0, leverage=0.0)
 
     def test_hft_rejects_invalid_and_oversized_input(self):
         bot = CMSProductionHFTBot()

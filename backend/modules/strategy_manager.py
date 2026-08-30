@@ -6,7 +6,9 @@ import yaml
 from .daily_harvester import DailyCompoundHarvesterModule, HarvesterStrategy
 
 
-MAX_LEVERAGE = 2.0
+# Sanity bound for simulated leverage. Exchange limits (up to 125x for
+# futures) are enforced separately per market-mode via effective_leverage().
+MAX_LEVERAGE = 200.0
 
 
 class StrategyManager:
@@ -35,6 +37,7 @@ class StrategyManager:
         price_change: float,
         current_balance: float,
         fee_rate: float | None = None,
+        leverage: float | None = None,
     ) -> dict:
         values = (news_sentiment, price_change, current_balance)
         if not all(math.isfinite(float(value)) for value in values):
@@ -43,7 +46,7 @@ class StrategyManager:
             raise ValueError("Текущий баланс должен быть положительным.")
 
         strategy = self.current_strategy()
-        leverage = float(self.config.get("leverage", 1.5))
+        leverage = float(self.config.get("leverage", 1.5) if leverage is None else leverage)
         if not math.isfinite(leverage) or leverage <= 0 or leverage > MAX_LEVERAGE:
             raise ValueError("Плечо должно быть конечным, положительным и не превышать 2x.")
 

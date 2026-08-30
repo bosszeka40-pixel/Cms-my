@@ -214,9 +214,16 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.5rem;">
                 <select id="mt-pair"><option>BTC/USDT</option><option>ETH/USDT</option><option>SOL/USDT</option><option>BNB/USDT</option><option>XRP/USDT</option></select>
                 <select id="mt-side"><option value="buy">buy</option><option value="sell">sell</option></select>
+                <select id="mt-exchange" onchange="rebuildMtModes()">
+                    {% for ex in trading_exchanges %}<option value="{{ ex }}">{{ ex }}</option>{% endfor %}
+                </select>
+                <select id="mt-mode">
+                    {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+                </select>
                 <input id="mt-price" type="number" step="any" placeholder="Цена" style="margin:0;">
                 <input id="mt-amount" type="number" step="any" placeholder="Кол-во" style="margin:0;">
                 <input id="mt-balance" type="number" step="any" placeholder="Баланс (€)" style="margin:0;" value="1000">
+                <input id="mt-leverage" type="number" step="0.5" min="1" placeholder="Плечо (маржа/фьюч)" value="1" style="margin:0;">
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
                 <button class="btn btn-sm" onclick="submitManualTrade()">Отправить ордер</button>
@@ -230,6 +237,13 @@
                 <input id="tst-sentiment" type="number" step="0.1" placeholder="Сентимент" value="0.5" style="margin:0;">
                 <input id="tst-change" type="number" step="0.1" placeholder="Изменение %" value="1.0" style="margin:0;">
                 <input id="tst-balance" type="number" step="any" placeholder="Баланс" value="100" style="margin:0;">
+                <select id="tst-exchange">
+                    {% for ex in trading_exchanges %}<option value="{{ ex }}">{{ ex }}</option>{% endfor %}
+                </select>
+                <select id="tst-mode">
+                    {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+                </select>
+                <input id="tst-leverage" type="number" step="0.5" min="1" placeholder="Плечо" value="1" style="margin:0;">
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
                 <button class="btn btn-sm" onclick="submitStrategyTest()">Запустить тест</button>
@@ -518,6 +532,39 @@ async function postJson(url, body) {
     return {ok: r.ok, d};
 }
 function errBox(el, msg) { el.innerHTML = ApiUI.badge('Ошибка', 'bad') + ' <span style="font-size:.72rem;color:var(--danger);">' + ApiUI.esc(msg) + '</span>'; }
+const MT_MODE_LABELS = {spot:'Спот', margin_isolated:'Маржа (изолир.)', margin_cross:'Маржа (кросс)', futures:'Фьючерсы'};
+let __exFeatures = null;
+async function loadMtFeatures() {
+    try {
+        const d = await (await fetch('/api/exchanges')).json();
+        const map = {};
+        (d.exchanges || []).forEach(x => { map[x.id] = x.features || {}; });
+        __exFeatures = map;
+        rebuildMtModes();
+    } catch (e) {}
+}
+function rebuildMtModes() {
+    const ex = document.getElementById('mt-exchange');
+    const sel = document.getElementById('mt-mode');
+    if (!ex || !sel || !__exFeatures) { toggleMtLeverage(); return; }
+    const feats = __exFeatures[ex.value] || {spot: true};
+    const cur = sel.value;
+    sel.innerHTML = Object.keys(MT_MODE_LABELS).filter(m => feats[m]).map(m =>
+        '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + MT_MODE_LABELS[m] + '</option>').join('');
+    toggleMtLeverage();
+}
+function toggleMtLeverage() {
+    const sel = document.getElementById('mt-mode');
+    const lv = document.getElementById('mt-leverage');
+    if (!sel || !lv) return;
+    lv.disabled = sel.value === 'spot';
+    lv.placeholder = sel.value === 'spot' ? 'Спот: плечо = 1x' : 'Плечо (маржа/фьюч)';
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('mt-mode');
+    if (sel) sel.addEventListener('change', toggleMtLeverage);
+    loadMtFeatures();
+});
 async function submitManualTrade() {
     const el = document.getElementById('mt-result');
     try {
@@ -526,7 +573,10 @@ async function submitManualTrade() {
             side: document.getElementById('mt-side').value,
             price: parseFloat(document.getElementById('mt-price').value || 0),
             amount: parseFloat(document.getElementById('mt-amount').value || 0),
-            balance: parseFloat(document.getElementById('mt-balance').value || 0)
+            balance: parseFloat(document.getElementById('mt-balance').value || 0),
+            exchange: document.getElementById('mt-exchange').value,
+            market_mode: document.getElementById('mt-mode').value,
+            leverage: parseFloat(document.getElementById('mt-leverage').value || 1)
         });
         if (!ok) return errBox(el, d.detail || 'Ошибка');
         if (d.status === 'blocked' || d.status === 'rejected') {
@@ -535,7 +585,8 @@ async function submitManualTrade() {
         }
         el.innerHTML = ApiUI.statGrid([
             { label: 'Статус', value: ApiUI.badge(d.status || '—', d.status === 'executed' ? 'ok' : 'warn') },
-            { label: 'Комиссия', value: ApiUI.num(d.fee, 6) + '€', color: 'var(--warning)' },
+            { label: 'Режим', value: ApiUI.esc((d.exchange || '') + ' · ' + (d.market_mode || 'spot') + ' · ' + (d.leverage || 1) + 'x') },
+            { label: 'Комиссия (реальная)', value: ApiUI.num(d.fee, 6) + '€ <span style="font-size:.68rem;color:var(--text-muted);">' + ((d.fee_rate || 0) * 100).toFixed(3) + '%</span>', color: 'var(--warning)' },
             { label: 'Баланс', value: ApiUI.num(d.balance) + '€', color: 'var(--success)' },
             { label: 'ID ордера', value: d.order_id ? '<span class="api-feedtime">' + ApiUI.esc(String(d.order_id).slice(0, 12)) + '</span>' : '—' }
         ]);
@@ -548,7 +599,10 @@ async function submitStrategyTest() {
             pair: document.getElementById('tst-pair').value,
             news_sentiment: parseFloat(document.getElementById('tst-sentiment').value || 0),
             price_change: parseFloat(document.getElementById('tst-change').value || 0),
-            current_balance: parseFloat(document.getElementById('tst-balance').value || 0)
+            current_balance: parseFloat(document.getElementById('tst-balance').value || 0),
+            exchange: document.getElementById('tst-exchange').value,
+            market_mode: document.getElementById('tst-mode').value,
+            leverage: parseFloat(document.getElementById('tst-leverage').value || 1)
         });
         if (!ok) return errBox(el, d.detail || 'Ошибка');
         const t = d.trade || {};
@@ -556,10 +610,12 @@ async function submitStrategyTest() {
         el.innerHTML =
             ApiUI.badge(dir, t.signal > 0 ? 'ok' : t.signal < 0 ? 'bad' : 'flat') +
             ' <span class="api-chip">' + ApiUI.esc(d.strategy || '—') + '</span> <span class="api-chip">' + ApiUI.esc(d.pair || '—') + '</span>' +
+            ' <span class="api-chip">' + ApiUI.esc((d.exchange || '') + ' · ' + (d.market_mode || 'spot') + ' · ' + (d.leverage || 1) + 'x') + '</span>' +
             '<div style="margin-top:.4rem;">' + ApiUI.statGrid([
                 { label: 'P/L', value: ApiUI.num(t.pl, 4) + '€', color: ApiUI.signColor(t.pl) },
                 { label: 'Баланс до', value: ApiUI.num(t.previous_balance, 4) + '€' },
-                { label: 'Баланс после', value: ApiUI.num(t.next_balance, 4) + '€', color: 'var(--success)' }
+                { label: 'Баланс после', value: ApiUI.num(t.next_balance, 4) + '€', color: 'var(--success)' },
+                { label: 'Комиссия (реальная)', value: ((d.fee_rate || 0) * 100).toFixed(3) + '%', color: 'var(--warning)' }
             ]) + '</div>';
     } catch (e) { errBox(el, 'Ошибка сети'); }
 }

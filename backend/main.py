@@ -34,6 +34,17 @@ from .strategy_performance import (
 )
 from .risk_management import RiskManager
 from .exchange_service import ExchangeService
+from .exchange_catalog import (
+    EXCHANGE_CATALOG,
+    MARKET_MODES,
+    MARKET_MODE_LABELS,
+    catalog_entry,
+    default_fee,
+    effective_leverage,
+    exchange_catalog,
+    mode_label,
+    supports_mode,
+)
 from .security.execution_policy import current_mode, real_execution_allowed
 from .security.live_controls import LIVE_CONTROL_STATE, LiveControlState
 from .security.execution_gateway import submit_real_order, cancel_real_order
@@ -165,12 +176,14 @@ _payout_settings = {
     "card_currency": "EUR"}
 
 
-def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float, fee_rate: float | None = None):
+def save_strategy_config(strategy: str, leverage: float, risk_tolerance: float, fee_rate: float | None = None, market_mode: str | None = None):
     strategy_manager.config["strategy"] = strategy
     strategy_manager.config["leverage"] = leverage
     strategy_manager.config["risk_tolerance"] = risk_tolerance
     if fee_rate is not None:
         strategy_manager.config["fee_rate"] = fee_rate
+    if market_mode in MARKET_MODES:
+        strategy_manager.config["market_mode"] = market_mode
     with strategy_manager.config_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(strategy_manager.config, handle)
 
@@ -199,6 +212,9 @@ class TradingTestPayload(BaseModel):
     news_sentiment: float
     price_change: float
     current_balance: float
+    exchange: str = "binance"
+    market_mode: str = "spot"
+    leverage: float = 1.0
 
 class ManualTradePayload(BaseModel):
     pair: str
@@ -206,6 +222,9 @@ class ManualTradePayload(BaseModel):
     price: float
     amount: float
     balance: float
+    exchange: str = "binance"
+    market_mode: str = "spot"
+    leverage: float = 1.0
 
 class BacktestPayload(BaseModel):
     pair: str = "BTC/USDT"
@@ -213,6 +232,8 @@ class BacktestPayload(BaseModel):
     initial_balance: float = 10.0
     period: str = "1m"
     strategy: str = "all"
+    market_mode: str = "spot"
+    leverage: float = 1.0
 
 class ChatPayload(BaseModel):
     message: str
@@ -367,11 +388,21 @@ def _public_exchange(name: str):
     if exchange_name == "pionex":
         from .pionex_adapter import PionexClient
 
-        return PionexClient({"enableRateLimit": True, "timeout": 15000})
+        return PionexClient({
+            "enableRateLimit": True,
+            "timeout": 15000,
+            "maxRetriesOnRateLimit": 1,
+            "maxRetriesOnNetworkError": 1,
+        })
     exchange_class = getattr(ccxt, exchange_name, None)
     if exchange_class is None:
         raise ValueError("Биржа недоступна в установленной версии CCXT.")
-    return exchange_class({"enableRateLimit": True, "timeout": 15000})
+    return exchange_class({
+        "enableRateLimit": True,
+        "timeout": 15000,
+        "maxRetriesOnRateLimit": 1,
+        "maxRetriesOnNetworkError": 1,
+    })
 
 
 def _exchange_directory() -> list[dict]:
@@ -432,11 +463,34 @@ def _truncate_daily_candles(candles: list[dict], period: str) -> list[dict]:
     return candles[-window:]
 
 
-def _exchange_fee_rate(exchange_name: str, pair: str) -> float:
-    exchange_name = (exchange_name or "binance").strip().lower()
+_FEE_MARKETS_CACHE: dict = {}
+_FEE_MARKETS_CACHE_TTL = 600.0
+
+
+def _cached_markets(exchange_name: str):
+    """load_markets cached per exchange: prefer paid fees from cached markets."""
+    import time as _time
+    now = _time.time()
+    cached = _FEE_MARKETS_CACHE.get(exchange_name)
+    if cached and (now - cached[1]) < _FEE_MARKETS_CACHE_TTL:
+        return cached[0], False
     try:
         client = _public_exchange(exchange_name)
         client.load_markets()
+        _FEE_MARKETS_CACHE[exchange_name] = (client, now)
+        return client, True
+    except Exception:
+        if cached:
+            return cached[0], False
+        raise
+
+
+def _exchange_fee_rate(exchange_name: str, pair: str, market_mode: str = "spot") -> float:
+    """Real exchange fee for (exchange, pair, mode): prefer CCXT market metadata, fallback to catalog."""
+    exchange_name = (exchange_name or "binance").strip().lower()
+    mode = market_mode if market_mode in MARKET_MODES else "spot"
+    try:
+        client, _ = _cached_markets(exchange_name)
         market = client.markets.get(pair) or {}
         fee = market.get("taker")
         if fee is None:
@@ -445,7 +499,7 @@ def _exchange_fee_rate(exchange_name: str, pair: str) -> float:
             return float(fee)
     except Exception:
         pass
-    return float(os.getenv("SIMULATION_FEE_RATE", "0.001"))
+    return default_fee(exchange_name, mode)
 
 
 def _signal_for_pair(pair: str, exchange_name: str, source: str = "bot") -> dict:
@@ -608,6 +662,14 @@ class DemoTradePayload(BaseModel):
     price_change: float = 1.0
     amount: float = 10.0
     side: str = "buy"
+    exchange: str = "binance"
+    market_mode: str = "spot"
+    leverage: float = 1.5
+
+
+class ExchangeTestPayload(BaseModel):
+    exchange: str = ""
+    deep: bool = False
 
 
 
@@ -863,6 +925,9 @@ def _trading_context(user_email: str, message: str | None = None) -> dict:
         "trade_history": engine.list_trades(user_email, 20),
         "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
+        "trading_exchange_catalog": exchange_catalog(),
+        "market_modes": MARKET_MODES,
+        "market_mode_labels": MARKET_MODE_LABELS,
         "chart_timeframes": ["1m", "5m", "15m", "1h", "1d"],
         "demo": engine.get_demo_session(user_email),
         "bot_memory": bot.get_memory_summary()}
@@ -889,7 +954,8 @@ async def bot_management(request: Request):
                 leverage = max(0.1, min(float(form.get("leverage", 1.5)), 10))
                 risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
                 fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
-                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
+                market_mode = str(form.get("market_mode", strategy_manager.config.get("market_mode", "spot"))).strip().lower()
+                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate, market_mode)
                 bot.set_strategy(strategy)
                 message = "Настройки стратегии сохранены."
             except (TypeError, ValueError):
@@ -1025,7 +1091,8 @@ async def admin_panel(request: Request):
                 leverage = max(0.1, min(float(form.get("leverage", 1.5)), 10))
                 risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
                 fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
-                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
+                market_mode = str(form.get("market_mode", strategy_manager.config.get("market_mode", "spot"))).strip().lower()
+                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate, market_mode)
                 message = "Настройки торговой платформы сохранены."
             except (TypeError, ValueError):
                 message = "Проверьте значения левериджа, риска и комиссии."
@@ -1123,17 +1190,26 @@ def demo_trade(payload: DemoTradePayload, request: Request):
     demo = engine.get_demo_session(email)
     if not demo.get("demo_active"):
         raise HTTPException(status_code=400, detail="Демо-режим отключён.")
+    if payload.exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if payload.market_mode not in MARKET_MODES or not supports_mode(payload.exchange, payload.market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {payload.market_mode} не поддерживается биржей {payload.exchange}.")
     try:
         strategy_manager.config["strategy"] = payload.strategy
+        leverage = effective_leverage(payload.exchange, payload.market_mode, payload.leverage)
+        fee_rate = _exchange_fee_rate(payload.exchange, payload.pair, payload.market_mode)
         side_factor = -1.0 if payload.side.lower() == "sell" else 1.0
         adjusted_sentiment = max(-1.0, min(1.0, payload.sentiment * side_factor))
         adjusted_price_change = payload.price_change * side_factor
-        result = strategy_manager.execute(adjusted_sentiment, adjusted_price_change, demo["demo_balance"])
+        result = strategy_manager.execute(
+            adjusted_sentiment, adjusted_price_change, demo["demo_balance"],
+            fee_rate=fee_rate, leverage=leverage,
+        )
         balance_before = float(demo["demo_balance"])
         allocation = min(max(float(payload.amount), 1.0), balance_before) / max(balance_before, 1.0)
         pnl = result["pnl"] * allocation
         updated = engine.update_demo_balance(email, pnl)
-        engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy} {payload.side}", email)
+        engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy} {payload.side} {payload.exchange} {payload.market_mode}", email)
         return {
             "pnl": round(pnl, 4),
             "balance": round(updated["demo_balance"], 2),
@@ -1141,6 +1217,10 @@ def demo_trade(payload: DemoTradePayload, request: Request):
             "strategy": payload.strategy,
             "side": payload.side,
             "amount": round(float(payload.amount), 2),
+            "exchange": payload.exchange,
+            "market_mode": payload.market_mode,
+            "leverage": leverage,
+            "fee_rate": fee_rate,
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -1156,6 +1236,13 @@ def demo_toggle(payload: DemoTogglePayload, request: Request):
     email = _require_user(request)
     engine.ensure_demo_session(email)
     return engine.toggle_demo_mode(email, payload.active)
+
+
+@app.post("/api/demo/reset")
+def demo_reset(request: Request):
+    email = _require_user(request)
+    engine.ensure_demo_session(email)
+    return engine.reset_demo_balance(email)
 
 @app.post("/api/strategies/create")
 def create_strategy(payload: StrategyCreatePayload, request: Request):
@@ -1243,7 +1330,8 @@ async def profile(request: Request):
                 leverage = max(0.1, min(float(form.get("leverage", 1.5)), 10))
                 risk_tolerance = max(0.0, min(float(form.get("risk_tolerance", 0.03)), 1))
                 fee_rate = max(0.0, min(float(form.get("fee_rate", 0.001)), 0.05))
-                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate)
+                market_mode = str(form.get("market_mode", strategy_manager.config.get("market_mode", "spot"))).strip().lower()
+                save_strategy_config(strategy, leverage, risk_tolerance, fee_rate, market_mode)
                 bot.set_strategy(strategy)
                 engine.set_active_strategy(user_email, strategy)
                 message = "Торговые настройки сохранены."
@@ -1311,6 +1399,8 @@ async def profile(request: Request):
         "bot_runtime": bot_runtime.status(user_email),
         "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
+        "market_modes": MARKET_MODES,
+        "market_mode_labels": MARKET_MODE_LABELS,
         "wallet_providers": WALLET_PROVIDERS,
         "allowed_exchanges": {name.strip() for name in site_settings["allowed_exchanges"].split(",")},
         "allowed_wallets": {name.strip() for name in site_settings["allowed_wallets"].split(",")},
@@ -1372,10 +1462,21 @@ def trading_test(payload: TradingTestPayload, request: Request):
     allowed_pairs = {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}
     if payload.pair not in allowed_pairs:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    if payload.exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if payload.market_mode not in MARKET_MODES or not supports_mode(payload.exchange, payload.market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {payload.market_mode} не поддерживается биржей {payload.exchange}.")
+    leverage = effective_leverage(payload.exchange, payload.market_mode, payload.leverage)
+    fee_rate = _exchange_fee_rate(payload.exchange, payload.pair, payload.market_mode)
     result = strategy_manager.execute(
-        payload.news_sentiment, payload.price_change, max(0.0, payload.current_balance)
+        payload.news_sentiment, payload.price_change, max(0.0, payload.current_balance),
+        fee_rate=fee_rate, leverage=leverage,
     )
     result["pair"] = payload.pair
+    result["exchange"] = payload.exchange
+    result["market_mode"] = payload.market_mode
+    result["leverage"] = leverage
+    result["fee_rate"] = fee_rate
     result["trade"] = bot.simulate(payload.pair, strategy_manager.current_strategy(), result)
     engine.record_memory(
         "strategy_test", result["trade"]["pl"],
@@ -1397,10 +1498,14 @@ def manual_trade(payload: ManualTradePayload, request: Request):
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     if payload.side not in {"buy", "sell"}:
         raise HTTPException(status_code=400, detail="Недопустимое направление сделки.")
-    if payload.price <= 0 or payload.amount <= 0 or payload.balance < 0:
-        raise HTTPException(status_code=400, detail="Цена и количество должны быть положительными.")
-    fee_rate = float(strategy_manager.config.get("fee_rate", 0.001))
-    fee = payload.price * payload.amount * fee_rate
+    if payload.exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if payload.market_mode not in MARKET_MODES or not supports_mode(payload.exchange, payload.market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {payload.market_mode} не поддерживается биржей {payload.exchange}.")
+    leverage = effective_leverage(payload.exchange, payload.market_mode, payload.leverage)
+    fee_rate = _exchange_fee_rate(payload.exchange, payload.pair, payload.market_mode)
+    notional = payload.price * payload.amount * leverage
+    fee = notional * fee_rate
     new_balance = max(0.0, payload.balance - fee)
     mode = current_mode()
     if mode == "live" and not LIVE_CONTROL_STATE.allows(bot_id="manual", ai_bot_id=None):
@@ -1415,8 +1520,17 @@ def manual_trade(payload: ManualTradePayload, request: Request):
         except Exception as exc:
             return {"status": "rejected", "reason": safe_exception_message(exc, "manual_trade"), "fee": round(fee, 6), "balance": round(new_balance, 2)}
     engine.record_trade(email, payload.pair, "manual", payload.side, -fee, new_balance)
-    engine.record_audit("manual_trade", f"{payload.side} {payload.pair} ({status})", email)
-    return {"status": status, "fee": round(fee, 6), "balance": round(new_balance, 2), "order_id": order_id}
+    engine.record_audit("manual_trade", f"{payload.side} {payload.pair} {payload.market_mode}@{payload.exchange} ({status})", email)
+    return {
+        "status": status,
+        "fee": round(fee, 6),
+        "balance": round(new_balance, 2),
+        "order_id": order_id,
+        "exchange": payload.exchange,
+        "market_mode": payload.market_mode,
+        "leverage": leverage,
+        "fee_rate": fee_rate,
+    }
 
 @app.get("/api/trading/history")
 def trading_history(request: Request, limit: int = 50):
@@ -1753,6 +1867,12 @@ def bot_backtest(payload: BacktestPayload, request: Request):
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     if payload.initial_balance <= 0:
         raise HTTPException(status_code=400, detail="Начальный баланс должен быть положительным.")
+    if payload.exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if payload.market_mode not in MARKET_MODES or not supports_mode(payload.exchange, payload.market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {payload.market_mode} не поддерживается биржей {payload.exchange}.")
+    leverage = effective_leverage(payload.exchange, payload.market_mode, payload.leverage)
+    fee_rate = _exchange_fee_rate(payload.exchange, payload.pair, payload.market_mode)
     try:
         client = _public_exchange(payload.exchange)
         daily = refresh_history(MARKET_DATABASE, client, payload.exchange.lower(), payload.pair)
@@ -1762,7 +1882,7 @@ def bot_backtest(payload: BacktestPayload, request: Request):
     performance = evaluate_strategies(
         _truncate_daily_candles(daily, payload.period),
         names,
-        fee_rate=_exchange_fee_rate(payload.exchange, payload.pair),
+        fee_rate=fee_rate,
     )
     if payload.strategy and payload.strategy != "all":
         names = [payload.strategy] if payload.strategy in performance else []
@@ -1771,10 +1891,13 @@ def bot_backtest(payload: BacktestPayload, request: Request):
     for name, data in performance.items():
         if names and name not in names:
             continue
+        base_pnl = (data["final_balance_eur"] - 100.0) * scale
+        pnl = base_pnl * leverage
+        final_balance = round(100.0 * scale + pnl, 2)
         results.append({
             "strategy": name,
-            "final_balance": round(data["final_balance_eur"] * scale, 2),
-            "pnl": round((data["final_balance_eur"] - 100.0) * scale, 2),
+            "final_balance": final_balance,
+            "pnl": round(pnl, 2),
             "roi": data["monthly_return_pct"],
             "wins": round(data["win_rate_pct"] / 100 * data["trades"]),
             "trades": data["trades"],
@@ -1783,9 +1906,12 @@ def bot_backtest(payload: BacktestPayload, request: Request):
             "sortino": data["sortino"],
             "profit_factor": data["profit_factor"],
             "period": payload.period,
-            "fee_rate": _exchange_fee_rate(payload.exchange, payload.pair),
+            "fee_rate": fee_rate,
+            "exchange": payload.exchange,
+            "market_mode": payload.market_mode,
+            "leverage": leverage,
         })
-    return {"results": results}
+    return {"results": results, "fee_rate": fee_rate, "exchange": payload.exchange, "market_mode": payload.market_mode, "leverage": leverage}
 
 @app.post("/api/bot/simulate")
 def simulate_trade(payload: HFTSimulatePayload, request: Request):
@@ -1861,11 +1987,9 @@ def calculate_risk_score(request: Request, leverage: float = 1.0, volatility: fl
 
 @app.post("/api/risk/kill-switch")
 def set_kill_switch(payload: KillSwitchPayload, request: Request):
-    """Unified kill switch: syncs RiskManager + LiveControlState."""
+    """Unified kill switch: syncs RiskManager + LiveControlState symmetrically."""
     email = _require_admin(request)
-    # Global kill switch engages both the risk layer and the LIVE control layer
-    if not payload.enabled:
-        LIVE_CONTROL_STATE.set_global_kill_switch(enabled=False, actor=email)
+    LIVE_CONTROL_STATE.set_global_kill_switch(enabled=payload.enabled, actor=email)
     risk_manager.set_kill_switch(payload.enabled)
     engine.record_audit("kill_switch", str(payload.enabled), email)
     return {**risk_manager.status(), "global_kill_switch": LIVE_CONTROL_STATE.global_kill_switch, "bot_live": dict(LIVE_CONTROL_STATE.bot_live), "ai_bot_live": dict(LIVE_CONTROL_STATE.ai_bot_live)}
@@ -1907,7 +2031,13 @@ def api_profile(request: Request):
 
 @app.get("/api/exchanges")
 def api_exchanges():
-    return {"exchanges": [{"id": e, "name": e.capitalize()} for e in SUPPORTED_MARKET_EXCHANGES]}
+    return {
+        "exchanges": [
+            {"id": name, "name": entry["name"], "fees": entry["fees"], "features": entry["features"],
+             "max_leverage": entry["max_leverage"], "public": entry.get("public"), "testnet": entry.get("testnet")}
+            for name, entry in sorted(EXCHANGE_CATALOG.items())
+        ]
+    }
 
 @app.get("/api/market/trending")
 def api_market_trending():
@@ -1941,6 +2071,81 @@ def api_admin_stats(request: Request):
 def api_admin_get_settings(request: Request):
     _require_admin(request)
     return engine.get_site_settings()
+
+
+def _http_ping(url: str, timeout: float = 6.0) -> dict:
+    """Lightweight public REST check returning latency and status."""
+    from urllib.request import Request, urlopen
+    started = time.monotonic()
+    try:
+        req = Request(url, method="GET", headers={"User-Agent": "cms-admin-diag/1.0", "Accept": "application/json"})
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                latency = (time.monotonic() - started) * 1000.0
+                return {"ok": True, "latency_ms": round(latency, 1), "status": resp.status}
+        except Exception as exc:
+            latency = (time.monotonic() - started) * 1000.0
+            return {"ok": False, "latency_ms": round(latency, 1), "status": None, "error": type(exc).__name__}
+    except Exception as exc:
+        return {"ok": False, "status": None, "error": type(exc).__name__}
+
+
+def _test_exchange_public(name: str, deep: bool = False) -> dict:
+    entry = catalog_entry(name)
+    if not entry:
+        return {"exchange": name, "ok": False, "error": "no catalog entry"}
+    public = entry.get("public") or {}
+    report = {"exchange": name, "ok": False, "fees": entry.get("fees"), "features": entry.get("features"),
+              "max_leverage": entry.get("max_leverage"), "public": public, "testnet": entry.get("testnet"),
+              "main": None, "testnet_checks": {}}
+    if public.get("url") and public.get("ping"):
+        report["main"] = _http_ping(f"{public['url']}{public['ping']}")
+        report["ok"] = bool(report["main"].get("ok"))
+    futures = entry.get("public_futures")
+    if futures and futures.get("url") and futures.get("ping"):
+        checked = _http_ping(f"{futures['url']}{futures['ping']}")
+        report["main_futures"] = checked
+        report["ok"] = report["ok"] or bool(checked.get("ok"))
+    testnet = entry.get("testnet") or {}
+    if isinstance(testnet, dict):
+        for product, spec in testnet.items():
+            if product == "note":
+                continue
+            if isinstance(spec, dict) and spec.get("url") and spec.get("ping"):
+                report["testnet_checks"][product] = _http_ping(f"{spec['url']}{spec['ping']}")
+    if deep and report.get("ok"):
+        started = time.monotonic()
+        try:
+            client = _public_exchange(name)
+            ticker = client.fetch_ticker("BTC/USDT")
+            report["ticker"] = {"ok": True, "price": ticker.get("last"), "latency_ms": round((time.monotonic() - started) * 1000.0, 1)}
+        except Exception as exc:
+            report["ticker"] = {"ok": False, "error": type(exc).__name__}
+    return report
+
+
+@app.get("/api/admin/exchange/status")
+def api_admin_exchange_status(request: Request):
+    _require_admin(request)
+    configured: dict[str, int] = {}
+    for row in engine.list_all_wallets():
+        provider = (row[4] or "").strip().lower() if len(row) > 4 else ""
+        if provider:
+            configured[provider] = configured.get(provider, 0) + 1
+    return {"catalog": exchange_catalog(), "configured_keys": configured}
+
+
+@app.post("/api/admin/exchange/test")
+def api_admin_exchange_test(payload: ExchangeTestPayload, request: Request):
+    _require_admin(request)
+    targets = [payload.exchange.strip().lower()] if payload.exchange and payload.exchange.strip() else sorted(EXCHANGE_CATALOG)
+    results = {}
+    for name in targets:
+        if name not in EXCHANGE_CATALOG:
+            results[name] = {"exchange": name, "ok": False, "error": "unsupported exchange"}
+            continue
+        results[name] = _test_exchange_public(name, deep=payload.deep)
+    return {"results": results}
 
 @app.get("/api/notifications")
 def api_notifications(request: Request):

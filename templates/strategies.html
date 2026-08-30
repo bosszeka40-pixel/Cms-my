@@ -60,6 +60,16 @@
                             {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
                         </select>
                     </div>
+                    <div class="term-field">
+                        <label>Режим</label>
+                        <select id="bt-mode">
+                            {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="term-field">
+                        <label>Плечо</label>
+                        <input id="bt-leverage" type="number" value="1" step="0.1" min="1" max="125">
+                    </div>
                     <button class="term-buy-btn" id="run-backtest" style="width:auto;padding:.55rem 1rem;">Запустить</button>
                 </div>
                 <div id="bt-result" style="margin-top:.5rem;font-size:.82rem;"></div>
@@ -109,6 +119,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
 <script>
+const __escStr = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 (() => {
     const pairEl = document.getElementById('test-pair');
     const exchange = '{{ trading_exchanges[0] if trading_exchanges else "binance" }}';
@@ -204,17 +215,28 @@ document.getElementById('bt-strategy').addEventListener('change', (e) => {
         const resultEl = document.getElementById('bt-result');
         const resultsEl = document.getElementById('bt-results');
         const balance = parseFloat(document.getElementById('bt-balance').value) || 100;
-        resultEl.innerHTML = '<span style="color:var(--warning);">⏳ Выполняется backtest...</span>';
+        const startedAt = Date.now();
+        const ticker = setInterval(() => {
+            const secs = Math.round((Date.now() - startedAt) / 1000);
+            resultEl.innerHTML = '<span style="color:var(--warning);">⏳ Выполняется backtest… ' + secs + ' с</span>';
+        }, 1000);
+        resultEl.innerHTML = '<span style="color:var(--warning);">⏳ Выполняется backtest...0 с</span>';
         resultsEl.style.display = 'none';
         try {
             const resp = await fetch('/api/bot/backtest', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ pair: pairEl.value, exchange: document.getElementById('bt-exchange').value, initial_balance: balance })
+                body: JSON.stringify({ pair: pairEl.value, exchange: document.getElementById('bt-exchange').value, initial_balance: balance,
+                    market_mode: document.getElementById('bt-mode').value,
+                    leverage: parseFloat(document.getElementById('bt-leverage').value) || 1 })
             });
+            clearInterval(ticker);
             const data = await resp.json();
             if (resp.ok) {
-                resultEl.innerHTML = '<span style="color:var(--success);">✓ Backtest завершён</span>';
+                resultEl.innerHTML = '<span style="color:var(--success);">✓ Backtest завершён</span>' +
+                    (data.exchange || data.market_mode || data.leverage ? '<div style="margin-top:.3rem;font-size:.72rem;color:var(--text-secondary);">' +
+                        __escStr(data.exchange || '') + ' · ' + __escStr(data.market_mode || '') + ' · плечо ' + (data.leverage || 1) + 'x' +
+                        (data.fee_rate != null ? ' · реальная комиссия ' + (data.fee_rate * 100).toFixed(3) + '%' : '') + '</div>' : '');
                 resultsEl.style.display = '';
                 resultsEl.innerHTML = (data.results || []).map(r =>
                     `<div class="term-result-card">` +

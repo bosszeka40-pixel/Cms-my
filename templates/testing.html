@@ -33,6 +33,16 @@
             <input type="number" id="test-balance" value="100" min="10" max="10000">
         </div>
         <div class="field-group">
+            <label>Режим торгов</label>
+            <select id="test-mode">
+                {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Плечо</label>
+            <input type="number" id="test-leverage" value="1" min="1" step="0.5">
+        </div>
+        <div class="field-group">
             <label>Стратегия</label>
             <select id="test-strategy">
                 <option value="all">Все стратегии</option>
@@ -78,8 +88,13 @@ async function runBacktest() {
     const resultsEl = document.getElementById('test-results');
     const btn = document.getElementById('run-backtest');
     btn.disabled = true;
-    statusEl.textContent = '⏳ Загрузка рыночных данных и тестирование...';
+    statusEl.textContent = '⏳ Загрузка рыночных данных и тестирование...0 с';
     resultsEl.innerHTML = '';
+    const btStarted = Date.now();
+    const btTicker = setInterval(() => {
+        const secs = Math.round((Date.now() - btStarted) / 1000);
+        statusEl.textContent = '⏳ Загрузка рыночных данных и тестирование...' + secs + ' с';
+    }, 1000);
 
     try {
         const resp = await fetch('/api/bot/backtest', {
@@ -88,10 +103,13 @@ async function runBacktest() {
             body: JSON.stringify({
                 pair: document.getElementById('test-pair').value,
                 exchange: document.getElementById('test-exchange').value,
-                initial_balance: parseFloat(document.getElementById('test-balance').value) || 100
+                initial_balance: parseFloat(document.getElementById('test-balance').value) || 100,
+                market_mode: document.getElementById('test-mode').value,
+                leverage: parseFloat(document.getElementById('test-leverage').value) || 1
             })
         });
         const data = await resp.json();
+        clearInterval(btTicker);
         if (resp.ok && data.results) {
             resultsEl.innerHTML = data.results.map(r => `
                 <div class="term-result-card">
@@ -101,12 +119,13 @@ async function runBacktest() {
                     <div style="font-size:.68rem;color:var(--text-muted);margin-top:.25rem;">${r.trades||0} сделок · ${r.wins||0} побед · Финал: ${(r.final_balance||0).toFixed(2)}€</div>
                 </div>
             `).join('') || '<div class="term-empty">Нет данных</div>';
-            statusEl.textContent = '✅ Тест завершён';
+            statusEl.textContent = '✅ Тест завершён' + (data.exchange ? ' · ' + data.exchange + ' · ' + (data.market_mode || 'spot') + ' · плечо ' + (data.leverage || 1) + 'x' + (data.fee_rate != null ? ' · реальная комиссия ' + (data.fee_rate * 100).toFixed(3) + '%' : '') : '');
         } else {
             statusEl.textContent = '❌ ' + (data.detail || 'Ошибка');
             resultsEl.innerHTML = `<div class="term-empty">${data.detail || 'Ошибка теста'}</div>`;
         }
     } catch(e) {
+        clearInterval(btTicker);
         statusEl.textContent = '❌ Ошибка соединения';
         resultsEl.innerHTML = `<div class="term-empty">Ошибка: ${e.message}</div>`;
     }

@@ -70,6 +70,22 @@
                     <label>Сумма (€)</label>
                     <input id="demo-amount" type="number" value="10" step="1" min="1">
                 </div>
+                <div class="term-field">
+                    <label>Биржа</label>
+                    <select id="demo-exchange">
+                        {% for ex in trading_exchanges %}<option value="{{ ex }}">{{ ex }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="term-field">
+                    <label>Режим торгов</label>
+                    <select id="demo-mode">
+                        {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="term-field">
+                    <label>Плечо</label>
+                    <input id="demo-leverage" type="number" value="1" step="0.5" min="1">
+                </div>
                 <button class="term-buy-btn" type="submit" id="demo-submit">Выполнить сделку</button>
                 <div id="demo-result" style="margin-top:.5rem;font-size:.82rem;"></div>
             </form>
@@ -135,6 +151,9 @@ document.getElementById('demo-trade-form').addEventListener('submit', async (e) 
                 strategy: document.getElementById('demo-strategy').value,
                 sentiment: parseFloat(document.getElementById('demo-sentiment').value),
                 price_change: parseFloat(document.getElementById('demo-change').value),
+                exchange: document.getElementById('demo-exchange').value,
+                market_mode: document.getElementById('demo-mode').value,
+                leverage: parseFloat(document.getElementById('demo-leverage').value) || 1
             })
         });
         const data = await resp.json();
@@ -145,7 +164,8 @@ document.getElementById('demo-trade-form').addEventListener('submit', async (e) 
             document.getElementById('demo-pnl').textContent = (demoPnl >= 0 ? '+' : '') + demoPnl.toFixed(2) + '€';
             document.getElementById('demo-pnl').style.color = demoPnl >= 0 ? 'var(--success)' : 'var(--danger)';
             document.getElementById('demo-trades').textContent = parseInt(document.getElementById('demo-trades').textContent || '0') + 1;
-            resultEl.innerHTML = '<span style="color:var(--success);">✓ ' + data.strategy + ' | P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€ | Сигнал: ' + (data.signal > 0 ? 'BUY' : 'SELL') + '</span>';
+            resultEl.innerHTML = '<span style="color:var(--success);">✓ ' + data.strategy + ' | P/L: ' + data.pnl.toFixed(4) + '€ | Баланс: ' + data.balance.toFixed(2) + '€ | Сигнал: ' + (data.signal > 0 ? 'BUY' : 'SELL') + '</span>' +
+                (data.market_mode ? '<div style="font-size:.7rem;color:var(--text-muted);margin-top:.25rem;">' + data.exchange + ' · ' + data.market_mode + ' · плечо ' + data.leverage + 'x · комиссия ' + ((data.fee_rate || 0) * 100).toFixed(3) + '%</div>' : '');
             demoHistory.unshift({time: new Date().toLocaleTimeString(), strategy: data.strategy, signal: data.signal > 0 ? 'BUY' : 'SELL', pnl: data.pnl});
             renderDemoHistory();
         } else {
@@ -188,11 +208,14 @@ async function toggleAutoDemo() {
             const pair = document.getElementById('test-pair').value;
             const strategy = document.getElementById('demo-strategy').value;
             const sentiment = (Math.random() * 2 - 1);
-            const priceChange = (Math.random() * 6 - 3);
+            const priceChange = (Math.random() * 0.6 - 0.3);
             const resp = await fetch('/api/demo/trade', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({pair, strategy, sentiment, price_change: priceChange})
+                body: JSON.stringify({pair, strategy, sentiment, price_change: priceChange,
+                    exchange: document.getElementById('demo-exchange').value,
+                    market_mode: document.getElementById('demo-mode').value,
+                    leverage: parseFloat(document.getElementById('demo-leverage').value) || 1})
             });
             const data = await resp.json();
             if (resp.ok) {
@@ -212,11 +235,16 @@ async function toggleAutoDemo() {
 async function resetDemo() {
     if (!confirm('Сбросить демо-баланс до 100€?')) return;
     try {
-        await fetch('/api/demo/toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({active: true})});
-        demoBalance = 100; demoPnl = 0; demoHistory = [];
-        document.getElementById('demo-bal').textContent = '100.00€';
-        document.getElementById('demo-pnl').textContent = '0.00€';
-        document.getElementById('demo-trades').textContent = '0';
+        const resp = await fetch('/api/demo/reset', {method:'POST'});
+        const data = await resp.json();
+        demoBalance = data.demo_balance;
+        demoPnl = data.demo_pnl;
+        demoHistory = [];
+        document.getElementById('demo-bal').textContent = data.demo_balance.toFixed(2) + '€';
+        document.getElementById('demo-pnl').textContent = (data.demo_pnl >= 0 ? '+' : '') + data.demo_pnl.toFixed(2) + '€';
+        document.getElementById('demo-pnl').style.color = data.demo_pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+        const tradesEl = document.getElementById('demo-trades');
+        document.getElementById('demo-trades').textContent = data.demo_trades_count;
         document.getElementById('demo-history-body').innerHTML = '<tr><td colspan="4" class="term-empty">Сделок пока нет</td></tr>';
     } catch(_) {}
 }
