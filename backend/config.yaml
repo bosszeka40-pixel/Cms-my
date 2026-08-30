@@ -1,5 +1,6 @@
 fee_rate: 0.002
-leverage: 1.0
+leverage: 2.0
 log_level: info
+market_mode: spot
 risk_tolerance: 0.06
-strategy: delta_neutral_hedger
+strategy: pure_harvester
