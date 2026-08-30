@@ -35,3 +35,4 @@ instance/
 .env
 *.log
 *.pid
+backend/learning_state.json
