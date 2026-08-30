@@ -2123,21 +2123,40 @@ def trading_status(request: Request):
     return bot.status()
 
 @app.post("/api/bot/start")
-def start_bot(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+def start_bot(request: Request, pair: str = "BTC/USDT", exchange: str = "binance",
+              market_mode: str = "spot", leverage: float = 1.5,
+              strategy: str | None = None, bot_mode: str = "strategy"):
     email = _require_admin(request)
     # Unified kill switch: block if either the RiskManager or LiveControlState blocks LIVE
     if risk_manager.kill_switch or LIVE_CONTROL_STATE.global_kill_switch:
         raise HTTPException(status_code=423, detail="Сначала отключите аварийный выключатель.")
-    leverage = float(strategy_manager.config.get("leverage", 1.5))
-    risk_score = risk_manager.calculate_risk_score(leverage=leverage)
+    exchange = (exchange or "binance").lower()
+    if exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if pair not in SUPPORTED_TRADING_PAIRS:
+        raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    if market_mode not in MARKET_MODES or not supports_mode(exchange, market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {market_mode} не поддерживается биржей {exchange}.")
+    if bot_mode not in ("strategy", "full_auto"):
+        raise HTTPException(status_code=400, detail="bot_mode должен быть strategy или full_auto.")
+    eff_leverage = effective_leverage(exchange, market_mode, leverage)
+    risk_score = risk_manager.calculate_risk_score(leverage=eff_leverage)
     allowed, reason = risk_manager.check_risk_score(risk_score)
     if not allowed:
         raise HTTPException(status_code=429, detail=reason)
     engine.ensure_demo_session(email)
     result = bot.start()
-    rt = bot_runtime.start(email, pair=pair, exchange=exchange)
-    result.update({"risk_score": risk_score, "lifecycle": bot_runtime.lifecycle})
-    engine.record_audit("bot_started", f"{pair}@{exchange}", email)
+    rt = bot_runtime.start(
+        email, pair=pair, exchange=exchange,
+        market_mode=market_mode, leverage=eff_leverage,
+        strategy=strategy, bot_mode=bot_mode,
+    )
+    result.update({
+        "risk_score": risk_score, "lifecycle": rt["lifecycle"],
+        "exchange": exchange, "pair": pair,
+        "market_mode": market_mode, "leverage": eff_leverage, "bot_mode": bot_mode,
+    })
+    engine.record_audit("bot_started", f"{pair}@{exchange} mode={market_mode} bot_mode={bot_mode}", email)
     engine.record_bot_stat("bot_status", "started")
     return result
 
@@ -2158,9 +2177,24 @@ def pause_bot(request: Request):
 
 
 @app.post("/api/bot/resume")
-def resume_bot(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
+def resume_bot(request: Request, pair: str | None = None, exchange: str | None = None,
+               market_mode: str | None = None, leverage: float | None = None,
+               strategy: str | None = None, bot_mode: str | None = None):
     email = _require_user(request)
-    return bot_runtime.resume(email, pair=pair, exchange=exchange)
+    if exchange:
+        exchange = exchange.lower()
+        if exchange not in SUPPORTED_MARKET_EXCHANGES:
+            raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if market_mode and (
+        market_mode not in MARKET_MODES or not supports_mode(exchange or "binance", market_mode)
+    ):
+        raise HTTPException(status_code=400, detail=f"Режим {market_mode} не поддерживается биржей {exchange or 'binance'}.")
+    if bot_mode and bot_mode not in ("strategy", "full_auto"):
+        raise HTTPException(status_code=400, detail="bot_mode должен быть strategy или full_auto.")
+    return bot_runtime.resume(
+        email, pair=pair, exchange=exchange, market_mode=market_mode,
+        leverage=leverage, strategy=strategy, bot_mode=bot_mode,
+    )
 
 
 @app.post("/api/bot/emergency-stop")

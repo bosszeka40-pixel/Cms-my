@@ -47,6 +47,15 @@ class BotRuntime:
         self._last_price = None
         self._demo_owner = None
         self._last_context = None
+        self._runtime_config = {
+            "pair": "BTC/USDT",
+            "exchange": "binance",
+            "market_mode": "spot",
+            "leverage": 1.0,
+            "strategy": None,
+            "bot_mode": "strategy",
+        }
+        self._last_market_info = None
 
     def _kill_switch_active(self):
         try:
@@ -64,21 +73,31 @@ class BotRuntime:
             pass
         return False
 
-    def start(self, email, pair="BTC/USDT", exchange="binance"):
+    def start(self, email, pair="BTC/USDT", exchange="binance", market_mode="spot",
+              leverage=1.0, strategy=None, bot_mode="strategy"):
         with self._lock:
             if self.lifecycle == BotLifecycle.RUNNING:
-                return {"status": "already_running"}
+                return {"status": "already_running", "lifecycle": self.lifecycle}
             self._owner_email = email
+            self._runtime_config = {
+                "pair": pair,
+                "exchange": exchange,
+                "market_mode": market_mode,
+                "leverage": float(leverage or 1.0),
+                "strategy": strategy,
+                "bot_mode": bot_mode,
+            }
             self._stop_event.clear()
             self.lifecycle = BotLifecycle.VALIDATING
-            self._thread = threading.Thread(target=self._run, args=(email, pair, exchange), daemon=True)
+            self._thread = threading.Thread(target=self._run, args=(email,), daemon=True)
             self._thread.start()
             self.lifecycle = BotLifecycle.RUNNING
             self.bot.start()
-            self.engine.record_audit("bot_runtime_started", f"pair={pair} exchange={exchange}", email)
+            self.engine.record_audit("bot_runtime_started", f"pair={pair} exchange={exchange} mode={market_mode} bot_mode={bot_mode}", email)
             return {"status": "started", "lifecycle": self.lifecycle}
 
-    def _run(self, email, pair, exchange):
+    def _run(self, email):
+        cfg = self._runtime_config
         # гарантируем демо-сессию владельцу
         self.engine.ensure_demo_session(email)
         while not self._stop_event.is_set() and self.lifecycle == BotLifecycle.RUNNING:
@@ -87,7 +106,7 @@ class BotRuntime:
                     self._emit("kill_switch_blocked", "Глобальный kill switch активен — бот остановлен.")
                     self.stop(email)
                     break
-                self._tick(email, pair, exchange)
+                self._tick(email, cfg.get("pair", "BTC/USDT"), cfg.get("exchange", "binance"))
             except Exception as exc:
                 self.lifecycle = BotLifecycle.ERROR
                 self._emit("error", f"Ошибка runtime: {exc}")
@@ -100,11 +119,27 @@ class BotRuntime:
                 self.lifecycle = BotLifecycle.PAUSED
             return {"lifecycle": self.lifecycle}
 
-    def resume(self, email, pair="BTC/USDT", exchange="binance"):
+    def resume(self, email, pair=None, exchange=None, market_mode=None,
+               leverage=None, strategy=None, bot_mode=None):
         with self._lock:
             if self.lifecycle == BotLifecycle.PAUSED:
+                cfg = dict(self._runtime_config)
+                if pair:
+                    cfg["pair"] = pair
+                if exchange:
+                    cfg["exchange"] = exchange
+                if market_mode:
+                    cfg["market_mode"] = market_mode
+                if leverage is not None:
+                    cfg["leverage"] = float(leverage or 1.0)
+                if strategy is not None:
+                    cfg["strategy"] = strategy
+                if bot_mode:
+                    cfg["bot_mode"] = bot_mode
+                self._runtime_config = cfg
+                self._owner_email = email
                 self._stop_event.clear()
-                self._thread = threading.Thread(target=self._run, args=(email, pair, exchange), daemon=True)
+                self._thread = threading.Thread(target=self._run, args=(email,), daemon=True)
                 self._thread.start()
                 self.lifecycle = BotLifecycle.RUNNING
             return {"lifecycle": self.lifecycle}
@@ -153,6 +188,8 @@ class BotRuntime:
                 "learning_enabled": bool(self.learner and self.learner.enabled),
                 "learning": learning,
                 "context": (self._last_context or {}).get("candles") or None,
+                "runtime": self._runtime_config,
+                "market_info": self._last_market_info,
             }
 
     def _emit(self, event, detail):
@@ -217,6 +254,12 @@ class BotRuntime:
             self._emit("warning", "Демо-баланс исчерпан.")
             return
 
+        cfg = self._runtime_config
+        market_mode = str(cfg.get("market_mode") or "spot")
+        leverage = float(cfg.get("leverage") or 1.0)
+        strategy = cfg.get("strategy")
+        bot_mode = str(cfg.get("bot_mode") or "strategy")
+
         # 1) реальный контекст: цена, свечи, стакан
         context = self._market_context(pair, exchange)
         candle_feat = (context or {}).get("candles") or {}
@@ -234,13 +277,35 @@ class BotRuntime:
         else:
             price_change = candle_feat.get("momentum_1h", 0.0)
 
-        # 2) сентимент из реальных фич (график + стакан)
+        # 2) рыночная информация бота: реальные данные выбранной биржи/пары/режима
+        from .main import _exchange_fee_rate
+        fee_rate = _exchange_fee_rate(exchange, pair, market_mode)
+        self._last_market_info = {
+            "pair": pair,
+            "exchange": exchange,
+            "market_mode": market_mode,
+            "leverage": leverage,
+            "last_price": price,
+            "best_bid": (context or {}).get("best_bid"),
+            "best_ask": (context or {}).get("best_ask"),
+            "spread_pct": depth_feat.get("spread_pct"),
+            "imbalance": depth_feat.get("imbalance"),
+            "momentum_1h": candle_feat.get("momentum_1h"),
+            "rsi14": candle_feat.get("rsi14"),
+            "volume_ratio": candle_feat.get("volume_ratio"),
+            "bid_depth_ratio": depth_feat.get("bid_depth_ratio"),
+            "price_change_pct": round(price_change, 4),
+            "fee_rate": fee_rate,
+            "updated": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # 3) сентимент из реальных фич (график + стакан)
         from .modules.market_features import heuristic_sentiment
         sentiment = heuristic_sentiment(candle_feat, depth_feat)
         ai_confidence = None
         ai_direction = 0
 
-        # 3) ИИ-слой: если включён и уверен — задаёт направление
+        # 4) ИИ-слой: если включён и уверен — задаёт направление
         if self.learner and self.learner.enabled and vector:
             ai_confidence = self.learner.predict_confidence(vector)
             ai_direction = self.learner.suggest_direction(ai_confidence)
@@ -249,19 +314,31 @@ class BotRuntime:
             if abs(sentiment) < 0.05 and candle_feat.get("momentum_1h", 0.0) == 0.0 and not depth_feat:
                 sentiment = 0.0
 
-        result = self.strategy_manager.execute(sentiment, price_change, balance)
-        signal = result["signal"]
-        pnl = result["pnl"]
-        net = result["next_balance"]
-
-        # 4) Risk check — никогда не выше лимита CMS
-        risk_score = self.risk_manager.calculate_risk_score(leverage=float(self.strategy_manager.config.get("leverage", 1.5)))
+        # 5) Risk check — никогда не выше лимита CMS (по выбранному плечу)
+        risk_score = self.risk_manager.calculate_risk_score(leverage=leverage)
         allowed, reason = self.risk_manager.check_risk_score(risk_score)
         if not allowed:
             self._emit("risk_blocked", f"Risk score {risk_score} превышает лимит: {reason}")
             return
 
-        # 5) обучение по факту сделки (реальные свечи+стакан -> исход)
+        if bot_mode == "full_auto":
+            # бот самостоятельно: сам решает когда действовать, сам оценивает результат
+            result = self._autonomous_tick(sentiment, price_change, balance, leverage, fee_rate)
+            if result["signal"] in ("KEEP", "FLAT", "HOLD"):
+                if self.learner and vector is not None:
+                    self.learner.update(vector, 0.0)
+                self._emit("skip", f"{pair} {exchange} bot=автономный · sentiment={round(sentiment, 4)} — бездействие (низкая уверенность)")
+                return
+        else:
+            result = self.strategy_manager.execute(
+                sentiment, price_change, balance, fee_rate=fee_rate, leverage=leverage, strategy=strategy
+            )
+
+        signal = result["signal"]
+        pnl = result["pnl"]
+        net = result["next_balance"]
+
+        # 6) обучение по факту сделки (реальные свечи+стакан -> исход)
         if self.learner and vector is not None:
             self.learner.update(vector, pnl if prev_price else 0.0)
 
@@ -269,6 +346,9 @@ class BotRuntime:
             "time": datetime.now(timezone.utc).isoformat(),
             "pair": pair,
             "exchange": exchange,
+            "market_mode": market_mode,
+            "leverage": leverage,
+            "bot_mode": bot_mode,
             "signal": signal,
             "strategy": result["strategy"],
             "entry_price": price,
@@ -294,4 +374,30 @@ class BotRuntime:
         self.engine.record_memory("demo_trade", round(pnl, 4), f"{pair} {result['strategy']} signal={signal}", email)
         # синхронизируем существующий бот-объект (bot.py) чтобы UI bot_status показывал trades
         self.bot.simulate(pair, result["strategy"], {"signal": signal, "previous_balance": balance, "next_balance": net})
-        self._emit("trade", f"{signal} {pair} PnL {round(pnl, 4)}€")
+        self._emit("trade", f"{signal} {pair} {market_mode} PnL {round(pnl, 4)}€")
+
+    def _autonomous_tick(self, sentiment, price_change, balance, leverage, fee_rate):
+        """Автономный режим: бот без стратегии сам решает действовать или нет."""
+        threshold = 0.10
+        if sentiment >= threshold:
+            direction = 1
+        elif sentiment <= -threshold:
+            direction = -1
+        else:
+            direction = 0
+        if direction == 0:
+            return {"signal": "KEEP", "pnl": 0.0, "next_balance": balance,
+                    "strategy": "autonomous", "leverage": leverage, "fee_rate": fee_rate, "fee": 0.0}
+        capture = 0.5 + 0.5 * min(1.0, abs(sentiment))
+        move_pct = (price_change or 0.0) * direction * capture * leverage
+        fee = balance * leverage * fee_rate * 2
+        next_balance = max(0.0, balance * (1.0 + move_pct / 100.0) - fee)
+        return {
+            "signal": "BUY" if direction > 0 else "SELL",
+            "pnl": next_balance - balance,
+            "next_balance": next_balance,
+            "strategy": "autonomous",
+            "leverage": leverage,
+            "fee_rate": fee_rate,
+            "fee": fee,
+        }

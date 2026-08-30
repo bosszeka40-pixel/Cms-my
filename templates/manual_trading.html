@@ -11,6 +11,13 @@
             <select id="term-pair" class="term-strategy-select" style="width:auto;min-width:120px;">
                 {% for pair in trading_pairs %}<option>{{ pair }}</option>{% endfor %}
             </select>
+            <select id="term-exchange" class="term-strategy-select" style="width:auto;min-width:100px;">
+                {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
+            </select>
+            <select id="term-mode" class="term-strategy-select" style="width:auto;min-width:130px;">
+                {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+            </select>
+            <input id="term-leverage" type="number" value="1" min="1" step="0.5" style="width:70px;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;" title="Плечо">
             <span class="term-pair-price up" id="term-price">—</span>
             <span class="term-pair-change up" id="term-change">—</span>
         </div>
@@ -310,12 +317,53 @@
 <script>
 (() => {
     const pairEl = document.getElementById('term-pair');
-    const exchange = '{{ trading_exchanges[0] }}';
+    let exchange = '{{ trading_exchanges[0] }}';
+    let currentMode = 'spot';
+    let currentLeverage = 1;
     let currentTf = '1h';
     let currentSide = 'buy';
     let demoBalance = {{ demo.demo_balance|default(100)|float }};
     let demoPnl = {{ demo.demo_pnl|default(0)|float }};
     let positions = [];
+
+    const exchangeEl = document.getElementById('term-exchange');
+    const modeEl = document.getElementById('term-mode');
+    const leverageEl = document.getElementById('term-leverage');
+    const EXCHANGE_FEATURES_RU = {
+        {% for name, entry in trading_exchange_catalog.items() %}
+        '{{ name }}': {
+            modes: {{ (entry.get('features') or {}) | tojson }},
+            max_leverage: {{ (entry.get('max_leverage') or {}) | tojson }},
+        },
+        {% endfor %}
+    };
+    function refreshTermModes() {
+        const feat = EXCHANGE_FEATURES_RU[exchange] || {modes: {spot: true}, max_leverage: {spot: 1}};
+        const modes = feat.modes || {};
+        const sel = modeEl;
+        if (!sel) { currentMode = 'spot'; return; }
+        const allModes = {{ market_modes | tojson }};
+        const cur = sel.value;
+        sel.innerHTML = allModes.filter(m => modes[m]).map(m => `<option value="${m}">${m}</option>`).join('');
+        if (!modes[cur] && sel.options.length) sel.value = sel.options[0].value;
+        currentMode = sel.value;
+        setTermLeverageCap();
+    }
+    function setTermLeverageCap() {
+        const feat = EXCHANGE_FEATURES_RU[exchange] || {max_leverage: {spot: 1}};
+        const caps = feat.max_leverage || {};
+        const cap = caps[currentMode] || 1;
+        if (leverageEl) {
+            const v = parseFloat(leverageEl.value);
+            leverageEl.max = cap;
+            if (!(v > 0) || v > cap) leverageEl.value = cap;
+            leverageEl.disabled = currentMode === 'spot';
+            currentLeverage = currentMode === 'spot' ? 1 : (parseFloat(leverageEl.value) || cap);
+        } else {
+            currentLeverage = currentMode === 'spot' ? 1 : 1;
+        }
+    }
+    if (leverageEl && currentMode === 'spot') leverageEl.disabled = true;
 
     /* Конвертер терминала: сумма в USDT/EUR/монетах ⇄ количество монет */
     let terminalConv = null;
@@ -324,9 +372,9 @@
             host: 'oc-terminal',
             pair: () => pairEl.value,
             exchange: () => exchange,
-            mode: () => 'spot',
+            mode: () => currentMode,
             side: () => currentSide,
-            leverage: () => 1,
+            leverage: () => currentLeverage,
             balance: () => demoBalance,
             onPairList: (pairs, meta) => {
                 if (meta && meta.pairs) {
@@ -357,6 +405,7 @@
 
     /* Init chart */
     initTradingChart('trading-chart');
+    refreshTermModes();
     loadChartData(pairEl.value, exchange, currentTf);
     startLivePrice(pairEl.value, exchange);
 
@@ -382,6 +431,31 @@
             if (btn.id === 'submit-buy') btn.textContent = 'Купить ' + pairEl.value;
             else btn.textContent = 'Продать ' + pairEl.value;
         });
+        if (terminalConv) terminalConv.refresh();
+    });
+
+    /* Биржа/режим/плечо главного терминала */
+    function marketConfigChanged() {
+        if (typeof OrderBookPanel !== 'undefined') OrderBookPanel.setPair(pairEl.value, exchange);
+        if (terminalConv) terminalConv.refresh();
+        stopLivePrice();
+        loadChartData(pairEl.value, exchange, currentTf);
+        if (currentTf === 'live') startLivePrice(pairEl.value, exchange);
+        loadSignals();
+    }
+    if (exchangeEl) exchangeEl.addEventListener('change', () => {
+        exchange = exchangeEl.value;
+        refreshTermModes();
+        marketConfigChanged();
+    });
+    if (modeEl) modeEl.addEventListener('change', () => {
+        currentMode = modeEl.value;
+        setTermLeverageCap();
+        if (terminalConv) terminalConv.refresh();
+    });
+    if (leverageEl) leverageEl.addEventListener('change', () => {
+        currentLeverage = parseFloat(leverageEl.value) || 1;
+        if (terminalConv) terminalConv.refresh();
     });
 
     /* Buy/Sell tabs */
@@ -396,7 +470,7 @@
             const resp = await fetch('/api/market/apply-signal', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({pair, exchange: 'binance', source, amount: parseFloat(document.getElementById('order-amount').value || '10'), mode: 'demo'})
+                body: JSON.stringify({pair, exchange, source, amount: parseFloat(document.getElementById('order-amount').value || '10'), mode: 'demo'})
             });
             const data = await resp.json();
             if (resp.ok) {
@@ -419,13 +493,14 @@
             el.innerHTML = '<span style="color:var(--danger);">✗ Ошибка сети</span>';
         }
     }
+    window.applySignal = applySignal;
 
     async function loadSignals() {
         const body = document.getElementById('signals-body');
         const source = document.getElementById('signals-source').value;
         body.innerHTML = '<tr><td colspan="5" class="term-empty">Загрузка...</td></tr>';
         try {
-            const resp = await fetch('/api/market/signals?exchange=binance&source=' + encodeURIComponent(source));
+            const resp = await fetch('/api/market/signals?exchange=' + encodeURIComponent(exchange) + '&source=' + encodeURIComponent(source));
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.detail || 'Не удалось получить сигналы');
             const signals = data.signals || [];
@@ -513,6 +588,9 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
             price_change: 0,
             amount,
             side,
+            exchange,
+            market_mode: currentMode,
+            leverage: currentLeverage,
         };
         // Профессиональный терминал: сумма в USDT/EUR/монетах (сервер конвертирует по бирже)
         const oc = terminalConv ? terminalConv.getState() : null;

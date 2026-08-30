@@ -221,7 +221,7 @@
     <h2>🛰 ИИ-теневой режим</h2>
     <p style="font-size:.82rem;color:var(--text-muted);">Оценка, урегулирование и мониторинг теневых сделок ИИ-бота. Работает параллельно и не влияет на реальные ордера.</p>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;margin-bottom:1rem;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;align-items:end;margin-bottom:1rem;">
         <div class="field-group">
             <label>Статус фида</label>
             <div id="shadow-feed-status" style="font-size:.85rem;padding:.5rem;background:var(--bg-tertiary);border-radius:4px;">Загрузка…</div>
@@ -229,6 +229,12 @@
         <div class="field-group">
             <label>Пара (feed)</label>
             <input id="shadow-feed-pair" value="BTC/USDT" spellcheck="false">
+        </div>
+        <div class="field-group">
+            <label>Биржа</label>
+            <select id="shadow-feed-exchange">
+                {% for ex in supported_exchanges %}<option>{{ ex }}</option>{% endfor %}
+            </select>
         </div>
         <div style="display:flex;gap:.35rem;">
             <button class="btn btn-sm" onclick="startShadowFeed()">▶ Запустить фид</button>
@@ -407,9 +413,10 @@ async function loadShadowStatus() {
 async function startShadowFeed() {
     try {
         const pair = document.getElementById('shadow-feed-pair').value || 'BTC/USDT';
+        const exchange = (document.getElementById('shadow-feed-exchange') || {}).value || 'binance';
         const r = await fetch('/api/admin/ai-shadow/feed/start', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({exchange: 'binance', pair: pair, interval_seconds: 1.0})
+            body: JSON.stringify({exchange: exchange, pair: pair, interval_seconds: 1.0})
         });
         alert((await r.json().catch(()=>({}))).detail || 'Фид запущен');
         loadShadowStatus();

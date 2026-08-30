@@ -38,6 +38,7 @@ class StrategyManager:
         current_balance: float,
         fee_rate: float | None = None,
         leverage: float | None = None,
+        strategy: str | None = None,
     ) -> dict:
         values = (news_sentiment, price_change, current_balance)
         if not all(math.isfinite(float(value)) for value in values):
@@ -45,7 +46,7 @@ class StrategyManager:
         if current_balance <= 0:
             raise ValueError("Текущий баланс должен быть положительным.")
 
-        strategy = self.current_strategy()
+        strategy = strategy or self.current_strategy()
         leverage = float(self.config.get("leverage", 1.5) if leverage is None else leverage)
         if not math.isfinite(leverage) or leverage <= 0 or leverage > MAX_LEVERAGE:
             raise ValueError("Плечо должно быть конечным, положительным и не превышать 2x.")

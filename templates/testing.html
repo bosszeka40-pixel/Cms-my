@@ -105,7 +105,8 @@ async function runBacktest() {
                 exchange: document.getElementById('test-exchange').value,
                 initial_balance: parseFloat(document.getElementById('test-balance').value) || 100,
                 market_mode: document.getElementById('test-mode').value,
-                leverage: parseFloat(document.getElementById('test-leverage').value) || 1
+                leverage: parseFloat(document.getElementById('test-leverage').value) || 1,
+                strategy: (document.getElementById('test-strategy') || {}).value || 'all'
             })
         });
         const data = await resp.json();

@@ -149,6 +149,7 @@ class CMSEngine:
         self.ensure_user_plugin_access_column()
         self.ensure_strategy_plugins()
         self._ensure_demo_column()
+        self.ensure_wallet_arb_columns()
 
 
     def ensure_demo_session(self, email: str):
@@ -316,6 +317,19 @@ class CMSEngine:
             columns = connection.exec_driver_sql("PRAGMA table_info(user_plugins)").fetchall()
             if not any(column[1] == "access_until" for column in columns):
                 connection.exec_driver_sql("ALTER TABLE user_plugins ADD COLUMN access_until DATETIME")
+
+    def ensure_wallet_arb_columns(self):
+        """Дрейф схемы: dev/старые БД не имеют арбитраж-колонок кошелька."""
+        additions = {
+            "exchange_provider_arb": "VARCHAR",
+            "exchange_key_masked_arb": "VARCHAR",
+            "exchange_sandbox_arb": "BOOLEAN",
+        }
+        with self.engine.begin() as connection:
+            columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(wallets)").fetchall()]
+            for column, coltype in additions.items():
+                if column not in columns:
+                    connection.exec_driver_sql(f"ALTER TABLE wallets ADD COLUMN {column} {coltype}")
 
     @staticmethod
     def hash_password(password: str) -> str:

@@ -52,11 +52,7 @@
             <div class="field-group">
                 <label>Вторая биржа</label>
                 <select id="arb-exchange-name" required>
-                    <option value="binance">Binance</option>
-                    <option value="bybit">Bybit</option>
-                    <option value="okx">OKX</option>
-                    <option value="kraken">Kraken</option>
-                    <option value="bitfinex">Bitfinex</option>
+                    {% for ex in trading_exchanges %}<option value="{{ ex }}">{{ ex | capitalize }}</option>{% endfor %}
                 </select>
             </div>
             <div class="field-group">

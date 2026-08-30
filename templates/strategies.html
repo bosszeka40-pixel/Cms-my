@@ -55,7 +55,7 @@
                         <input id="bt-balance" type="number" value="100" step="1" min="1">
                     </div>
                     <div class="term-field">
-                        <label>Пара</label>
+                        <label>Биржа</label>
                         <select id="bt-exchange" class="term-strategy-select">
                             {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
                         </select>
@@ -228,7 +228,8 @@ document.getElementById('bt-strategy').addEventListener('change', (e) => {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ pair: pairEl.value, exchange: document.getElementById('bt-exchange').value, initial_balance: balance,
                     market_mode: document.getElementById('bt-mode').value,
-                    leverage: parseFloat(document.getElementById('bt-leverage').value) || 1 })
+                    leverage: parseFloat(document.getElementById('bt-leverage').value) || 1,
+                    strategy: document.getElementById('bt-strategy').value })
             });
             clearInterval(ticker);
             const data = await resp.json();

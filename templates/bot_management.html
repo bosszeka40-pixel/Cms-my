@@ -60,11 +60,39 @@
     </div>
 </div>
 
+<!-- Bot Market Info (live snapshot of chosen exchange/pair/mode) -->
+<div class="card" style="margin-bottom:1rem;padding:.75rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <h2 style="margin:0;font-size:1rem;">🔎 Информация бота <span id="bot-info-src" style="color:var(--text-muted);font-size:.8rem;"></span></h2>
+        <span id="bot-info-updated" style="font-size:.72rem;color:var(--text-muted);"></span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.5rem;font-size:.8rem;">
+        <div><span class="muted">Цена</span> <div><b id="bi-last-price">—</b></div></div>
+        <div><span class="muted">Bid / Ask</span> <div id="bi-bid-ask">—</div></div>
+        <div><span class="muted">Спред</span> <div id="bi-spread">—</div></div>
+        <div><span class="muted">Имбаланс стакана</span> <div id="bi-imbalance">—</div></div>
+        <div><span class="muted">Импульс 1h</span> <div id="bi-momentum">—</div></div>
+        <div><span class="muted">RSI 14</span> <div id="bi-rsi">—</div></div>
+        <div><span class="muted">Объём 1h</span> <div id="bi-volume">—</div></div>
+        <div><span class="muted">Режим / Плечо</span> <div id="bi-mode">—</div></div>
+        <div><span class="muted">Режим бота</span> <div id="bi-botmode">—</div></div>
+        <div><span class="muted">Комиссия</span> <div id="bi-fee">—</div></div>
+    </div>
+</div>
+
 <!-- Market Chart (same as Terminal: live) + Orderbook + Trades -->
 <div class="card" style="margin-bottom:1rem;padding:.75rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
         <h2 style="margin:0;">📈 Рынок <span id="bot-market-pair" style="color:var(--text-muted);font-size:.9rem;"></span></h2>
         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+            <select id="bot-chart-exchange" style="width:auto;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+                {% for ex in trading_exchanges %}<option>{{ ex }}</option>{% endfor %}
+            </select>
+            <select id="bot-chart-mode" style="width:auto;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+                {% for m in market_modes %}<option value="{{ m }}">{{ market_mode_labels.get(m, m) }}</option>{% endfor %}
+            </select>
+            <label style="font-size:.78rem;color:var(--text-muted);">Плечо</label>
+            <input id="bot-chart-leverage" type="number" min="1" step="0.5" value="1.5" style="width:64px;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;">
             <select id="bot-chart-pair" style="width:auto;padding:.3rem .5rem;background:var(--bg-tertiary);color:var(--text);border:1px solid var(--border);border-radius:4px;">
                 <option value="BTC/USDT">BTC/USDT</option>
                 <option value="ETH/USDT">ETH/USDT</option>
@@ -398,7 +426,19 @@ async function botAction(action) {
     const btn = document.getElementById('btn-bot-power') || document.getElementById('btn-bot-pause');
     if (btn) btn.disabled = true;
     try {
-        const resp = await fetch('/api/bot/' + action, {method: 'POST'});
+        let url = '/api/bot/' + action;
+        if (action === 'start' || action === 'resume') {
+            const qs = new URLSearchParams({
+                exchange: getBotExchange(),
+                pair: getBotPair(),
+                market_mode: getBotMode(),
+                leverage: String(getBotLeverage()),
+                bot_mode: (document.getElementById('bot-mode') || {}).value || 'strategy',
+                strategy: (document.getElementById('strategy-select') || {}).value || '',
+            });
+            url += '?' + qs.toString();
+        }
+        const resp = await fetch(url, {method: 'POST'});
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
             alert(data.detail || 'Ошибка: ' + action);
@@ -475,9 +515,10 @@ async function toggleAutoGenerate() {
 async function loadBotSignals() {
     const body = document.getElementById('bot-signals-body');
     const source = document.getElementById('bot-signals-source').value;
+    const ex = (document.getElementById('bot-chart-exchange') || {}).value || 'binance';
     body.innerHTML = '<tr><td colspan="4" class="term-empty">Загрузка...</td></tr>';
     try {
-        const resp = await fetch('/api/market/signals?exchange=binance&source=' + encodeURIComponent(source));
+        const resp = await fetch('/api/market/signals?exchange=' + encodeURIComponent(ex) + '&source=' + encodeURIComponent(source));
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Не удалось получить сигналы');
         const signals = data.signals || [];
@@ -526,10 +567,58 @@ document.getElementById('refresh-bot-signals')?.addEventListener('click', loadBo
 document.getElementById('bot-signals-source')?.addEventListener('change', loadBotSignals);
 loadBotSignals();
 
-/* ── Bot chart (same as Terminal: live mode) ── */
+/* ── Bot chart (same as Terminal: live mode, все биржи и режимы) ── */
+const EXCHANGE_FEATURES = {
+    {% for name, entry in trading_exchange_catalog.items() %}
+    '{{ name }}': {
+        modes: {{ (entry.get('features') or {}) | tojson }},
+        max_leverage: {{ (entry.get('max_leverage') or {}) | tojson }},
+    },
+    {% endfor %}
+};
 let botCurrentTf = '1h';
-const botExchange = 'binance';
-const botPairEl = document.getElementById('bot-chart-pair');
+let botPairEl = document.getElementById('bot-chart-pair');
+let botExchangeEl = document.getElementById('bot-chart-exchange');
+let botModeEl = document.getElementById('bot-chart-mode');
+let botLevEl = document.getElementById('bot-chart-leverage');
+let botExchange = '{{ trading_exchanges[0] }}';
+let botMode = 'spot';
+let botLeverage = 1.5;
+
+function getBotExchange() { return botExchangeEl ? botExchangeEl.value : botExchange; }
+function getBotPair() { return botPairEl ? botPairEl.value : 'BTC/USDT'; }
+function getBotMode() {
+    const m = botModeEl ? botModeEl.value : botMode;
+    const feat = EXCHANGE_FEATURES[getBotExchange()];
+    const modes = feat ? (feat.modes || {}) : {};
+    const mode = modes[m] ? m : (Object.keys(modes)[0] || 'spot');
+    if (botModeEl && botModeEl.value !== mode) botModeEl.value = mode;
+    return mode;
+}
+function getBotLeverage() {
+    let v = parseFloat(botLevEl ? botLevEl.value : 0);
+    if (!(v > 0)) v = botLeverage;
+    return v;
+}
+function refreshModes(exchange) {
+    const feat = EXCHANGE_FEATURES[exchange] || {modes: {spot: true}, max_leverage: {spot: 1}};
+    const modes = feat.modes || {};
+    [...(botModeEl ? botModeEl.options : [])].forEach(opt => {
+        opt.disabled = !modes[opt.value];
+    });
+    getBotMode(); // вернёт доступный доступный режим (не выбрасывает)
+}
+function setLeverageCap(exchange, mode) {
+    const feat = EXCHANGE_FEATURES[exchange] || {max_leverage: {spot: 1}};
+    const caps = feat.max_leverage || {};
+    const cap = caps[mode] || 1;
+    if (botLevEl) {
+        botLevEl.max = cap;
+        const v = parseFloat(botLevEl.value);
+        if (!(v > 0) || v > cap) botLevEl.value = cap;
+    }
+    botLeverage = parseFloat(botLevEl ? botLevEl.value : 1) || 1;
+}
 
 function fmtNum(n) {
     const v = Number(n);
@@ -542,19 +631,61 @@ function fmtPrice(n) {
     return v >= 100 ? v.toFixed(1) : v >= 1 ? v.toFixed(4) : v.toFixed(6);
 }
 
+/* Порядок: пара <= биржа <= режим/плечо */
+async function populatePairs(exchange) {
+    const old = getBotPair();
+    try {
+        const resp = await fetch('/api/market/pairs?exchange=' + encodeURIComponent(exchange));
+        const data = await resp.json();
+        const pairs = (data.pairs || []).map(p => p.pair).filter(Boolean);
+        if (botPairEl && pairs.length) {
+            if (botPairEl.options.length !== pairs.length || botPairEl.options[0].value !== pairs[0]) {
+                const keep = pairs.includes(old) ? old : 'BTC/USDT';
+                botPairEl.innerHTML = pairs.map(p => `<option value="${p}">${p}</option>`).join('');
+                if (!pairs.includes(keep)) botPairEl.value = pairs[0];
+                else botPairEl.value = keep;
+            }
+        }
+    } catch (_) {}
+    await marketChanged(getBotExchange());
+}
+
+async function marketChanged(exchange) {
+    refreshModes(exchange);
+    botMode = getBotMode();
+    setLeverageCap(exchange, botMode);
+    botExchange = exchange;
+    stopLivePrice();
+    loadChartData(getBotPair(), exchange, botCurrentTf);
+    if (botCurrentTf === 'live') startLivePrice(getBotPair(), exchange);
+    loadBotMarket();
+    loadBotSignals();
+    loadBotInfo();
+}
+
+if (botExchangeEl) botExchangeEl.addEventListener('change', () => { populatePairs(botExchangeEl.value); });
+if (botModeEl) botModeEl.addEventListener('change', () => {
+    const ex = getBotExchange(); botMode = botModeEl.value; setLeverageCap(ex, botMode);
+    marketChanged(ex);
+});
+if (botLevEl) botLevEl.addEventListener('change', () => {
+    const ex = getBotExchange(); botLeverage = getBotLeverage(); setLeverageCap(ex, getBotMode());
+});
+
 /* Orderbook + last price refresh (chart itself uses trading_chart.js) */
 async function loadBotMarket() {
-    const pair = botPairEl.value;
+    const pair = getBotPair();
+    const exchange = getBotExchange();
     const el = document.getElementById('bot-market-pair');
-    if (el) el.textContent = pair;
+    if (el) el.textContent = pair + ' @ ' + exchange;
     try {
-        const resp = await fetch('/api/market/data?pair=' + encodeURIComponent(pair) + '&exchange=binance');
+        const resp = await fetch('/api/market/data?pair=' + encodeURIComponent(pair) + '&exchange=' + encodeURIComponent(exchange));
         if (!resp.ok) throw new Error('Не удалось получить рыночные данные');
         const data = await resp.json();
 
         const last = document.getElementById('bot-last-price');
         if (last && data.ticker && data.ticker.last) {
-            last.textContent = fmtPrice(data.ticker.last) + ' USDT';
+            last.textContent = fmtPrice(data.ticker.last) + ' ' + (data.ticker.quote || 'USDT');
             last.style.color = Number(data.ticker.change) >= 0 ? 'var(--success)' : 'var(--danger)';
         }
 
@@ -574,11 +705,35 @@ async function loadBotMarket() {
     }
 }
 
+/* Панель «Информация бота»: всё, что бот реально видит на рынке + активная конфигурация */
+async function loadBotInfo() {
+    try {
+        const resp = await fetch('/api/bot/status');
+        if (!resp.ok) return;
+        const d = await resp.json();
+        const rt = d.runtime || {};
+        const mi = d.market_info || {};
+        const ex = mi.exchange || rt.exchange || getBotExchange();
+        const set = (id, text) => { const e = document.getElementById(id); if (e) e.textContent = text; };
+        set('bi-last-price', mi.last_price ? fmtPrice(mi.last_price) + ' ' + (mi.pair || getBotPair()).split('/')[1] : '—');
+        set('bi-bid-ask', (mi.best_bid != null && mi.best_ask != null) ? fmtPrice(mi.best_bid) + ' / ' + fmtPrice(mi.best_ask) : '—');
+        set('bi-spread', mi.spread_pct != null ? mi.spread_pct.toFixed(3) + '%' : '—');
+        set('bi-imbalance', mi.imbalance != null ? mi.imbalance.toFixed(3) : '—');
+        set('bi-momentum', mi.momentum_1h != null ? (mi.momentum_1h >= 0 ? '+' : '') + mi.momentum_1h.toFixed(3) + '%' : '—');
+        set('bi-rsi', mi.rsi14 != null ? mi.rsi14.toFixed(1) : '—');
+        set('bi-volume', mi.volume_ratio != null ? mi.volume_ratio.toFixed(2) + 'x' : '—');
+        set('bi-mode', (mi.market_mode || rt.market_mode || '—') + ' / ' + (mi.leverage || rt.leverage || '1') + 'x');
+        set('bi-botmode', rt.bot_mode || (d.active ? 'strategy' : '—'));
+        set('bi-fee', mi.fee_rate != null ? (mi.fee_rate * 100).toFixed(3) + '%' : '—');
+        const src = document.getElementById('bot-info-src');
+        if (src) src.textContent = (mi.pair || rt.pair || getBotPair()) + ' @ ' + ex + ' · ' + (d.active ? 'БОТ АКТИВЕН' : 'остановлен');
+        const up = document.getElementById('bot-info-updated');
+        if (up) up.textContent = mi.updated ? 'обновлено ' + mi.updated.replace('T', ' ').slice(5, 19) : '';
+    } catch (_) {}
+}
+
 /* Chart: same as manual terminal */
 initTradingChart('bot-chart');
-loadChartData(botPairEl.value, botExchange, botCurrentTf);
-startLivePrice(botPairEl.value, botExchange);
-
 const botTfBtnRow = document.querySelector('#bot-chart-tf-row, .term-timeframes');
 if (botTfBtnRow) {
     botTfBtnRow.querySelectorAll('.term-tf-btn').forEach(btn => {
@@ -587,20 +742,15 @@ if (botTfBtnRow) {
             btn.classList.add('active');
             botCurrentTf = btn.dataset.tf;
             stopLivePrice();
-            loadChartData(botPairEl.value, botExchange, botCurrentTf);
-            if (botCurrentTf === 'live') startLivePrice(botPairEl.value, botExchange);
+            loadChartData(getBotPair(), getBotExchange(), botCurrentTf);
+            if (botCurrentTf === 'live') startLivePrice(getBotPair(), getBotExchange());
         });
     });
 }
 
-botPairEl.addEventListener('change', () => {
-    stopLivePrice();
-    loadChartData(botPairEl.value, botExchange, botCurrentTf);
-    if (botCurrentTf === 'live') startLivePrice(botPairEl.value, botExchange);
-    loadBotMarket();
-});
+botPairEl.addEventListener('change', () => { marketChanged(getBotExchange()); });
 
-document.getElementById('bot-chart-refresh')?.addEventListener('click', () => { loadBotMarket(); loadBotTrades(); });
+document.getElementById('bot-chart-refresh')?.addEventListener('click', () => { loadBotMarket(); loadBotTrades(); loadBotInfo(); });
 
 async function loadBotTrades() {
     const body = document.getElementById('bot-trades-body');
@@ -627,10 +777,13 @@ async function loadBotTrades() {
     }
 }
 
-loadBotMarket();
 loadBotTrades();
+populatePairs(botExchangeEl ? botExchangeEl.value : 'binance');
+loadBotInfo();
+loadBotMarket();
 setInterval(loadBotMarket, 15000);
 setInterval(loadBotTrades, 10000);
+setInterval(loadBotInfo, 5000);
 pollBotStatus();
 setInterval(pollBotStatus, 5000);
 
