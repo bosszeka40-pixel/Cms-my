@@ -10,6 +10,12 @@ let bbLower = null;
 let bbMiddle = null;
 let rsiSeries = null;
 
+/* Нативные символы бирж (из /api/market/pairs) — чтобы график и живая цена читали
+ * данные напрямую с API биржи, не нагружая наш сервер. */
+let __nativePairs = {};
+window.__setNativePairs = (exchange, pairMap) => { __nativePairs[exchange] = pairMap || {}; };
+window.__nativeId = (exchange, pair) => (__nativePairs[exchange] || {})[pair];
+
 function calcEMA(data, period) {
     const k = 2 / (period + 1);
     const result = [];
@@ -135,6 +141,24 @@ function initTradingChart(containerId) {
 async function loadChartData(pair, exchange, timeframe) {
     if (!candleSeries) return;
     const tf = timeframe === 'live' ? '1m' : (timeframe || '1h');
+    // 1) Прямое API биржи из браузера: короткий график без нагрузки на наш сервер.
+    //    История для бэктестов/обучения продолжает храниться в серверной БД.
+    const nativeId = window.__nativeId && window.__nativeId(exchange, pair);
+    if (nativeId && typeof ExchangeFeed !== 'undefined' && ExchangeFeed.supported(exchange)) {
+        try {
+            const rows = await ExchangeFeed.klines(exchange, nativeId, tf, 600);
+            if (rows && rows.length) {
+                const candles = rows.map(r => ({
+                    time: Math.floor(r[0] / 1000),
+                    open: Number(r[1]), high: Number(r[2]), low: Number(r[3]), close: Number(r[4]),
+                }));
+                renderChartSeries(candles, rows);
+                updateDirectTicker(exchange, nativeId, rows);
+                return;
+            }
+        } catch (e) { /* тихий fallback на серверный путь ниже */ }
+    }
+    // 2) Серверный путь (свечи из БД, обновляемые с биржи) — как раньше.
     try {
         const r = await fetch(`/api/market/history?pair=${encodeURIComponent(pair)}&exchange=${encodeURIComponent(exchange)}&timeframe=${tf}`, {
             headers: { 'Accept': 'application/json' }
@@ -146,30 +170,64 @@ async function loadChartData(pair, exchange, timeframe) {
             time: Math.floor(c.timestamp / 1000),
             open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close),
         }));
-        candleSeries.setData(candles);
-
-        const volumes = data.candles.map(c => ({
-            time: Math.floor(c.timestamp / 1000),
-            value: Number(c.volume || 0),
-            color: c.close >= c.open ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
-        }));
-        if (volumeSeries) volumeSeries.setData(volumes);
-
-        if (candles.length >= 7) ema7Series.setData(calcEMA(candles, 7));
-        if (candles.length >= 25) ema25Series.setData(calcEMA(candles, 25));
-        if (candles.length >= 99) ema99Series.setData(calcEMA(candles, 99));
-
-        if (candles.length >= 20) {
-            const bb = calcBollinger(candles, 20, 2);
-            bbUpper.setData(bb.upper); bbMiddle.setData(bb.middle); bbLower.setData(bb.lower);
-        }
-        if (candles.length >= 15 && rsiSeries) rsiSeries.setData(calcRSI(candles, 14));
-
-        updateOHLCV(candles[candles.length - 1]);
+        renderChartSeries(candles, data.candles);
         updateTickerStats(data);
     } catch (err) {
         console.error('Chart load error:', err);
     }
+}
+
+function renderChartSeries(candles, rows) {
+    candleSeries.setData(candles);
+    const volumes = (rows || []).map(r => ({
+        time: Math.floor(r.timestamp != null ? r.timestamp / 1000 : r[0] / 1000),
+        value: Number(r.volume != null ? r.volume : r[5] || 0),
+        color: (r.close != null ? r.close : r[4]) >= (r.open != null ? r.open : r[1]) ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
+    }));
+    if (volumeSeries) volumeSeries.setData(volumes);
+
+    if (candles.length >= 7) ema7Series.setData(calcEMA(candles, 7));
+    if (candles.length >= 25) ema25Series.setData(calcEMA(candles, 25));
+    if (candles.length >= 99) ema99Series.setData(calcEMA(candles, 99));
+
+    if (candles.length >= 20) {
+        const bb = calcBollinger(candles, 20, 2);
+        bbUpper.setData(bb.upper); bbMiddle.setData(bb.middle); bbLower.setData(bb.lower);
+    }
+    if (candles.length >= 15 && rsiSeries) rsiSeries.setData(calcRSI(candles, 14));
+
+    const lastRow = rows && rows[rows.length - 1];
+    const lastCandle = { ...candles[candles.length - 1], volume: lastRow ? (lastRow.volume != null ? lastRow.volume : lastRow[5]) : 0 };
+    updateOHLCV(lastCandle);
+}
+
+/* Живой тикер напрямую с биржи (лучший-effort: статус-панель не обязана успешно). */
+async function updateDirectTicker(exchange, nativeId, rows) {
+    try {
+        const t = await ExchangeFeed.directTicker(exchange, nativeId);
+        const bid = Number(t.bid), ask = Number(t.ask);
+        const last = Number(t.last) || ((bid && ask) ? ((bid + ask) / 2) : null);
+        const priceEl = document.getElementById('term-price') || document.getElementById('test-price');
+        if (priceEl && last) {
+            priceEl.textContent = fmtPrice(last);
+            priceEl.className = 'term-pair-price up';
+        }
+        if (rows && rows.length > 1 && last) {
+            const prev = Number(rows[rows.length - 2][4]);
+            const pct = prev ? (last / prev - 1) * 100 : 0;
+            const changeEl = document.getElementById('term-change') || document.getElementById('test-change');
+            if (changeEl) {
+                changeEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                changeEl.className = 'term-pair-change ' + (pct >= 0 ? 'up' : 'down');
+            }
+        }
+    } catch (e) { /* статус-панель опциональна */ }
+}
+
+function fmtPrice(p) {
+    if (p >= 1000) return p.toFixed(2);
+    if (p >= 1) return p.toFixed(4 - 1);
+    return p.toFixed(6);
 }
 
 function updateOHLCV(candle) {
@@ -215,8 +273,30 @@ function formatNum(n) {
     return n.toFixed(2);
 }
 
-/* WebSocket live price updates */
+/* Live price: WebSocket (binance) или прямое API биржи из браузера (не грузим сервер) */
 let wsConn = null;
+let livePriceTimer = null;
+
+function _applyLatestPrice(price) {
+    if (price <= 0) return;
+    const priceEl = document.getElementById('term-price') || document.getElementById('test-price');
+    if (priceEl) {
+        const prev = parseFloat(priceEl.dataset.prev || price);
+        priceEl.textContent = fmtPrice(price);
+        priceEl.className = 'term-pair-price ' + (price >= prev ? 'up' : 'down');
+        priceEl.dataset.prev = price;
+    }
+    if (candleSeries) {
+        const now = Math.floor(Date.now() / 60000) * 60;
+        const last = candleSeries.data().at(-1);
+        if (last && last.time === now) {
+            candleSeries.update({ time: now, open: last.open, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price });
+        } else {
+            candleSeries.update({ time: now, open: price, high: price, low: price, close: price });
+        }
+    }
+}
+
 function startLivePrice(pair, exchange) {
     stopLivePrice();
     const symbol = pair.replace('/', '').toLowerCase();
@@ -226,27 +306,26 @@ function startLivePrice(pair, exchange) {
             wsConn.onmessage = e => {
                 try {
                     const d = JSON.parse(e.data);
-                    const price = parseFloat(d.p);
-                    const priceEl = document.getElementById('term-price') || document.getElementById('test-price');
-                    if (priceEl && price > 0) {
-                        const prev = parseFloat(priceEl.dataset.prev || price);
-                        priceEl.textContent = price.toFixed(2);
-                        priceEl.className = 'term-pair-price ' + (price >= prev ? 'up' : 'down');
-                        priceEl.dataset.prev = price;
-                    }
-                    if (candleSeries && price > 0) {
-                        const now = Math.floor(Date.now() / 60000) * 60;
-                        const last = candleSeries.data().at(-1);
-                        if (last && last.time === now) {
-                            candleSeries.update({ time: now, open: last.open, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price });
-                        } else {
-                            candleSeries.update({ time: now, open: price, high: price, low: price, close: price });
-                        }
-                    }
+                    _applyLatestPrice(parseFloat(d.p));
                 } catch (_) {}
             };
             wsConn.onclose = () => { if (wsConn) setTimeout(() => startLivePrice(pair, exchange), 3000); };
         } catch (_) {}
+        return;
+    }
+    // Другие биржи: живая цена напрямую с их публичного API (без нашего сервера)
+    const nativeId = window.__nativeId && window.__nativeId(exchange, pair);
+    if (nativeId && typeof ExchangeFeed !== 'undefined' && ExchangeFeed.supported(exchange)) {
+        livePriceTimer = setInterval(async () => {
+            try {
+                const t = await ExchangeFeed.directTicker(exchange, nativeId);
+                const last = parseFloat(t.last) || ((t.bid && t.ask) ? (parseFloat(t.bid) + parseFloat(t.ask)) / 2 : NaN);
+                if (last) _applyLatestPrice(last);
+            } catch (_) {}
+        }, 2500);
     }
 }
-function stopLivePrice() { if (wsConn) { try { wsConn.close(); } catch(_){} wsConn = null; } }
+function stopLivePrice() {
+    if (wsConn) { try { wsConn.close(); } catch(_){} wsConn = null; }
+    if (livePriceTimer) { clearInterval(livePriceTimer); livePriceTimer = null; }
+}

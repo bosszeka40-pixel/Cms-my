@@ -122,9 +122,12 @@
                 </div>
                 <div class="term-order-row">
                     <div class="term-field">
-                        <label>Количество (€)</label>
+                        <label>Сумма</label>
                         <input id="order-amount" type="number" step="0.01" min="0.01" value="10" placeholder="10.00">
                     </div>
+                </div>
+                <div class="term-order-row">
+                    <div id="oc-terminal"></div>
                 </div>
                 <div class="term-slider-wrap">
                     <input type="range" class="term-slider" id="amount-slider" min="0" max="100" value="10">
@@ -231,6 +234,7 @@
                 <input id="mt-balance" type="number" step="any" placeholder="Баланс (€)" style="margin:0;" value="1000">
                 <input id="mt-leverage" type="number" step="0.5" min="1" placeholder="Плечо (маржа/фьюч)" value="1" style="margin:0;">
             </div>
+            <div id="oc-api"></div>
             <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;">
                 <button class="btn btn-sm" onclick="submitManualTrade()">Отправить ордер</button>
                 <span id="mt-result" style="font-size:.75rem;"></span>
@@ -300,6 +304,8 @@
 <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="{{ url_for('static', filename='trading_chart.js') }}"></script>
 <script src="{{ url_for('static', filename='orderbook_panel.js') }}"></script>
+<script src="{{ url_for('static', filename='exchange_feed.js') }}"></script>
+<script src="{{ url_for('static', filename='order_converter.js') }}"></script>
 <script src="{{ url_for('static', filename='api_render.js') }}"></script>
 <script>
 (() => {
@@ -310,6 +316,44 @@
     let demoBalance = {{ demo.demo_balance|default(100)|float }};
     let demoPnl = {{ demo.demo_pnl|default(0)|float }};
     let positions = [];
+
+    /* Конвертер терминала: сумма в USDT/EUR/монетах ⇄ количество монет */
+    let terminalConv = null;
+    if (typeof OrderConverter !== 'undefined') {
+        terminalConv = OrderConverter.create({
+            host: 'oc-terminal',
+            pair: () => pairEl.value,
+            exchange: () => exchange,
+            mode: () => 'spot',
+            side: () => currentSide,
+            leverage: () => 1,
+            balance: () => demoBalance,
+            onPairList: (pairs, meta) => {
+                if (meta && meta.pairs) {
+                    const map = {};
+                    meta.pairs.forEach(p => map[p.pair] = p.id);
+                    window.__setNativePairs(meta.exchange, map);
+                }
+                if (pairs && pairs.length) {
+                    const sel = document.getElementById('term-pair');
+                    const avail = pairs.filter(p => p.active !== false).map(p => p.pair);
+                    if (sel && sel.options.length !== avail.length) {
+                        const keep = sel.value;
+                        sel.innerHTML = avail.map(p => `<option value="${p}">${p}</option>`).join('');
+                        if (!avail.includes(keep)) sel.value = avail[0];
+                        sel.dispatchEvent(new Event('change'));
+                    } else {
+                        stopLivePrice();
+                        loadChartData(pairEl.value, exchange, currentTf);
+                        if (currentTf === 'live') startLivePrice(pairEl.value, exchange);
+                        if (typeof OrderBookPanel !== 'undefined') OrderBookPanel.init({ containerId: 'book-orderbook', pair: pairEl.value, exchange });
+                        if (terminalConv) terminalConv.refresh();
+                    }
+                }
+            }
+        });
+        window.terminalConv = terminalConv;
+    }
 
     /* Init chart */
     initTradingChart('trading-chart');
@@ -422,6 +466,7 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
             tab.classList.add('active');
             document.getElementById('submit-buy').style.display = currentSide === 'buy' ? '' : 'none';
             document.getElementById('submit-sell').style.display = currentSide === 'sell' ? '' : 'none';
+            if (terminalConv) terminalConv.setSide(currentSide);
         });
     });
 
@@ -469,6 +514,9 @@ document.querySelectorAll('.term-panel-tab').forEach(tab => {
             amount,
             side,
         };
+        // Профессиональный терминал: сумма в USDT/EUR/монетах (сервер конвертирует по бирже)
+        const oc = terminalConv ? terminalConv.getState() : null;
+        if (oc && oc.value) { payload.unit = oc.unit; payload.value = oc.value; }
 
         try {
             const resp = await fetch('/api/demo/trade', {

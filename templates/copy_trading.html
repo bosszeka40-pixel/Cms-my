@@ -1,13 +1,17 @@
 {% extends 'base.html' %}
-{% block title %}Копитрейдинг — CMS Trading{% endblock %}
+{% block title %}Копитрейдинг-терминал — CMS Trading{% endblock %}
 {% block breadcrumb %}Торговля / Копитрейдинг{% endblock %}
 
 {% block content %}
 <div class="page-head">
     <div>
-        <span class="eyebrow">Социальная торговля</span>
-        <h1 class="page-title">Копитрейдинг</h1>
-        <p class="lead">Копируйте стратегии успешных трейдеров автоматически. Как на Pionex.</p>
+        <span class="eyebrow">Социальная торговля · зеркалирование по настройкам</span>
+        <h1 class="page-title">Копитрейдинг-терминал</h1>
+        <p class="lead">Копируйте стратегии-лидеров автоматически: направление считается из живой рыночной среды (свечи + стакан + ИИ) вашей биржи, сделки исполняются на вашем демо-счёте по вашим настройкам.</p>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+        <button class="btn btn-success" id="pulse-btn" onclick="runPulse()">▶ Запустить циклы</button>
+        <button class="btn btn-outline" onclick="tickPulseTimer()">⟳ Обновить</button>
     </div>
 </div>
 
@@ -15,7 +19,7 @@
 <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:1.5rem;">
     <div class="card stat-tile">
         <div class="stat-value">{{ traders|length }}</div>
-        <div class="stat-label">Трейдеров</div>
+        <div class="stat-label">Лидеров</div>
     </div>
     <div class="card stat-tile">
         <div class="stat-value text-success">+{{ '%.1f'|format(avg_return|default(0)) }}%</div>
@@ -26,117 +30,363 @@
         <div class="stat-label">Копируется</div>
     </div>
     <div class="card stat-tile">
-        <div class="stat-value" style="font-size:.82rem;">100€</div>
+        <div class="stat-value" id="demo-balance-display" style="font-size:.9rem;">{{ '%.2f€'|format(demo_balance|default(100)) }}</div>
         <div class="stat-label">Демо баланс</div>
     </div>
+    <div class="card stat-tile">
+        <div class="stat-value" id="mirror-count-display">{{ (portfolio|default({'follows':[],'count':0})).count }}</div>
+        <div class="stat-label">Зеркал</div>
+    </div>
 </div>
 
-<!-- Top Traders -->
+<!-- Leaders -->
 <div class="card" style="margin-bottom:1rem;">
-    <h2>🏆 Топ трейдеров</h2>
-    <p class="muted" style="font-size:.8rem;margin-bottom:1rem;">Стратегии автоматически генерируются ботом и публикуются в маркет. 15 дней бесплатно.</p>
-    <div id="traders-list" style="display:flex;flex-direction:column;gap:.5rem;">
-        {% for t in traders %}
-        <div style="display:grid;grid-template-columns:40px 1fr auto auto auto;gap:1rem;align-items:center;padding:.75rem;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
-            <div style="width:40px;height:40px;display:grid;place-items:center;background:var(--primary-bg);border:1px solid var(--primary);border-radius:50%;font-weight:700;color:var(--primary);">{{ t.name[:1] }}</div>
-            <div>
-                <div style="font-weight:600;font-size:.85rem;">{{ t.name }}</div>
-                <div style="font-size:.72rem;color:var(--text-secondary);">{{ t.strategy }} · {{ t.trades }} сделок</div>
-            </div>
-            <div style="text-align:right;">
-                <div style="font-size:.9rem;font-weight:700;color:{% if t.return_pct > 0 %}var(--success){% else %}var(--danger){% endif %};">{% if t.return_pct > 0 %}+{% endif %}{{ '%.1f'|format(t.return_pct) }}%</div>
-                <div style="font-size:.68rem;color:var(--text-muted);">доходность</div>
-            </div>
-            <div style="text-align:right;">
-                <div style="font-size:.82rem;font-weight:600;">{{ t.win_rate }}%</div>
-                <div style="font-size:.68rem;color:var(--text-muted);">винрейт</div>
-            </div>
-            <button class="btn btn-sm {% if t.copied %}btn-outline{% else %}btn-success{% endif %}" onclick="toggleCopy('{{ t.name }}', this)">
-                {{ '✓ Копируется' if t.copied else 'Копировать' }}
-            </button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <h2>🏆 Лидеры (реальная доходность стратегий биржевой истории)</h2>
+        <span class="muted" style="font-size:.72rem;">15 дней бесплатно · дальше по цене плагина</span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="table" style="width:100%;min-width:760px;">
+            <thead>
+                <tr>
+                    <th>Лидер</th>
+                    <th style="text-align:right;">Доходность</th>
+                    <th style="text-align:right;">Винрейт</th>
+                    <th style="text-align:right;">Сделок</th>
+                    <th style="text-align:right;">Profit Factor</th>
+                    <th style="text-align:right;">Просадка</th>
+                    <th style="text-align:right;">Цена</th>
+                    <th style="text-align:center;">Копировать</th>
+                </tr>
+            </thead>
+            <tbody id="leaders-tbody">
+                {% for t in traders %}
+                <tr data-leader="{{ t.name }}">
+                    <td>
+                        <div style="display:flex;align-items:center;gap:.6rem;">
+                            <div style="width:36px;height:36px;display:grid;place-items:center;background:var(--primary-bg);border:1px solid var(--primary);border-radius:50%;font-weight:700;color:var(--primary);">{{ t.name[:1] }}</div>
+                            <div>
+                                <div style="font-weight:600;font-size:.85rem;">{{ t.name }}</div>
+                                <div style="font-size:.7rem;color:var(--text-secondary);">{{ t.strategy }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="text-align:right;font-weight:700;color:{% if t.return_pct > 0 %}var(--success){% else %}var(--danger){% endif %};">{% if t.return_pct > 0 %}+{% endif %}{{ '%.1f'|format(t.return_pct) }}%</td>
+                    <td style="text-align:right;">{{ t.win_rate }}%</td>
+                    <td style="text-align:right;">{{ t.trades }}</td>
+                    <td style="text-align:right;">{{ '%.2f'|format(t.profit_factor|default(0)) if t.profit_factor }}</td>
+                    <td style="text-align:right;">{{ '%.1f'|format(t.max_drawdown_pct|default(0)) if t.max_drawdown_pct is not none }}%</td>
+                    <td style="text-align:right;">{{ '%.2f€'|format(t.price_eur|default('0')) }}</td>
+                    <td style="text-align:center;">
+                        <button class="btn btn-sm {% if t.copied %}btn-outline{% else %}btn-success{% endif %}" onclick="toggleCopy('{{ t.name }}', this)">
+                            {{ '✓ Копируется' if t.copied else 'Копировать' }}
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="term-empty">Нет доступных лидеров. Убедитесь, что стратегии зарегистрированы в MASTERCMS.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div id="pulse-log" style="margin-top:.75rem;display:flex;flex-direction:column;gap:.3rem;"></div>
+</div>
+
+<!-- Follow settings for selected leader -->
+<div class="card" id="follow-card" style="margin-bottom:1rem;{% if not copying_count %}display:none;{% endif %}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <h2>⚙️ Параметры подписки <span id="follow-leader-name" style="color:var(--primary);"></span></h2>
+        <span class="muted" style="font-size:.72rem;">подписка → зеркало на ваш демо-счёт</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;">
+        <div class="field-group">
+            <label>Сумма на цикл (€)</label>
+            <input type="number" id="f-amount" value="10" min="1" step="1">
         </div>
-        {% else %}
-        <div class="term-empty" style="padding:2rem;">Нет доступных трейдеров. Запустите бота для генерации стратегий.</div>
-        {% endfor %}
+        <div class="field-group">
+            <label>Пара</label>
+            <select id="f-pair">
+                {% for p in trading_pairs %}
+                <option value="{{ p }}" {% if p == 'BTC/USDT' %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Биржа</label>
+            <select id="f-exchange" onchange="fModeFill()">
+                {% for ex in trading_exchanges %}
+                <option value="{{ ex }}" {% if ex == 'binance' %}selected{% endif %}>{{ ex }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Режим</label>
+            <select id="f-mode">
+                <option value="spot">Спот</option>
+                <option value="futures">Фьючерсы</option>
+                <option value="leverage">Плечо</option>
+                <option value="fractional">Дробный</option>
+            </select>
+        </div>
+        <div class="field-group">
+            <label>Плечо</label>
+            <input type="number" id="f-leverage" value="1.5" min="1" step="0.5">
+        </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn btn-success" id="save-follow-btn" onclick="saveFollowSettings()">Сохранить параметры</button>
+        <button class="btn btn-outline" onclick="stopFollow()">Отписаться</button>
     </div>
 </div>
 
-<!-- Copy Settings -->
+<!-- Portfolio / mirrors -->
 <div class="card">
-    <h2>⚙️ Настройки копирования</h2>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-        <div class="field-group">
-            <label>Макс. сумма на сделку (€)</label>
-            <input type="number" id="copy-amount" value="10" min="1" max="100">
-        </div>
-        <div class="field-group">
-            <label>Макс. убыток (% от баланса)</label>
-            <input type="number" id="copy-max-loss" value="5" min="1" max="50">
-        </div>
-        <div class="field-group">
-            <label>Копировать</label>
-            <select id="copy-mode">
-                <option value="demo">Демо (100€)</option>
-                <option value="live" disabled>Live (недоступно)</option>
-            </select>
-        </div>
-        <div class="field-group">
-            <label>Стратегия</label>
-            <select id="copy-strategy">
-                <option value="auto">Авто (бот выбирает)</option>
-                <option value="momentum">Моментум</option>
-                <option value="mean_reversion">Возврат к среднему</option>
-                <option value="scalping">Скальпинг</option>
-                <option value="grid">Сетка</option>
-            </select>
-        </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <h2>📊 Мои зеркала</h2>
+        <button class="btn btn-outline btn-sm" onclick="setInterval(refreshPortfolio, 5000); window.__pfTimer=1; this.textContent='Автообновление ✓';">Авто (5с)</button>
     </div>
-    <div style="margin-top:1rem;display:flex;gap:.5rem;">
-        <button class="btn btn-success" onclick="saveCopySettings()">Сохранить настройки</button>
-        <button class="btn btn-outline" onclick="resetCopies()">Сбросить все копирования</button>
+    <div style="overflow-x:auto;">
+        <table class="table" style="width:100%;min-width:760px;">
+            <thead>
+                <tr>
+                    <th>Лидер</th>
+                    <th>Пара/Биржа</th>
+                    <th>Режим</th>
+                    <th style="text-align:right;">Сумма (€)</th>
+                    <th style="text-align:right;">Последний PnL</th>
+                    <th style="text-align:right;">Всего PnL</th>
+                    <th style="text-align:right;">Циклов</th>
+                    <th style="text-align:center;">Действия</th>
+                </tr>
+            </thead>
+            <tbody id="portfolio-tbody">
+                {% for f in (portfolio|default({'follows':[]})).follows %}
+                <tr data-leader="{{ f.leader }}">
+                    <td style="font-weight:600;">{{ f.leader }}</td>
+                    <td>{{ f.settings.get('pair','BTC/USDT') }} · {{ f.settings.get('exchange','binance') }}</td>
+                    <td>{{ f.settings.get('market_mode','spot') }} ×{{ f.settings.get('leverage',1.5) }}</td>
+                    <td style="text-align:right;">{{ '%.0f€'|format(f.settings.get('amount_eur',0)) }}</td>
+                    <td style="text-align:right;color:{% if f.last_pnl and f.last_pnl > 0 %}var(--success){% elif f.last_pnl is not none %}var(--danger){% endif %};">{{ '%.4f€'|format(f.last_pnl) if f.last_pnl is not none else '—' }}</td>
+                    <td style="text-align:right;color:{% if f.total_pnl and f.total_pnl > 0 %}var(--success){% elif f.total_pnl is not none %}var(--danger){% endif %};">{{ '%.4f€'|format(f.total_pnl) if f.total_pnl is not none else '—' }}</td>
+                    <td style="text-align:right;">{{ f.mirror_count }}</td>
+                    <td style="text-align:center;">
+                        <button class="btn btn-sm btn-danger" onclick="unfollow('{{ f.leader }}')">Отписаться</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="term-empty">Вы ещё никуда не подписаны. Выберите лидера выше.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+let currentFollowLeader = null;
+let pulseRunning = false;
+
+async function api(url, opts) {
+    const resp = await fetch(url, opts || {});
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.detail || ('HTTP ' + resp.status));
+    return data;
+}
+
 async function toggleCopy(traderName, btn) {
     try {
-        const resp = await fetch('/api/copy-trading/toggle', {
+        const data = await api('/api/copy-trading/toggle', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({trader: traderName})
         });
-        const data = await resp.json();
-        if (resp.ok) {
-            location.reload();
+        const on = (data.copies || []).includes(traderName);
+        if (on) {
+            btn.textContent = '✓ Копируется';
+            btn.className = 'btn btn-sm btn-outline';
+            currentFollowLeader = traderName;
+            document.getElementById('follow-leader-name').textContent = traderName;
+            document.getElementById('follow-card').style.display = '';
+        } else {
+            btn.textContent = 'Копировать';
+            btn.className = 'btn btn-sm btn-success';
+            const row = document.querySelector('#portfolio-tbody tr[data-leader="' + encodeURIComponent(traderName) + '"]');
+            if (row) row.remove();
         }
-    } catch(e) { alert('Ошибка: ' + e.message); }
+        refreshStats();
+    } catch (e) { alert('Ошибка: ' + e.message); }
 }
 
-async function saveCopySettings() {
-    const settings = {
-        amount: document.getElementById('copy-amount').value,
-        max_loss: document.getElementById('copy-max-loss').value,
-        mode: document.getElementById('copy-mode').value,
-        strategy: document.getElementById('copy-strategy').value,
+async function refreshLeaders() {
+    try {
+        const data = await api('/api/copy/leaders');
+        const tbody = document.getElementById('leaders-tbody');
+        if (!data.leaders || !data.leaders.length) return;
+        tbody.innerHTML = '';
+        for (const t of data.leaders) {
+            const tr = document.createElement('tr');
+            tr.dataset.leader = t.name;
+            const retC = t.return_pct > 0 ? 'var(--success)' : 'var(--danger)';
+            tr.innerHTML = `<td><div style="display:flex;align-items:center;gap:.6rem;">
+                <div style="width:36px;height:36px;display:grid;place-items:center;background:var(--primary-bg);border:1px solid var(--primary);border-radius:50%;font-weight:700;color:var(--primary);"></div>
+                <div><div style="font-weight:600;font-size:.85rem;">${t.name}</div><div style="font-size:.7rem;color:var(--text-secondary);"></div></div></div></td>
+                <td style="text-align:right;font-weight:700;color:${retC};">${t.return_pct > 0 ? '+' : ''}${t.return_pct.toFixed(1)}%</td>
+                <td style="text-align:right;">${t.win_rate}%</td>
+                <td style="text-align:right;">${t.trades}</td>
+                <td style="text-align:right;">${t.profit_factor ? t.profit_factor.toFixed(2) : '—'}</td>
+                <td style="text-align:right;">${t.max_drawdown_pct != null ? t.max_drawdown_pct.toFixed(1) + '%' : '—'}</td>
+                <td style="text-align:right;">${t.price_eur ? t.price_eur.toFixed(2) + '€' : '—'}</td>
+                <td style="text-align:center;"><button class="btn btn-sm ${t.copied ? 'btn-outline' : 'btn-success'}" onclick="toggleCopy('${t.name.replace(/'/g, '')}', this)">${t.copied ? '✓ Копируется' : 'Копировать'}</button></td>`;
+            tr.querySelector('[style*="display:grid"]').textContent = t.name[0].toUpperCase();
+            tr.querySelectorAll('div[style*="font-size:.7rem"]')[0].textContent = t.strategy || '';
+            tbody.appendChild(tr);
+        }
+    } catch (e) { /* leave server-rendered */ }
+}
+
+async function refreshPortfolio() {
+    try {
+        const data = await api('/api/copy/portfolio');
+        const tbody = document.getElementById('portfolio-tbody');
+        tbody.innerHTML = '';
+        if (!data.follows || !data.follows.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="term-empty">Вы ещё никуда не подписаны.</td></tr>';
+            return;
+        }
+        for (const f of data.follows) {
+            const lp = f.last_pnl;
+            const tp = f.total_pnl;
+            const lc = lp > 0 ? 'var(--success)' : lp != null ? 'var(--danger)' : 'var(--text-secondary)';
+            const tc = tp > 0 ? 'var(--success)' : tp != null ? 'var(--danger)' : 'var(--text-secondary)';
+            const tr = document.createElement('tr');
+            tr.dataset.leader = f.leader;
+            tr.innerHTML = `<td style="font-weight:600;">${f.leader}</td>
+                <td>${f.settings.pair} · ${f.settings.exchange}</td>
+                <td>${f.settings.market_mode} ×${f.settings.leverage}</td>
+                <td style="text-align:right;">${Number(f.settings.amount_eur || 0).toFixed(0)}€</td>
+                <td style="text-align:right;color:${lc};">${lp != null ? Number(lp).toFixed(4) + '€' : '—'}</td>
+                <td style="text-align:right;color:${tc};">${tp != null ? Number(tp).toFixed(4) + '€' : '—'}</td>
+                <td style="text-align:right;">${f.mirror_count}</td>
+                <td style="text-align:center;"><button class="btn btn-sm btn-danger" onclick="unfollow('${f.leader.replace(/'/g, '')}')">Отписаться</button></td>`;
+            tbody.appendChild(tr);
+        }
+        refreshStats();
+    } catch (e) { /* keep */ }
+}
+
+async function refreshStats() {
+    try {
+        const data = await api('/api/copy/portfolio');
+        document.getElementById('mirror-count-display').textContent = data.count;
+    } catch (e) {}
+    try {
+        const demo = await api('/api/demo/status');
+        if (demo.demo_balance != null) {
+            document.getElementById('demo-balance-display').textContent = Number(demo.demo_balance).toFixed(2) + '€';
+        }
+    } catch (e) {}
+}
+
+async function saveFollowSettings() {
+    const body = {
+        leader: currentFollowLeader || document.getElementById('follow-leader-name').textContent,
+        amount_eur: parseFloat(document.getElementById('f-amount').value),
+        pair: document.getElementById('f-pair').value,
+        exchange: document.getElementById('f-exchange').value,
+        market_mode: document.getElementById('f-mode').value,
+        leverage: parseFloat(document.getElementById('f-leverage').value),
     };
     try {
-        const resp = await fetch('/api/copy-trading/settings', {
+        await api('/api/copy/follow', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(settings)
+            body: JSON.stringify(body)
         });
-        if (resp.ok) alert('Настройки сохранены');
-    } catch(e) { alert('Ошибка'); }
+        alert('Параметры сохранены.');
+        refreshPortfolio();
+    } catch (e) { alert('Ошибка: ' + e.message); }
 }
 
-async function resetCopies() {
-    if (!confirm('Сбросить все копирования?')) return;
+async function stopFollow() {
+    const leader = currentFollowLeader || document.getElementById('follow-leader-name').textContent;
+    if (!leader || !confirm('Отписаться от ' + leader + '?')) return;
     try {
-        await fetch('/api/copy-trading/reset', {method: 'POST'});
-        location.reload();
-    } catch(e) {}
+        await api('/api/copy/unfollow', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({leader: leader})
+        });
+        document.getElementById('follow-leader-name').textContent = '';
+        document.getElementById('follow-card').style.display = 'none';
+        refreshLeaders();
+        refreshPortfolio();
+    } catch (e) { alert('Ошибка: ' + e.message); }
 }
+
+function fModeFill() {
+    const ex = document.getElementById('f-exchange').value;
+    const supported = {
+        binance: ['spot', 'futures'],
+        kraken: ['spot', 'futures'],
+        bybit: ['spot', 'futures'],
+        okx: ['spot', 'futures'],
+        bitfinex: ['spot', 'futures'],
+        pionex: ['spot'],
+    };
+    const modes = supported[ex] || ['spot'];
+    const select = document.getElementById('f-mode');
+    select.innerHTML = modes.map(m => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join('');
+}
+
+async function runPulse() {
+    if (pulseRunning) return;
+    pulseRunning = true;
+    const btn = document.getElementById('pulse-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Идёт цикл...';
+    const logEl = document.getElementById('pulse-log');
+    logEl.innerHTML = '';
+    try {
+        const data = await api('/api/copy/pulse', {method: 'POST'});
+        if ((data.mirrors || []).length === 0) {
+            logEl.innerHTML = '<div class="muted" style="font-size:.78rem;">Нет активных подписок или нет новых сигналов. Подпишитесь на лидера / дождитесь смены направления.</div>';
+        }
+        for (const m of data.mirrors || []) {
+            if (m.error) {
+                const div = document.createElement('div');
+                div.className = 'term-empty';
+                div.style.cssText = 'padding:.4rem .75rem;font-size:.78rem;border-left:2px solid var(--danger);';
+                div.textContent = `⚠️ ${m.leader}: ${m.error}`;
+                logEl.appendChild(div);
+                continue;
+            }
+            const sign = m.side === 'buy' ? '▲' : '▼';
+            const color = m.side === 'buy' ? 'var(--success)' : 'var(--danger)';
+            const div = document.createElement('div');
+            div.style.cssText = 'font-size:.78rem;padding:.35rem .6rem;background:var(--bg-tertiary);border-left:2px solid ' + color;
+            div.innerHTML = `<span style="color:${color};font-weight:700;">${sign} ${m.side.toUpperCase()}</span> ${m.leader} ${m.pair} @ ${m.exchange}/${m.market_mode} ×${m.leverage} · ${Number(m.amount_eur).toFixed(2)}€ · PnL <b style="color:${m.pnl > 0 ? 'var(--success)' : 'var(--danger)'};">${Number(m.pnl).toFixed(4)}€</b>${m.ai_confidence != null ? ` · ИИ ${(m.ai_confidence * 100).toFixed(0)}%` : ''}`;
+            logEl.appendChild(div);
+        }
+        refreshPortfolio();
+    } catch (e) {
+        logEl.innerHTML = '<div class="term-empty" style="padding:.4rem .75rem;">Ошибка цикла: ' + e.message + '</div>';
+    } finally {
+        pulseRunning = false;
+        btn.disabled = false;
+        btn.textContent = '▶ Запустить циклы';
+    }
+}
+
+function tickPulseTimer() {
+    refreshPortfolio();
+    refreshLeaders();
+}
+
+window.addEventListener('load', () => {
+    if (!document.getElementById('mirror-count-display').textContent.trim()) refreshStats();
+    tickPulseTimer();
+    if (window.__pfTimer) setInterval(refreshPortfolio, 5000);
+});
 </script>
 {% endblock %}

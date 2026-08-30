@@ -36,3 +36,4 @@ instance/
 *.log
 *.pid
 backend/learning_state.json
+backend/copy_trading.json

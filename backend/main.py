@@ -33,6 +33,14 @@ from .modules.market_features import (
     feature_vector as _feature_vector,
     heuristic_sentiment as _heuristic_sentiment,
 )
+from .modules.market_converter import (
+    eur_per_quote as _eur_per_quote,
+    live_ticker as _live_ticker,
+    pair_units as _pair_units,
+    pair_listing as _pair_listing,
+    preview as _terminal_preview,
+)
+from .modules.copy_trading import CopyTradingStore
 from .simple_cache import cached_fetch, cached_get
 from .market_history import (
     ensure_table, load_candles, refresh_candles, load_history, refresh_history,
@@ -128,10 +136,19 @@ strategy_manager = StrategyManager()
 exchange_service = ExchangeService(LIVE_CONTROL_STATE)
 arbitrage_engine = ArbitrageEngine()
 learner = OnlineSignalLearner(str(BASE_DIR / "backend" / "learning_state.json"))
+copy_store = CopyTradingStore(str(BASE_DIR / "backend" / "copy_trading.json"))
 bot_runtime = BotRuntime(engine, strategy_manager, risk_manager, bot, exchange_service, learner=learner)
 MARKET_DATABASE = str(BASE_DIR / "cms_v12.db")
 SUPPORTED_MARKET_EXCHANGES = {"binance", "bybit", "kraken", "okx", "bitfinex", "pionex"}
-SUPPORTED_TRADING_PAIRS = ("BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT")
+# Пары, разрешённые боту. Первые 5 — исторический минимум (для старых вызовов),
+# далее — расширенный список для терминала; реальная доступность уточняется на бирже
+# через /api/market/pairs (load_markets).
+SUPPORTED_TRADING_PAIRS = (
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
+    "DOT/USDT", "DOGE/USDT", "ADA/USDT", "LINK/USDT", "AVAX/USDT",
+    "LTC/USDT", "NEAR/USDT", "ARB/USDT", "APT/USDT", "MATIC/USDT",
+    "SUI/USDT", "OP/USDT", "TIA/USDT", "EUR/USDT", "USDC/USDT",
+)
 BACKTEST_PERIOD_WINDOWS = {
     "1d": 2,
     "1w": 8,
@@ -237,6 +254,11 @@ class ManualTradePayload(BaseModel):
     exchange: str = "binance"
     market_mode: str = "spot"
     leverage: float = 1.0
+    # Профессиональный терминал: ввести можно сумму в валюте котировки (quote),
+    # в монетах (base) или в EUR (eur); сервер конвертирует по живой ставке биржи.
+    # Если поля не переданы — поведение ровно как раньше (amount = количество монет).
+    unit: str = "base"
+    value: float = None
 
 class BacktestPayload(BaseModel):
     pair: str = "BTC/USDT"
@@ -678,6 +700,11 @@ class DemoTradePayload(BaseModel):
     market_mode: str = "spot"
     leverage: float = 1.5
     auto_from_market: bool = False
+    # Профессиональный терминал: ввести можно сумму в валюте котировки (quote),
+    # в монетах (base) или в EUR (eur); сервер конвертирует по живой ставке биржи.
+    # Если value не передано — поведение ровно как раньше (amount трактуется как EUR).
+    unit: str = "quote"
+    value: float = None
 
 
 class ExchangeTestPayload(BaseModel):
@@ -936,7 +963,7 @@ def _trading_context(user_email: str, message: str | None = None) -> dict:
         "theme": "dark",
         "message": message,
         "trade_history": engine.list_trades(user_email, 20),
-        "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
+        "trading_pairs": list(SUPPORTED_TRADING_PAIRS),
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
         "trading_exchange_catalog": exchange_catalog(),
         "market_modes": MARKET_MODES,
@@ -1259,12 +1286,56 @@ def demo_trade(payload: DemoTradePayload, request: Request):
             except Exception:
                 market_fields = {"auto_from_market": False, "note": "рыночный контекст недоступен, использованы введённые параметры"}
 
+        # Профессиональный терминал: сумма может быть в валюте котировки (USDT),
+        # в монетах (DOT) или в EUR. Конвертируем по живой ставке той же биржи.
+        # Старые вызовы (value=None) работают ровно как раньше: amount трактуется как EUR.
+        conversion = {"unit": payload.unit, "value": payload.value,
+                      "effective_amount_eur": None, "rate": None}
+        effective_amount = float(payload.amount)
+        if payload.value is not None and payload.value > 0:
+            try:
+                conv_client = _public_exchange(payload.exchange)
+                quote_ccy = payload.pair.split("/")[-1]
+                quote_rate = _eur_per_quote(conv_client, payload.exchange, quote_ccy)
+                if payload.unit == "eur":
+                    amount_eur = float(payload.value)
+                elif payload.unit == "quote":
+                    if quote_rate is None:
+                        raise HTTPException(status_code=400, detail="Биржа не даёт курс EUR/USDT — EUR-конвертация невозможна.")
+                    amount_eur = float(payload.value) * quote_rate
+                elif payload.unit == "base":
+                    if quote_rate is None:
+                        raise HTTPException(status_code=400, detail="Биржа не даёт курс EUR/USDT — конвертация в EUR невозможна.")
+                    tk = _live_ticker(conv_client, payload.exchange, payload.pair)
+                    last = tk.get("last") or tk.get("mid") or (tk.get("ask") + tk.get("bid", 0.0)) / 2.0
+                    if not last:
+                        raise HTTPException(status_code=400, detail="Биржа не вернула цену для конвертации.")
+                    amount_eur = float(payload.value) * last * quote_rate
+                else:
+                    raise HTTPException(status_code=400, detail="Неизвестная единица ввода: quote/base/eur.")
+                amount_eur = max(amount_eur, 0.01)
+                conversion = {
+                    "unit": payload.unit,
+                    "value": payload.value,
+                    "base": payload.pair.split("/")[0],
+                    "quote": quote_ccy,
+                    "quote_value": round(float(payload.value) if payload.unit != "base" else float(payload.value) * (tk.get("last") or 0.0), 8),
+                    "rate": _live_ticker(conv_client, payload.exchange, payload.pair),
+                    "effective_amount_eur": round(amount_eur, 4),
+                    "note": "конвертировано по живой ставке биржи",
+                }
+                effective_amount = amount_eur
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Ошибка конвертации: {exc}")
+
         result = strategy_manager.execute(
             adjusted_sentiment, adjusted_price_change, demo["demo_balance"],
             fee_rate=fee_rate, leverage=leverage,
         )
         balance_before = float(demo["demo_balance"])
-        allocation = min(max(float(payload.amount), 1.0), balance_before) / max(balance_before, 1.0)
+        allocation = min(max(effective_amount, 1.0), balance_before) / max(balance_before, 1.0)
         pnl = result["pnl"] * allocation
         updated = engine.update_demo_balance(email, pnl)
         engine.record_memory("demo_trade", pnl, f"{payload.pair} {payload.strategy} {payload.side} {payload.exchange} {payload.market_mode}", email)
@@ -1276,11 +1347,12 @@ def demo_trade(payload: DemoTradePayload, request: Request):
             "signal": result["signal"] if payload.side.lower() == "buy" else -result["signal"],
             "strategy": payload.strategy,
             "side": payload.side,
-            "amount": round(float(payload.amount), 2),
+            "amount": round(effective_amount, 2),
             "exchange": payload.exchange,
             "market_mode": payload.market_mode,
             "leverage": leverage,
             "fee_rate": fee_rate,
+            "conversion": conversion,
             **market_fields,
         }
     except Exception as exc:
@@ -1458,7 +1530,7 @@ async def profile(request: Request):
         "risk": risk_manager.status(),
         "risk_score": risk_manager.calculate_risk_score(leverage=float(strategy_manager.config.get("leverage", 1.5))),
         "bot_runtime": bot_runtime.status(user_email),
-        "trading_pairs": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"],
+        "trading_pairs": list(SUPPORTED_TRADING_PAIRS),
         "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
         "market_modes": MARKET_MODES,
         "market_mode_labels": MARKET_MODE_LABELS,
@@ -1520,8 +1592,7 @@ def trading_test(payload: TradingTestPayload, request: Request):
     decision = risk_manager.decide(payload.current_balance, 1.0)
     if not decision.allowed:
         raise HTTPException(status_code=429, detail=decision.reason)
-    allowed_pairs = {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}
-    if payload.pair not in allowed_pairs:
+    if payload.pair not in SUPPORTED_TRADING_PAIRS:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     if payload.exchange not in SUPPORTED_MARKET_EXCHANGES:
         raise HTTPException(status_code=400, detail="Биржа недоступна.")
@@ -1554,8 +1625,7 @@ def trading_test(payload: TradingTestPayload, request: Request):
 @app.post("/api/trading/manual")
 def manual_trade(payload: ManualTradePayload, request: Request):
     email = _require_user(request)
-    allowed_pairs = {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}
-    if payload.pair not in allowed_pairs:
+    if payload.pair not in SUPPORTED_TRADING_PAIRS:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     if payload.side not in {"buy", "sell"}:
         raise HTTPException(status_code=400, detail="Недопустимое направление сделки.")
@@ -1565,7 +1635,55 @@ def manual_trade(payload: ManualTradePayload, request: Request):
         raise HTTPException(status_code=400, detail=f"Режим {payload.market_mode} не поддерживается биржей {payload.exchange}.")
     leverage = effective_leverage(payload.exchange, payload.market_mode, payload.leverage)
     fee_rate = _exchange_fee_rate(payload.exchange, payload.pair, payload.market_mode)
-    notional = payload.price * payload.amount * leverage
+    # Профессиональный терминал: amount может быть в монетах (base), в валюте
+    # котировки (quote) или в EUR. Конвертируем в количество монет по живой ставке
+    # (цена исполнения ask для buy, bid для sell). Старые вызовы (value=None)
+    # работают как раньше: amount = количество монет, price — лимит.
+    conversion = {"unit": payload.unit, "value": payload.value, "rate": None}
+    base_amount = float(payload.amount)
+    exec_price = float(payload.price or 0.0)
+    if payload.value is not None and payload.value > 0:
+        try:
+            conv_client = _public_exchange(payload.exchange)
+            tk = _live_ticker(conv_client, payload.exchange, payload.pair)
+            bid, ask, last = tk.get("bid"), tk.get("ask"), tk.get("last")
+            side_rate = ask if payload.side == "buy" else bid
+            if not side_rate:
+                side_rate = last
+            if not side_rate:
+                raise HTTPException(status_code=400, detail="Биржа не вернула цену для конвертации.")
+            if payload.unit == "base":
+                quote_value = float(payload.value) * side_rate
+            elif payload.unit == "quote":
+                quote_value = float(payload.value)
+            elif payload.unit == "eur":
+                quote_ccy = payload.pair.split("/")[-1]
+                eur_rate = _eur_per_quote(conv_client, payload.exchange, quote_ccy)
+                if not eur_rate:
+                    raise HTTPException(status_code=400, detail="Биржа не даёт курс EUR/USDT — конвертация в EUR невозможна.")
+                quote_value = float(payload.value) / eur_rate
+            else:
+                raise HTTPException(status_code=400, detail="Неизвестная единица ввода: base/quote/eur.")
+            base_amount = quote_value / side_rate
+            conversion = {
+                "unit": payload.unit,
+                "value": payload.value,
+                "base": payload.pair.split("/")[0],
+                "quote": payload.pair.split("/")[-1],
+                "rate": {"bid": bid, "ask": ask, "last": last},
+                "exec_price": side_rate,
+                "base_amount": round(base_amount, 8),
+                "quote_value": round(quote_value, 8),
+                "note": "конвертировано по живой ставке биржи",
+            }
+            if not exec_price:
+                exec_price = side_rate
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Ошибка конвертации: {exc}")
+    fx_price = exec_price if exec_price > 0 else 0.0
+    notional = fx_price * base_amount * leverage
     fee = notional * fee_rate
     new_balance = max(0.0, payload.balance - fee)
     mode = current_mode()
@@ -1576,7 +1694,7 @@ def manual_trade(payload: ManualTradePayload, request: Request):
     order_id = None
     if mode == "live":
         try:
-            order_id = submit_real_order(email, payload.pair, payload.side, payload.price, payload.amount)
+            order_id = submit_real_order(email, payload.pair, payload.side, fx_price or payload.price, base_amount)
             status = "submitted"
         except Exception as exc:
             return {"status": "rejected", "reason": safe_exception_message(exc, "manual_trade"), "fee": round(fee, 6), "balance": round(new_balance, 2)}
@@ -1690,7 +1808,7 @@ def activate_strategy(payload: PluginActionPayload, request: Request):
 def market_data(request: Request, pair: str = "BTC/USDT", exchange: str = "binance"):
     if not request.session.get("user_email"):
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
-    if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
+    if pair not in SUPPORTED_TRADING_PAIRS:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     try:
         exchange = (exchange or "binance").lower()
@@ -1720,7 +1838,7 @@ def market_history(request: Request, pair: str = "BTC/USDT", exchange: str = "bi
                    timeframe: str = "1h"):
     if not request.session.get("user_email"):
         raise HTTPException(status_code=401, detail="Требуется авторизация.")
-    if pair not in {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}:
+    if pair not in SUPPORTED_TRADING_PAIRS:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     if timeframe not in {"1m", "5m", "15m", "1h", "4h", "1d", "1w"}:
         raise HTTPException(status_code=400, detail="Поддерживаются таймфреймы от 1m до 1d.")
@@ -1759,6 +1877,73 @@ def market_orderbook(request: Request, pair: str = "BTC/USDT", exchange: str = "
         return {**_merge_depth(snapshot), "pair": pair, "exchange": exchange}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось получить стакан: {exc}") from exc
+
+
+@app.get("/api/market/pairs")
+def market_pairs(request: Request, exchange: str = "binance"):
+    """Пары разрешённые боту, фактически доступные на выбранной бирже (реальный API биржи)."""
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    exchange = (exchange or "binance").lower()
+    if exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    client = _public_exchange(exchange)
+    try:
+        listing = _pair_listing(client, exchange, SUPPORTED_TRADING_PAIRS)
+    except Exception as exc:
+        return {"exchange": exchange, "pairs": [], "note": f"Не удалось загрузить рынки биржи: {exc}"}
+    quotes = sorted({p["quote"] for p in listing})
+    bases = sorted({p["base"] for p in listing})
+    # Справочник комиссий/плеч каталога (редко меняется): терминал в браузере
+    # считает прямо сам, не дёргая наш сервер на каждый ввод.
+    fees_by_mode = {}
+    leverage_max = {}
+    for mode in MARKET_MODES:
+        if supports_mode(exchange, mode):
+            fees_by_mode[mode] = _exchange_fee_rate(exchange, "BTC/USDT", mode)
+            leverage_max[mode] = effective_leverage(exchange, mode, 1000)
+    return {
+        "exchange": exchange,
+        "pairs": listing,
+        "pair_map": {p["pair"]: p for p in listing},
+        "base_currencies": bases,
+        "quote_currencies": quotes,
+        "fees_by_mode": fees_by_mode,
+        "leverage_max": leverage_max,
+        "supports_eur_input": "EUR/USDT" in {p["pair"] for p in listing},
+        "count": len(listing),
+    }
+
+
+@app.get("/api/terminal/preview")
+def terminal_preview(request: Request, pair: str = "DOT/USDT", exchange: str = "binance",
+                     market_mode: str = "spot", side: str = "buy",
+                     unit: str = "quote", value: float = 0.0, leverage: float = 1.0):
+    """Профессиональный терминал: просчёт ордера по живой ставке биржи.
+
+    Unit "quote" — сумма в валюте котировки (USDT); "base" — количество монет (DOT);
+    "eur" — сумма в EUR (реальная стоимость монет). Сервер показывает парную величину,
+    комиссию, маржу и лимиты из реальных параметров инструмента биржи.
+    """
+    if not request.session.get("user_email"):
+        raise HTTPException(status_code=401, detail="Требуется авторизация.")
+    exchange = (exchange or "binance").lower()
+    if exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if market_mode not in MARKET_MODES or not supports_mode(exchange, market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {market_mode} не поддерживается биржей {exchange}.")
+    try:
+        client = _public_exchange(exchange)
+        fee_rate = _exchange_fee_rate(exchange, pair, market_mode)
+        eff_leverage = effective_leverage(exchange, market_mode, leverage)
+        data = _terminal_preview(client, exchange, pair, market_mode, side, unit, value,
+                                 fee_rate=fee_rate, leverage=eff_leverage)
+        data["eur_symbol"] = "EUR"
+        return data
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить просчёт терминала: {exc}") from exc
 
 
 @app.get("/api/market/context")
@@ -1997,8 +2182,7 @@ def bot_status(request: Request):
 @app.post("/api/bot/backtest")
 def bot_backtest(payload: BacktestPayload, request: Request):
     _require_user(request)
-    allowed_pairs = {"BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"}
-    if payload.pair not in allowed_pairs:
+    if payload.pair not in SUPPORTED_TRADING_PAIRS:
         raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
     if payload.initial_balance <= 0:
         raise HTTPException(status_code=400, detail="Начальный баланс должен быть положительным.")
@@ -2312,38 +2496,129 @@ def api_submit_feedback(request: Request, message: str = Form(...)):
 # Copy Trading — копирование стратегий трейдеров (как Pionex)
 # ═══════════════════════════════════════════════════════════════
 
-_copy_trading_state = {}  # email -> {copies: [], settings: {}}
-
 def _get_traders_list():
-    """Генерируем список трейдеров из bot memory и published strategies."""
+    """Лидеры копитрейдинга: стратегии с РЕАЛЬНОЙ доходностью (backtest на реальных
+    закрытых дневных свечах биржи), ценой и винрейтом. Кэш на 5 минут."""
+    perf = _strategy_performance()
     traders = []
-    bot_status = bot.status()
-    gen_status = bot.strategy_generator.get_status()
-    log = gen_status.get("recent_log", [])
+    for plugin in engine.list_plugins():
+        result = perf.get(plugin.name) or {}
+        if not isinstance(result, dict):
+            continue
+        monthly = float(result.get("monthly_return_pct") or 0.0)
+        win = float(result.get("win_rate_pct") or 0.0)
+        trades = int(result.get("trades") or 0)
+        traders.append({
+            "name": plugin.name,
+            "strategy": (plugin.description or "")[:48] or plugin.name,
+            "return_pct": round(monthly, 1),
+            "win_rate": round(win, 1),
+            "trades": trades,
+            "price_eur": float(result.get("price_eur") or float(plugin.price or 0.0)),
+            "final_balance_eur": result.get("final_balance_eur"),
+            "max_drawdown_pct": result.get("max_drawdown_pct"),
+            "profit_factor": result.get("profit_factor"),
+            "as_of": result.get("as_of"),
+            "copied": False,
+        })
+    traders.sort(key=lambda t: t["return_pct"], reverse=True)
+    return traders
 
-    builtin = [
-        {"name": "Daily Compound Bot", "strategy": "pure_harvester", "return_pct": 0, "win_rate": 50, "trades": 0, "copied": False},
-        {"name": "HFT Momentum Pro", "strategy": "high_frequency_momentum", "return_pct": 0, "win_rate": 50, "trades": 0, "copied": False},
-        {"name": "Compound Defender", "strategy": "compound_defender", "return_pct": 0, "win_rate": 50, "trades": 0, "copied": False},
-    ]
 
-    for entry in log:
-        if entry.get("action") == "published":
-            builtin.append({
-                "name": entry.get("name", "Auto Strategy"),
-                "strategy": "auto_generated",
-                "return_pct": entry.get("return", 0),
-                "win_rate": 50,
-                "trades": 0,
-                "copied": False,
+def _copy_pulse(email: str):
+    """Один цикл зеркалирования: направление каждого лидера считается из реального
+    рыночного контекста (свечи + стакан + ИИ-слой) той же биржи, копия исполняется
+    на демо-балансе подписчика по его настройкам. Копируем при смене сигнала или
+    с периодичностью раз в 60 секунд."""
+    follows = copy_store.follows(email)
+    if not follows:
+        return {"mirrors": [], "followed": 0, "note": "нет подписок"}
+    mirrors = []
+    for leader, settings in follows.items():
+        if not settings.get("active", True):
+            continue
+        ex = (settings.get("exchange") or "binance").lower()
+        if ex not in SUPPORTED_MARKET_EXCHANGES:
+            mirrors.append({"leader": leader, "error": "биржа недоступна"})
+            continue
+        mode = settings.get("market_mode") or "spot"
+        if mode not in MARKET_MODES or not supports_mode(ex, mode):
+            mirrors.append({"leader": leader, "error": f"режим {mode} не поддерживается"})
+            continue
+        pair = settings.get("pair") or "BTC/USDT"
+        if pair not in SUPPORTED_TRADING_PAIRS:
+            mirrors.append({"leader": leader, "error": "пара недоступна"})
+            continue
+        try:
+            client = _public_exchange(ex)
+            candles = refresh_candles(MARKET_DATABASE, client, ex, pair, timeframe="1h")
+            daily = refresh_history(MARKET_DATABASE, client, ex, pair)
+            snapshot = _fetch_depth(client, pair, limit=20)
+            candle_feat = _candle_features(candles, daily)
+            depth_feat = _depth_metrics(snapshot)
+            vector = _feature_vector(candle_feat, depth_feat)
+            direction = _heuristic_sentiment(candle_feat, depth_feat)
+            ai_confidence = None
+            if learner.enabled and vector:
+                ai_confidence = learner.predict_confidence(vector)
+                ai_dir = learner.suggest_direction(ai_confidence)
+                if ai_dir != 0:
+                    direction = ai_dir * max(0.3, abs(direction))
+            side = "buy" if direction > 0 else "sell" if direction < 0 else None
+            if not side:
+                continue
+            prev = copy_store.mirror_state(email, leader)
+            now = int(time.time())
+            same_recent = (prev.get("last_side") == side and (now - int(prev.get("last_ts") or 0)) < 60)
+            if same_recent:
+                continue
+            demo = engine.get_demo_session(email)
+            if not demo.get("demo_active"):
+                mirrors.append({"leader": leader, "error": "демо-режим отключён"})
+                continue
+            balance = float(demo.get("demo_balance") or 0.0)
+            if balance <= 0:
+                mirrors.append({"leader": leader, "error": "нулевой баланс"})
+                continue
+            amount_eur = min(max(float(settings.get("amount_eur") or 10.0), 0.0), balance)
+            if amount_eur <= 0:
+                mirrors.append({"leader": leader, "error": "сумма копирования не задана"})
+                continue
+            leverage = effective_leverage(ex, mode, float(settings.get("leverage") or 1.5))
+            fee_rate = _exchange_fee_rate(ex, pair, mode)
+            result = strategy_manager.execute(
+                direction, candle_feat.get("momentum_1h", 0.0), balance,
+                fee_rate=fee_rate, leverage=leverage,
+            )
+            allocation = amount_eur / balance
+            pnl = result["pnl"] * allocation
+            updated = engine.update_demo_balance(email, pnl)
+            engine.record_memory("copy_trade", pnl, f"copy:{leader} {pair} side={side} {ex} {mode}", email)
+            engine.record_audit(
+                "copy_trade",
+                f"{side} {pair} leader={leader} amount={round(amount_eur, 2)} pnl={round(pnl, 4)}",
+                email,
+            )
+            copy_store.record_mirror(email, leader, {
+                "side": side, "direction": round(direction, 6), "pnl": round(pnl, 4),
+                "amount_eur": round(amount_eur, 2), "pair": pair, "exchange": ex,
+                "market_mode": mode, "leverage": leverage, "signal": result["signal"],
             })
-
-    if bot_status.get("trade_count", 0) > 0:
-        builtin[0]["return_pct"] = round(bot_status.get("total_pnl", 0), 2)
-        builtin[0]["win_rate"] = bot_status.get("win_rate", 0)
-        builtin[0]["trades"] = bot_status.get("trade_count", 0)
-
-    return builtin
+            if vector is not None:
+                try:
+                    learner.update(vector, pnl)
+                except Exception:
+                    pass
+            mirrors.append({
+                "leader": leader, "side": side, "pnl": round(pnl, 4),
+                "balance": round(updated["demo_balance"], 2),
+                "amount_eur": round(amount_eur, 2), "pair": pair, "exchange": ex,
+                "market_mode": mode, "leverage": leverage,
+                "ai_confidence": round(ai_confidence, 4) if ai_confidence is not None else None,
+            })
+        except Exception as exc:
+            mirrors.append({"leader": leader, "error": safe_exception_message(exc, "copy_trade")})
+    return {"mirrors": mirrors, "followed": len(follows), "ts": int(time.time() * 1000)}
 
 
 @app.api_route("/copy-trading", methods=["GET", "POST"], name="copy_trading_page")
@@ -2352,12 +2627,13 @@ async def copy_trading_page(request: Request):
     if not user_email:
         return RedirectResponse(url="/login", status_code=302)
 
-    state = _copy_trading_state.get(user_email, {"copies": [], "settings": {}})
+    portfolio = copy_store.portfolio(user_email)
+    copied = {item["leader"] for item in portfolio["follows"]}
     traders = _get_traders_list()
     for t in traders:
-        t["copied"] = t["name"] in state.get("copies", [])
+        t["copied"] = t["name"] in copied
 
-    copying_count = sum(1 for t in traders if t["copied"])
+    copying_count = len(copied)
     returns = [t["return_pct"] for t in traders if t["return_pct"]]
     avg_return = sum(returns) / len(returns) if returns else 0
 
@@ -2368,6 +2644,10 @@ async def copy_trading_page(request: Request):
         "traders": traders,
         "avg_return": avg_return,
         "copying_count": copying_count,
+        "portfolio": portfolio,
+        "demo_balance": (engine.get_demo_session(user_email) or {}).get("demo_balance", 100),
+        "trading_pairs": list(SUPPORTED_TRADING_PAIRS),
+        "trading_exchanges": sorted(SUPPORTED_MARKET_EXCHANGES),
     })
 
 
@@ -2377,14 +2657,13 @@ class CopyTogglePayload(BaseModel):
 
 @app.post("/api/copy-trading/toggle")
 def copy_toggle(payload: CopyTogglePayload, request: Request):
+    """Обратная совместимость: включение/выключение подписки одним переключением."""
     email = _require_user(request)
-    state = _copy_trading_state.setdefault(email, {"copies": [], "settings": {}})
-    if payload.trader in state["copies"]:
-        state["copies"].remove(payload.trader)
-    else:
-        state["copies"].append(payload.trader)
-    engine.record_audit("copy_toggle", f"trader={payload.trader}", email)
-    return {"ok": True, "copies": state["copies"]}
+    result = copy_store.unfollow(email, payload.trader)
+    if not result:
+        copy_store.follow(email, payload.trader, {"amount_eur": 10.0})
+    engine.record_audit("copy_toggle", f"trader={payload.trader} now={'off' if result else 'on'}", email)
+    return {"ok": True, "copies": list(copy_store.follows(email))}
 
 
 class CopySettingsPayload(BaseModel):
@@ -2397,18 +2676,85 @@ class CopySettingsPayload(BaseModel):
 @app.post("/api/copy-trading/settings")
 def copy_settings(payload: CopySettingsPayload, request: Request):
     email = _require_user(request)
-    state = _copy_trading_state.setdefault(email, {"copies": [], "settings": {}})
-    state["settings"] = payload.model_dump()
-    engine.record_audit("copy_settings", str(state["settings"]), email)
-    return {"ok": True, "settings": state["settings"]}
+    for leader in list(copy_store.follows(email)):
+        entry = copy_store.follows(email)[leader]
+        entry["amount_eur"] = max(1.0, payload.amount)
+        copy_store.follow(email, leader, entry)
+    engine.record_audit("copy_settings", str(payload.model_dump()), email)
+    return {"ok": True}
 
 
 @app.post("/api/copy-trading/reset")
 def copy_reset(request: Request):
     email = _require_user(request)
-    _copy_trading_state[email] = {"copies": [], "settings": {}}
+    copy_store.reset(email)
     engine.record_audit("copy_reset", "all cleared", email)
     return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Copy Trading Terminal API — профессиональный терминал копирования
+# ═══════════════════════════════════════════════════════════════
+
+class CopyFollowPayload(BaseModel):
+    leader: str
+    amount_eur: float = 10.0
+    exchange: str = "binance"
+    market_mode: str = "spot"
+    leverage: float = 1.5
+    pair: str = "BTC/USDT"
+
+
+class CopyUnfollowPayload(BaseModel):
+    leader: str
+
+
+@app.get("/api/copy/leaders")
+def copy_leaders(request: Request):
+    email = _require_user(request)
+    copied = {item["leader"] for item in copy_store.portfolio(email)["follows"]}
+    leaders = _get_traders_list()
+    for t in leaders:
+        t["copied"] = t["name"] in copied
+    return {"leaders": leaders, "ts": int(time.time() * 1000)}
+
+
+@app.post("/api/copy/follow")
+def copy_follow(payload: CopyFollowPayload, request: Request):
+    email = _require_user(request)
+    if payload.leader not in {p.name for p in engine.list_plugins()}:
+        raise HTTPException(status_code=400, detail="Лидер не найден.")
+    if payload.exchange not in SUPPORTED_MARKET_EXCHANGES:
+        raise HTTPException(status_code=400, detail="Биржа недоступна.")
+    if payload.market_mode not in MARKET_MODES or not supports_mode(payload.exchange, payload.market_mode):
+        raise HTTPException(status_code=400, detail=f"Режим {payload.market_mode} не поддерживается {payload.exchange}.")
+    if payload.pair not in SUPPORTED_TRADING_PAIRS:
+        raise HTTPException(status_code=400, detail="Недоступная торговая пара.")
+    entry = copy_store.follow(email, payload.leader, payload.model_dump())
+    engine.record_audit("copy_follow", f"{payload.leader} amount={payload.amount_eur} {payload.pair}@{payload.exchange} {payload.market_mode}", email)
+    return {"ok": True, "leader": payload.leader, "settings": entry}
+
+
+@app.post("/api/copy/unfollow")
+def copy_unfollow(payload: CopyUnfollowPayload, request: Request):
+    email = _require_user(request)
+    removed = copy_store.unfollow(email, payload.leader)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Подписка не найдена.")
+    engine.record_audit("copy_unfollow", payload.leader, email)
+    return {"ok": True, "leader": payload.leader}
+
+
+@app.get("/api/copy/portfolio")
+def copy_portfolio(request: Request):
+    email = _require_user(request)
+    return copy_store.portfolio(email)
+
+
+@app.post("/api/copy/pulse")
+def copy_pulse_route(request: Request):
+    email = _require_user(request)
+    return _copy_pulse(email)
 
 
 # ═══════════════════════════════════════════════════════════════
